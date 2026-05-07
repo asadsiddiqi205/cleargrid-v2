@@ -1,11 +1,19 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Table,
   TableHeader,
@@ -21,6 +29,7 @@ import {
   Copy,
 } from "lucide-react";
 import { journeysList, type JourneyStatus, type JourneyListItem } from "@/data/journeys";
+import { lenders } from "@/data/lenders";
 
 /* ------------------------------------------------------------------ */
 /*  Status display helpers                                             */
@@ -49,6 +58,16 @@ const journeyStatusConfig: Record<JourneyStatus, { className: string; label: str
   },
 };
 
+const ALL = "all";
+
+function getLenderName(id: string): string {
+  if (id === "general") return "General";
+  return lenders.find((l) => l.id === id)?.shortName ?? id;
+}
+
+/* Unique creators from the data */
+const CREATORS = Array.from(new Set(journeysList.map((j) => j.createdBy))).sort();
+
 /* ------------------------------------------------------------------ */
 /*  Component                                                          */
 /* ------------------------------------------------------------------ */
@@ -57,9 +76,35 @@ export function JourneysTable() {
   const [search, setSearch] = useState("");
   const [items, setItems] = useState<JourneyListItem[]>(journeysList);
 
-  const filtered = items.filter((j) =>
-    j.name.toLowerCase().includes(search.toLowerCase())
-  );
+  // Filters
+  const [createdByFilter, setCreatedByFilter] = useState(ALL);
+  const [statusFilter, setStatusFilter] = useState(ALL);
+  const [lenderFilter, setLenderFilter] = useState(ALL);
+  const [createdDateFrom, setCreatedDateFrom] = useState("");
+  const [lastRunFrom, setLastRunFrom] = useState("");
+
+  const filtered = useMemo(() => {
+    return items.filter((j) => {
+      if (search && !j.name.toLowerCase().includes(search.toLowerCase())) return false;
+      if (createdByFilter !== ALL && j.createdBy !== createdByFilter) return false;
+      if (statusFilter !== ALL && j.status !== statusFilter) return false;
+      if (lenderFilter !== ALL && j.lenderId !== lenderFilter) return false;
+      if (createdDateFrom && j.createdDate < createdDateFrom) return false;
+      if (lastRunFrom && (!j.lastRun || new Date(j.lastRun).toISOString().slice(0, 10) < lastRunFrom)) return false;
+      return true;
+    });
+  }, [items, search, createdByFilter, statusFilter, lenderFilter, createdDateFrom, lastRunFrom]);
+
+  const hasFilters = createdByFilter !== ALL || statusFilter !== ALL || lenderFilter !== ALL || createdDateFrom || lastRunFrom;
+
+  function clearFilters() {
+    setCreatedByFilter(ALL);
+    setStatusFilter(ALL);
+    setLenderFilter(ALL);
+    setCreatedDateFrom("");
+    setLastRunFrom("");
+    setSearch("");
+  }
 
   function handleRun(j: JourneyListItem) {
     toast.success(`Journey "${j.name}" started`);
@@ -84,16 +129,89 @@ export function JourneysTable() {
   }
 
   return (
-    <div className="space-y-3">
-      {/* Search */}
-      <div className="relative max-w-sm">
-        <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search journeys..."
-          className="h-8 pl-8 text-xs"
-        />
+    <div className="space-y-4">
+      {/* Filters */}
+      <div className="flex flex-wrap items-end gap-3">
+        <div className="space-y-1.5">
+          <Label className="text-[11px] uppercase tracking-wider text-muted-foreground">Search</Label>
+          <div className="relative">
+            <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search journeys..."
+              className="h-9 w-[200px] pl-8 text-xs"
+            />
+          </div>
+        </div>
+
+        <div className="space-y-1.5">
+          <Label className="text-[11px] uppercase tracking-wider text-muted-foreground">Created by</Label>
+          <Select value={createdByFilter} onValueChange={(v) => setCreatedByFilter(v ?? ALL)}>
+            <SelectTrigger className="h-9 w-[160px]"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value={ALL}>All users</SelectItem>
+              {CREATORS.map((c) => (
+                <SelectItem key={c} value={c}>{c}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="space-y-1.5">
+          <Label className="text-[11px] uppercase tracking-wider text-muted-foreground">Status</Label>
+          <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v ?? ALL)}>
+            <SelectTrigger className="h-9 w-[140px]"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value={ALL}>All statuses</SelectItem>
+              <SelectItem value="running">Running</SelectItem>
+              <SelectItem value="scheduled">Scheduled</SelectItem>
+              <SelectItem value="draft">Draft</SelectItem>
+              <SelectItem value="completed">Completed</SelectItem>
+              <SelectItem value="paused">Paused</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="space-y-1.5">
+          <Label className="text-[11px] uppercase tracking-wider text-muted-foreground">Lender</Label>
+          <Select value={lenderFilter} onValueChange={(v) => setLenderFilter(v ?? ALL)}>
+            <SelectTrigger className="h-9 w-[160px]"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value={ALL}>All lenders</SelectItem>
+              <SelectItem value="general">General</SelectItem>
+              {lenders.map((l) => (
+                <SelectItem key={l.id} value={l.id}>{l.shortName}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="space-y-1.5">
+          <Label className="text-[11px] uppercase tracking-wider text-muted-foreground">Created date</Label>
+          <input
+            type="date"
+            value={createdDateFrom}
+            onChange={(e) => setCreatedDateFrom(e.target.value)}
+            className="h-9 rounded-lg border border-input bg-transparent px-3 text-xs outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30"
+          />
+        </div>
+
+        <div className="space-y-1.5">
+          <Label className="text-[11px] uppercase tracking-wider text-muted-foreground">Last run date</Label>
+          <input
+            type="date"
+            value={lastRunFrom}
+            onChange={(e) => setLastRunFrom(e.target.value)}
+            className="h-9 rounded-lg border border-input bg-transparent px-3 text-xs outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30"
+          />
+        </div>
+
+        {hasFilters && (
+          <Button variant="ghost" size="sm" className="h-9" onClick={clearFilters}>
+            Clear
+          </Button>
+        )}
       </div>
 
       {/* Table */}
@@ -103,7 +221,10 @@ export function JourneysTable() {
             <TableRow>
               <TableHead>Name</TableHead>
               <TableHead>Trigger</TableHead>
+              <TableHead>Lender</TableHead>
               <TableHead>Status</TableHead>
+              <TableHead>Created by</TableHead>
+              <TableHead>Created</TableHead>
               <TableHead>Last Run</TableHead>
               <TableHead className="text-right">Enrolled</TableHead>
               <TableHead className="text-right">Actions</TableHead>
@@ -123,10 +244,19 @@ export function JourneysTable() {
                 <TableCell className="text-xs text-muted-foreground">
                   {journey.trigger}
                 </TableCell>
+                <TableCell className="text-xs text-muted-foreground">
+                  {getLenderName(journey.lenderId)}
+                </TableCell>
                 <TableCell>
                   <Badge className={journeyStatusConfig[journey.status].className}>
                     {journeyStatusConfig[journey.status].label}
                   </Badge>
+                </TableCell>
+                <TableCell className="text-xs text-muted-foreground">
+                  {journey.createdBy}
+                </TableCell>
+                <TableCell className="text-xs text-muted-foreground">
+                  {new Date(journey.createdDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
                 </TableCell>
                 <TableCell className="text-xs text-muted-foreground">
                   {journey.lastRun ?? "\u2014"}
@@ -166,7 +296,7 @@ export function JourneysTable() {
             ))}
             {filtered.length === 0 && (
               <TableRow>
-                <TableCell colSpan={6} className="py-10 text-center">
+                <TableCell colSpan={9} className="py-10 text-center">
                   <div className="flex flex-col items-center gap-1.5 text-muted-foreground">
                     <p className="text-sm font-medium text-foreground">
                       No journeys match

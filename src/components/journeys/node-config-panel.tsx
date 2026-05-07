@@ -98,11 +98,20 @@ const WHATSAPP_TEMPLATES = [
   "PTP Follow-up WA",
 ];
 
-const CALL_SCRIPTS = [
-  "Standard Collection",
-  "PTP Follow-up",
-  "Settlement Negotiation",
-  "Payment Confirmation",
+interface ClearVoiceProject {
+  id: string;
+  name: string;
+  status: "live" | "draft";
+  tags: string[];
+}
+
+const CLEARVOICE_PROJECTS: ClearVoiceProject[] = [
+  { id: "proj_001", name: "CashNow PTP EN", status: "live", tags: ["PTP", "EN", "UAE"] },
+  { id: "proj_002", name: "CashNow Reminder AR", status: "live", tags: ["Reminder", "AR", "UAE"] },
+  { id: "proj_003", name: "Mashreq Settlement EN", status: "live", tags: ["Settlement", "EN", "UAE"] },
+  { id: "proj_004", name: "Tamara Early Delinquency AR", status: "live", tags: ["Early DPD", "AR", "UAE"] },
+  { id: "proj_005", name: "Generic Collection EN", status: "draft", tags: ["Collection", "EN"] },
+  { id: "proj_006", name: "FAB Final Notice EN", status: "draft", tags: ["Final Notice", "EN", "UAE"] },
 ];
 
 const AGENT_TEAMS = [
@@ -167,13 +176,14 @@ interface NodeConfigPanelProps {
   node: Node | null;
   onClose: () => void;
   onUpdate: (id: string, data: Record<string, unknown>) => void;
+  onDeleteNode?: () => void;
 }
 
 /* ------------------------------------------------------------------ */
 /*  Component                                                          */
 /* ------------------------------------------------------------------ */
 
-export function NodeConfigPanel({ node, onClose, onUpdate }: NodeConfigPanelProps) {
+export function NodeConfigPanel({ node, onClose, onUpdate, onDeleteNode }: NodeConfigPanelProps) {
   const d = (node?.data ?? {}) as Record<string, unknown>;
 
   const update = useCallback(
@@ -273,7 +283,7 @@ export function NodeConfigPanel({ node, onClose, onUpdate }: NodeConfigPanelProp
     [node, onUpdate]
   );
 
-  // Active tab in the right config panel (6 tabs)
+  // Active tab in the right config panel (3 tabs)
   const [tab, setTab] = useState<string>("logic");
 
   if (!node) return null;
@@ -336,18 +346,6 @@ export function NodeConfigPanel({ node, onClose, onUpdate }: NodeConfigPanelProp
               <Filter className="h-3 w-3" />
               Logic
             </TabsTrigger>
-            <TabsTrigger value="variables" className="flex-none px-2 text-[10px]">
-              <VariableIcon className="h-3 w-3" />
-              Vars
-            </TabsTrigger>
-            <TabsTrigger value="branches" className="flex-none px-2 text-[10px]">
-              <GitBranch className="h-3 w-3" />
-              Branches
-            </TabsTrigger>
-            <TabsTrigger value="delivery" className="flex-none px-2 text-[10px]">
-              <SendIcon className="h-3 w-3" />
-              Delivery
-            </TabsTrigger>
             <TabsTrigger value="advanced" className="flex-none px-2 text-[10px]">
               <SlidersHorizontal className="h-3 w-3" />
               Advanced
@@ -398,115 +396,6 @@ export function NodeConfigPanel({ node, onClose, onUpdate }: NodeConfigPanelProp
           )}
         </TabsContent>
 
-        {/* Variables tab — placeholder per-journey vars */}
-        <TabsContent value="variables" className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
-          <p className="text-[11px] text-muted-foreground">
-            Journey-scoped variables available to this node.
-          </p>
-          <div className="space-y-1.5">
-            {[
-              { name: "borrower.name", type: "string" },
-              { name: "borrower.total_overdue", type: "number" },
-              { name: "account.dpd", type: "number" },
-            ].map((v) => (
-              <div
-                key={v.name}
-                className="flex items-center justify-between rounded-md border border-border bg-muted/20 px-2 py-1.5"
-              >
-                <span className="font-mono text-[10px] text-foreground">{`{${v.name}}`}</span>
-                <span className="text-[9px] text-muted-foreground">{v.type}</span>
-              </div>
-            ))}
-          </div>
-          <Button variant="outline" size="sm" className="w-full">
-            <Plus className="h-3 w-3" />
-            Add variable
-          </Button>
-        </TabsContent>
-
-        {/* Branches tab */}
-        <TabsContent value="branches" className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
-          {isBranchNode ? (
-            <>
-              <p className="text-[11px] text-muted-foreground">
-                Configure each output port for this branching block.
-              </p>
-              {((d.ports as string[]) ?? defaultBranches(node, block)).map((label, i) => (
-                <div
-                  key={i}
-                  className="flex items-center justify-between rounded-md border border-border bg-muted/20 px-2 py-1.5"
-                >
-                  <span className="text-xs text-foreground">{label}</span>
-                  <button className="text-muted-foreground hover:text-red-400">
-                    <Trash2 className="h-3 w-3" />
-                  </button>
-                </div>
-              ))}
-              <Button variant="outline" size="sm" className="w-full">
-                <Plus className="h-3 w-3" />
-                Add branch
-              </Button>
-            </>
-          ) : (
-            <EmptyTabState
-              icon={<GitBranch className="h-5 w-5" />}
-              title="No branches"
-              message="This block has a single output. Use a Decision Split or Audience Split to add branches."
-            />
-          )}
-        </TabsContent>
-
-        {/* Delivery tab */}
-        <TabsContent value="delivery" className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
-          {isActionNode ? (
-            <>
-              <Section title="Frequency cap">
-                <div className="flex gap-2">
-                  <Input
-                    type="number"
-                    value={(d.freqCount as number) ?? 3}
-                    onChange={(e) => update("freqCount", Number(e.target.value))}
-                    className="h-7 text-xs"
-                    min={0}
-                  />
-                  <NativeSelect
-                    value={(d.freqWindow as string) ?? "week"}
-                    onChange={(v) => update("freqWindow", v)}
-                  >
-                    <option value="day">per day</option>
-                    <option value="week">per week</option>
-                    <option value="month">per month</option>
-                  </NativeSelect>
-                </div>
-              </Section>
-              <Section title="Quiet hours / DND">
-                <label className="flex items-center justify-between">
-                  <span className="text-xs text-foreground">Respect DND window</span>
-                  <Switch
-                    checked={(d.respectDnd as boolean) ?? true}
-                    onCheckedChange={(val) => update("respectDnd", val)}
-                    size="sm"
-                  />
-                </label>
-              </Section>
-              <Section title="Queueing">
-                <NativeSelect
-                  value={(d.queueing as string) ?? "immediate"}
-                  onChange={(v) => update("queueing", v)}
-                >
-                  <option value="immediate">Send immediately</option>
-                  <option value="batch">Batch in queue</option>
-                </NativeSelect>
-              </Section>
-            </>
-          ) : (
-            <EmptyTabState
-              icon={<SendIcon className="h-5 w-5" />}
-              title="Not a delivery step"
-              message="Delivery settings only apply to channel/action blocks like Send Email, Send SMS or AI Call."
-            />
-          )}
-        </TabsContent>
 
         {/* Advanced tab */}
         <TabsContent value="advanced" className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
@@ -984,50 +873,65 @@ export function NodeConfigPanel({ node, onClose, onUpdate }: NodeConfigPanelProp
               </>
             )}
 
-            {/* ---- Start AI Call ---- */}
+            {/* ---- Start AI Call — ClearVoice project picker ---- */}
             {(d.actionType as string) === "call" && (
-              <>
-                <Section title="Call Script">
-                  <NativeSelect
-                    value={(d.template as string) ?? ""}
-                    onChange={(v) => update("template", v)}
-                  >
-                    <option value="">Select script...</option>
-                    {CALL_SCRIPTS.map((s) => (
-                      <option key={s} value={s}>{s}</option>
-                    ))}
-                  </NativeSelect>
+              <div className="space-y-3">
+                <Section title="Select a ClearVoice Project">
+                  <div className="space-y-2">
+                    {CLEARVOICE_PROJECTS.map((proj) => {
+                      const selected = (d.clearvoiceProjectId as string) === proj.id;
+                      return (
+                        <button
+                          key={proj.id}
+                          type="button"
+                          onClick={() => {
+                            update("clearvoiceProjectId", proj.id);
+                            update("clearvoiceProjectName", proj.name);
+                            update("template", proj.name);
+                          }}
+                          className={cn(
+                            "w-full rounded-lg border-2 p-3 text-left transition-all",
+                            selected
+                              ? "border-primary bg-primary/10"
+                              : "border-border/50 hover:border-border hover:bg-accent/20"
+                          )}
+                        >
+                          <div className="flex items-center justify-between">
+                            <div className="min-w-0 flex-1">
+                              <p className="text-xs font-semibold text-foreground truncate">
+                                {proj.name}
+                              </p>
+                              <p className="mt-0.5 text-[10px] font-mono text-muted-foreground">
+                                {proj.id}
+                              </p>
+                            </div>
+                            <span
+                              className={cn(
+                                "ml-2 shrink-0 rounded-md px-2 py-0.5 text-[10px] font-semibold",
+                                proj.status === "live"
+                                  ? "bg-emerald-500/20 text-emerald-400"
+                                  : "bg-zinc-500/20 text-zinc-400"
+                              )}
+                            >
+                              {proj.status === "live" ? "Live" : "Draft"}
+                            </span>
+                          </div>
+                          <div className="mt-2 flex flex-wrap gap-1">
+                            {proj.tags.map((tag) => (
+                              <span
+                                key={tag}
+                                className="rounded-md bg-muted px-1.5 py-0.5 text-[9px] font-medium text-muted-foreground"
+                              >
+                                {tag}
+                              </span>
+                            ))}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
                 </Section>
-                <Section title="Voice">
-                  <NativeSelect
-                    value={(d.voice as string) ?? "Male"}
-                    onChange={(v) => update("voice", v)}
-                  >
-                    <option value="Male">Male</option>
-                    <option value="Female">Female</option>
-                  </NativeSelect>
-                </Section>
-                <Section title="Language">
-                  <NativeSelect
-                    value={(d.language as string) ?? "English"}
-                    onChange={(v) => update("language", v)}
-                  >
-                    <option value="English">English</option>
-                    <option value="Arabic">Arabic</option>
-                  </NativeSelect>
-                </Section>
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground">Max Attempts</Label>
-                  <Input
-                    type="number"
-                    value={(d.maxAttempts as number) ?? 3}
-                    onChange={(e) => update("maxAttempts", Number(e.target.value))}
-                    className="h-7 text-xs"
-                    min={1}
-                    max={10}
-                  />
-                </div>
-              </>
+              </div>
             )}
 
             {/* ---- Assign Agent ---- */}
@@ -1341,6 +1245,19 @@ export function NodeConfigPanel({ node, onClose, onUpdate }: NodeConfigPanelProp
         )}
         </TabsContent>
       </Tabs>
+      <div className="border-t border-border p-4">
+        <Button
+          variant="destructive"
+          size="sm"
+          className="w-full"
+          onClick={() => {
+            onDeleteNode?.()
+          }}
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+          Delete node
+        </Button>
+      </div>
     </div>
   );
 }

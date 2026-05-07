@@ -10,21 +10,16 @@ import {
   BadgeCheck,
   Plus,
   Wand2,
-  Phone,
-  Volume2,
-  Languages,
-  PhoneOutgoing,
-  Clock3,
   Layout,
   Edit3,
   Blocks,
+  X,
+  ChevronDown,
 } from "lucide-react"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import {
   Tabs,
@@ -59,8 +54,6 @@ import {
   changeToneVariants,
   translateVariants,
   smsVariants,
-  voiceScriptTemplates,
-  voiceAiActions,
   mergeVariables,
   mergeVarLevelLabels,
   aiAssistVariants,
@@ -70,12 +63,8 @@ import {
 import type {
   ComposerState,
   Channel,
-  VoiceLang,
-  VoiceVoice,
-  CallWindow,
   EmailMode,
 } from "@/components/composer/composer-view"
-import { HelpMeWriteDialog } from "@/components/composer/help-me-write-dialog"
 import {
   AICommandMenu,
   type AIAction,
@@ -85,17 +74,17 @@ import { EmailTemplateMode } from "@/components/composer/email-template-mode"
 import { EmailAiGenerateMode } from "@/components/composer/email-ai-generate-mode"
 import { EmailBlockBuilder } from "@/components/composer/email-block-builder"
 import { AiAssistPanel, AI_ASSIST_ACTIONS } from "@/components/composer/ai-assist-panel"
+import { playbooks, type Playbook } from "@/data/playbooks"
 
 interface EditorPanelProps {
   state: ComposerState
   update: <K extends keyof ComposerState>(key: K, value: ComposerState[K]) => void
 }
 
-type EditField = "body" | "smsBody" | "voiceScript"
+type EditField = "body" | "smsBody"
 
 function activeField(channel: Channel): EditField {
   if (channel === "sms") return "smsBody"
-  if (channel === "voice") return "voiceScript"
   return "body"
 }
 
@@ -109,15 +98,16 @@ function pickRandom<T>(arr: T[], prev?: T): T {
 }
 
 export function EditorPanel({ state, update }: EditorPanelProps) {
-  const [helpOpen, setHelpOpen] = React.useState(false)
   const [aiMenuOpen, setAiMenuOpen] = React.useState(false)
   const [animating, setAnimating] = React.useState(false)
   const [lastBody, setLastBody] = React.useState<string | null>(null)
   const [aiAssistOpen, setAiAssistOpen] = React.useState(false)
   const [draftSavedAt, setDraftSavedAt] = React.useState<string | null>(null)
+  const [activePlaybook, setActivePlaybook] = React.useState<Playbook | null>(null)
+  const [playbookDropdownOpen, setPlaybookDropdownOpen] = React.useState(false)
 
   // Update draft timestamp 2s after any content change
-  const contentSignature = `${state.body}|${state.smsBody}|${state.subject}|${state.voiceScript}`
+  const contentSignature = `${state.body}|${state.smsBody}|${state.subject}`
   React.useEffect(() => {
     const timer = window.setTimeout(() => {
       const now = new Date()
@@ -146,25 +136,61 @@ export function EditorPanel({ state, update }: EditorPanelProps) {
 
   const bodyRef = React.useRef<HTMLTextAreaElement | null>(null)
   const smsRef = React.useRef<HTMLTextAreaElement | null>(null)
-  const voiceRef = React.useRef<HTMLTextAreaElement | null>(null)
   const aiButtonRef = React.useRef<HTMLDivElement | null>(null)
+
+  // -------- Playbook --------
+  const applyPlaybookToChannel = React.useCallback(
+    (pb: Playbook, channel: Channel) => {
+      if (channel === "email") {
+        update("subject", pb.templates.email.subject ?? "")
+        update("body", pb.templates.email.body)
+        update("previewText", pb.templates.email.body.replace(/\s+/g, " ").trim().slice(0, 120))
+      } else if (channel === "sms") {
+        update("smsBody", pb.templates.sms.body)
+      } else if (channel === "whatsapp") {
+        update("smsBody", pb.templates.whatsapp.body)
+      }
+    },
+    [update]
+  )
+
+  const handleSelectPlaybook = React.useCallback(
+    (pb: Playbook) => {
+      setActivePlaybook(pb)
+      setPlaybookDropdownOpen(false)
+      applyPlaybookToChannel(pb, state.channel)
+      update("compliance", pb.compliancePosture)
+      update("emailMode", "inline")
+      toast.success(`Playbook applied: ${pb.name}`)
+    },
+    [state.channel, applyPlaybookToChannel, update]
+  )
+
+  const clearPlaybook = React.useCallback(() => {
+    setActivePlaybook(null)
+    update("subject", "")
+    update("previewText", "")
+    update("body", "")
+    update("smsBody", "")
+    update("compliance", "standard")
+    toast.info("Playbook cleared")
+  }, [update])
 
   // -------- Channel switching --------
   const handleChannelChange = (v: string | null) => {
-    if (v === "email" || v === "sms" || v === "whatsapp" || v === "voice") {
+    if (v === "email" || v === "sms" || v === "whatsapp") {
       update("channel", v as Channel)
+      if (activePlaybook) applyPlaybookToChannel(activePlaybook, v as Channel)
     }
   }
 
   const getFieldValue = (field: EditField): string => {
     if (field === "smsBody") return state.smsBody
-    if (field === "voiceScript") return state.voiceScript
     return state.body
   }
 
   const getFieldRef = (field: EditField): HTMLTextAreaElement | null => {
     if (field === "smsBody") return smsRef.current
-    if (field === "voiceScript") return voiceRef.current
     return bodyRef.current
   }
 
@@ -215,7 +241,7 @@ export function EditorPanel({ state, update }: EditorPanelProps) {
       })
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [state.channel, state.body, state.smsBody, state.voiceScript, update]
+    [state.channel, state.body, state.smsBody, update]
   )
 
   // -------- AI Assist quick action (12 vertical actions) --------
@@ -270,115 +296,61 @@ export function EditorPanel({ state, update }: EditorPanelProps) {
       const field = activeField(state.channel)
       const current = getFieldValue(field)
       const hasContent = current.trim().length > 0
-      const isVoice = state.channel === "voice"
 
       switch (action.kind) {
         case "improve": {
-          if (isVoice) {
-            const variant = pickRandom(voiceAiActions.improve, current)
-            applyAIContent(variant, "Script improved")
-          } else {
-            const variant = pickRandom(improveVariants, current)
-            applyAIContent(hasContent ? variant : improveVariants[0], "Improved by AI")
-          }
+          const variant = pickRandom(improveVariants, current)
+          applyAIContent(hasContent ? variant : improveVariants[0], "Improved by AI")
           break
         }
         case "fixGrammar": {
-          if (isVoice) {
-            const variant = pickRandom(voiceAiActions.improve, current)
-            applyAIContent(variant, "Script polished")
-          } else {
-            const variant = pickRandom(fixGrammarVariants, current)
-            applyAIContent(variant, "Grammar fixed")
-          }
+          const variant = pickRandom(fixGrammarVariants, current)
+          applyAIContent(variant, "Grammar fixed")
           break
         }
         case "makeShorter": {
-          if (isVoice) {
-            const variant = pickRandom(voiceAiActions.shorter, current)
-            applyAIContent(variant, "Made shorter")
-          } else {
-            const variant = pickRandom(
-              state.channel === "sms" ? smsVariants : makeShorterVariants,
-              current
-            )
-            applyAIContent(variant, "Made shorter")
-          }
+          const variant = pickRandom(
+            state.channel === "sms" ? smsVariants : makeShorterVariants,
+            current
+          )
+          applyAIContent(variant, "Made shorter")
           break
         }
         case "makeLonger": {
-          if (isVoice) {
-            const variant = pickRandom(voiceAiActions.addPtpQuestion, current)
-            applyAIContent(variant, "Added PTP question")
-          } else {
-            const variant = pickRandom(makeLongerVariants, current)
-            applyAIContent(variant, "Expanded")
-          }
+          const variant = pickRandom(makeLongerVariants, current)
+          applyAIContent(variant, "Expanded")
           break
         }
         case "polish": {
-          if (isVoice) {
-            const variant = pickRandom(voiceAiActions.improve, current)
-            applyAIContent(variant, "Polished")
-          } else {
-            const variant = pickRandom(polishVariants, current)
-            applyAIContent(variant, "Polished")
-          }
+          const variant = pickRandom(polishVariants, current)
+          applyAIContent(variant, "Polished")
           break
         }
         case "simplify": {
-          if (isVoice) {
-            const variant = pickRandom(voiceAiActions.shorter, current)
-            applyAIContent(variant, "Simplified")
-          } else {
-            const variant = pickRandom(makeShorterVariants, current)
-            applyAIContent(variant, "Simplified")
-          }
+          const variant = pickRandom(makeShorterVariants, current)
+          applyAIContent(variant, "Simplified")
           break
         }
         case "changeTone": {
-          if (isVoice) {
-            if (action.tone === "empathetic") {
-              const variant = pickRandom(voiceAiActions.moreEmpathetic, current)
-              applyAIContent(variant, "More empathetic")
-            } else if (action.tone === "firm" || action.tone === "professional") {
-              const variant = pickRandom(voiceAiActions.moreUrgent, current)
-              applyAIContent(variant, "More urgent")
-            } else {
-              const variant = pickRandom(voiceAiActions.improve, current)
-              applyAIContent(variant, `Tone → ${action.tone}`)
-            }
-          } else {
-            const variant = pickRandom(changeToneVariants[action.tone], current)
-            applyAIContent(
-              variant,
-              `Tone → ${action.tone.charAt(0).toUpperCase() + action.tone.slice(1)}`
-            )
-          }
+          const variant = pickRandom(changeToneVariants[action.tone], current)
+          applyAIContent(
+            variant,
+            `Tone → ${action.tone.charAt(0).toUpperCase() + action.tone.slice(1)}`
+          )
           break
         }
         case "translate": {
-          if (isVoice) {
-            // Voice scripts: switch language too
-            update("voiceLang", action.lang === "arabic" ? "ar" : "en")
-            const variant = pickRandom(voiceAiActions.improve, current)
-            applyAIContent(
-              variant,
-              `Translated to ${action.lang === "arabic" ? "Arabic" : "English"}`
-            )
-          } else {
-            const variant = pickRandom(translateVariants[action.lang], current)
-            applyAIContent(
-              variant,
-              `Translated to ${action.lang === "arabic" ? "Arabic" : "English"}`
-            )
-          }
+          const variant = pickRandom(translateVariants[action.lang], current)
+          applyAIContent(
+            variant,
+            `Translated to ${action.lang === "arabic" ? "Arabic" : "English"}`
+          )
           break
         }
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [applyAIContent, state.body, state.smsBody, state.voiceScript, state.channel, update]
+    [applyAIContent, state.body, state.smsBody, state.channel, update]
   )
 
   // -------- Keyboard shortcut Cmd+J --------
@@ -418,21 +390,6 @@ export function EditorPanel({ state, update }: EditorPanelProps) {
     setSelection((s) => ({ ...s, visible: false }))
   }
 
-  // -------- Help me write insert --------
-  const handleHelpInsert = (result: { subject: string; previewText: string; body: string }) => {
-    if (state.channel === "email") {
-      update("subject", result.subject)
-      update("previewText", result.previewText)
-      update("body", result.body)
-    } else if (state.channel === "sms") {
-      update("smsBody", result.body.slice(0, 300))
-    } else if (state.channel === "voice") {
-      update("voiceScript", result.body)
-      update("voiceScriptName", "custom")
-    }
-    toast.success("✨ Draft inserted")
-  }
-
   // -------- Save as template --------
   const saveAsTemplate = () => {
     toast.success("Template saved to library")
@@ -443,8 +400,6 @@ export function EditorPanel({ state, update }: EditorPanelProps) {
     update("previewText", "")
     update("body", "")
     update("smsBody", "")
-    update("voiceScript", "")
-    update("voiceScriptName", "custom")
     toast.info("Editor cleared")
   }
 
@@ -456,21 +411,8 @@ export function EditorPanel({ state, update }: EditorPanelProps) {
     toast.info("Reverted last AI edit")
   }
 
-  // -------- Voice script template selection --------
-  const handleVoiceScriptSelect = (id: string) => {
-    const tpl = voiceScriptTemplates.find((t) => t.id === id)
-    if (!tpl) return
-    update("voiceScriptName", tpl.id)
-    if (tpl.id !== "custom") {
-      update("voiceScript", tpl.script)
-    }
-  }
-
   const charCount = state.smsBody.length
   const smsOver = charCount > 160
-  const voiceCharCount = state.voiceScript.length
-  // Rough estimate: ~14 chars per second of speech
-  const voiceDurationSec = Math.max(5, Math.ceil(voiceCharCount / 14))
 
   return (
     <div className="relative flex h-full flex-col">
@@ -493,10 +435,6 @@ export function EditorPanel({ state, update }: EditorPanelProps) {
               <MessageCircle className="h-3.5 w-3.5" />
               WhatsApp
             </TabsTrigger>
-            <TabsTrigger value="voice">
-              <Phone className="h-3.5 w-3.5" />
-              AI Call
-            </TabsTrigger>
           </TabsList>
         </Tabs>
 
@@ -507,15 +445,14 @@ export function EditorPanel({ state, update }: EditorPanelProps) {
         )}
 
         <div className="ml-auto flex items-center gap-2">
-          <Button
-            variant="default"
-            size="default"
-            className="bg-primary text-primary-foreground shadow-sm hover:bg-primary/90"
-            onClick={() => setHelpOpen(true)}
-          >
-            <Sparkles className="h-4 w-4" />
-            Help me write
-          </Button>
+          {/* Playbook chip */}
+          <PlaybookChip
+            activePlaybook={activePlaybook}
+            open={playbookDropdownOpen}
+            setOpen={setPlaybookDropdownOpen}
+            onSelect={handleSelectPlaybook}
+            onClear={clearPlaybook}
+          />
 
           <DropdownMenu>
             <DropdownMenuTrigger
@@ -539,6 +476,18 @@ export function EditorPanel({ state, update }: EditorPanelProps) {
           </DropdownMenu>
         </div>
       </div>
+
+      {/* Tone indicator (when playbook active) */}
+      {activePlaybook && (
+        <div className="flex items-center gap-2 border-b border-border px-5 py-1.5">
+          <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-medium", TONE_COLORS[activePlaybook.tone] ?? "bg-purple-400/15 text-purple-300")}>
+            {activePlaybook.tone.charAt(0).toUpperCase() + activePlaybook.tone.slice(1)}
+          </span>
+          <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-medium", COMPLIANCE_COLORS[activePlaybook.compliancePosture] ?? "bg-zinc-700 text-zinc-300")}>
+            {activePlaybook.compliancePosture.charAt(0).toUpperCase() + activePlaybook.compliancePosture.slice(1)} compliance
+          </span>
+        </div>
+      )}
 
       {/* ---- Body ---- */}
       <div className="flex-1 min-h-0 overflow-y-auto">
@@ -617,7 +566,7 @@ export function EditorPanel({ state, update }: EditorPanelProps) {
                             onChange={(e) => update("body", e.target.value)}
                             onSelect={handleSelect("body")}
                             onBlur={() => window.setTimeout(selectionLost, 150)}
-                            placeholder="Write your message here, or click 'Help me write' to generate..."
+                            placeholder="Write your message here..."
                             className={cn(
                               "min-h-[320px] resize-none border-none bg-transparent p-0 text-base leading-relaxed shadow-none transition-opacity duration-300 focus-visible:ring-0",
                               animating && "opacity-30"
@@ -761,214 +710,8 @@ export function EditorPanel({ state, update }: EditorPanelProps) {
               </p>
             </div>
           )}
-
-          {/* ---- VOICE (AI CALL) ---- */}
-          {state.channel === "voice" && (
-            <div className="space-y-4">
-              <div className="flex items-start justify-between gap-3">
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2">
-                    <Phone className="h-4 w-4 text-primary" />
-                    <h3 className="font-heading text-base font-semibold text-foreground">
-                      AI Call Script
-                    </h3>
-                    <Badge className="bg-primary/15 text-primary ring-1 ring-primary/30">
-                      ClearVoice
-                    </Badge>
-                  </div>
-                  <p className="text-[11px] text-muted-foreground">
-                    What the AI voice agent will say to the borrower when they pick up.
-                  </p>
-                </div>
-
-                <div className="w-56">
-                  <Select
-                    value={state.voiceScriptName}
-                    onValueChange={(v) => handleVoiceScriptSelect(v ?? "custom")}
-                  >
-                    <SelectTrigger className="w-full">
-                      <SelectValue placeholder="Use a pre-built script" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {voiceScriptTemplates.map((t) => (
-                        <SelectItem key={t.id} value={t.id}>
-                          {t.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              <div className="relative">
-                <Textarea
-                  ref={voiceRef}
-                  value={state.voiceScript}
-                  onChange={(e) => {
-                    update("voiceScript", e.target.value)
-                    if (state.voiceScriptName !== "custom") {
-                      update("voiceScriptName", "custom")
-                    }
-                  }}
-                  onSelect={handleSelect("voiceScript")}
-                  onBlur={() => window.setTimeout(selectionLost, 150)}
-                  placeholder="Hi {{borrower_name}}, this is ClearGrid calling about your account..."
-                  className={cn(
-                    "min-h-[260px] resize-none text-base leading-relaxed transition-opacity duration-300",
-                    animating && "opacity-30"
-                  )}
-                />
-                {animating && (
-                  <div className="pointer-events-none absolute inset-0 -m-2 animate-pulse rounded-lg border border-primary/40 bg-primary/5" />
-                )}
-              </div>
-
-              {state.voiceScript && (
-                <div className="rounded-lg border border-dashed border-border bg-muted/10 p-3">
-                  <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                    Tokens in script
-                  </div>
-                  <TokenizedPreview text={state.voiceScript} />
-                </div>
-              )}
-
-              {/* Voice settings 2x2 grid */}
-              <div className="grid grid-cols-2 gap-3 rounded-lg border border-border bg-muted/10 p-3">
-                <div className="space-y-1.5">
-                  <Label className="flex items-center gap-1.5 text-[11px] uppercase tracking-wider text-muted-foreground">
-                    <Volume2 className="h-3 w-3" />
-                    Voice
-                  </Label>
-                  <Select
-                    value={state.voiceVoice}
-                    onValueChange={(v) =>
-                      update("voiceVoice", ((v ?? "female") as VoiceVoice))
-                    }
-                  >
-                    <SelectTrigger className="w-full">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="female">
-                        <span className="flex items-center justify-between gap-2">
-                          <span>Female (Warm)</span>
-                        </span>
-                      </SelectItem>
-                      <SelectItem value="male">
-                        <span className="flex items-center justify-between gap-2">
-                          <span>Male (Firm)</span>
-                        </span>
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-6 w-full justify-start text-[10px] text-muted-foreground"
-                    onClick={() =>
-                      toast.info("Voice preview not available in prototype")
-                    }
-                  >
-                    <Volume2 className="h-3 w-3" />
-                    Preview voice sample
-                  </Button>
-                </div>
-
-                <div className="space-y-1.5">
-                  <Label className="flex items-center gap-1.5 text-[11px] uppercase tracking-wider text-muted-foreground">
-                    <Languages className="h-3 w-3" />
-                    Language
-                  </Label>
-                  <Select
-                    value={state.voiceLang}
-                    onValueChange={(v) =>
-                      update("voiceLang", ((v ?? "en") as VoiceLang))
-                    }
-                  >
-                    <SelectTrigger className="w-full">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="en">English</SelectItem>
-                      <SelectItem value="ar">Arabic</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-1.5">
-                  <Label className="flex items-center gap-1.5 text-[11px] uppercase tracking-wider text-muted-foreground">
-                    <PhoneOutgoing className="h-3 w-3" />
-                    Max attempts
-                  </Label>
-                  <Input
-                    type="number"
-                    min={1}
-                    max={10}
-                    value={state.voiceMaxAttempts}
-                    onChange={(e) => {
-                      const n = Number(e.target.value)
-                      if (Number.isFinite(n) && n >= 1 && n <= 10) {
-                        update("voiceMaxAttempts", n)
-                      }
-                    }}
-                    className="w-full"
-                  />
-                  <p className="text-[10px] leading-tight text-muted-foreground/80">
-                    How many times to retry if no answer
-                  </p>
-                </div>
-
-                <div className="space-y-1.5">
-                  <Label className="flex items-center gap-1.5 text-[11px] uppercase tracking-wider text-muted-foreground">
-                    <Clock3 className="h-3 w-3" />
-                    Call window
-                  </Label>
-                  <Select
-                    value={state.voiceCallWindow}
-                    onValueChange={(v) =>
-                      update("voiceCallWindow", ((v ?? "anytime") as CallWindow))
-                    }
-                  >
-                    <SelectTrigger className="w-full">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="anytime">Anytime within contact hours</SelectItem>
-                      <SelectItem value="morning">Morning (9–12)</SelectItem>
-                      <SelectItem value="afternoon">Afternoon (12–17)</SelectItem>
-                      <SelectItem value="evening">Evening (17–19)</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              <div className="flex items-center justify-between rounded border border-primary/30 bg-primary/5 px-3 py-2 text-[11px] text-muted-foreground">
-                <span className="flex items-center gap-1.5">
-                  <Clock3 className="h-3 w-3" />
-                  Estimated duration: <span className="font-medium text-foreground">~{voiceDurationSec}s</span>
-                </span>
-                <span>{voiceCharCount.toLocaleString()} chars</span>
-              </div>
-
-              <EditorToolbar
-                onInsertToken={insertToken}
-                aiButtonRef={aiButtonRef}
-                aiOpen={aiMenuOpen}
-                setAiOpen={setAiMenuOpen}
-                onAiAction={runAIAction}
-                charCount={voiceCharCount}
-              />
-            </div>
-          )}
         </div>
       </div>
-
-      {/* ---- Help me write dialog ---- */}
-      <HelpMeWriteDialog
-        open={helpOpen}
-        onOpenChange={(o) => setHelpOpen(o)}
-        onInsert={handleHelpInsert}
-      />
 
       {/* ---- Floating selection toolbar ---- */}
       <SelectionToolbar
@@ -1151,6 +894,89 @@ function ScopedVariableMenu({
         )
       })}
     </>
+  )
+}
+
+// ---------- Playbook chip ----------
+
+const TONE_COLORS: Record<string, string> = {
+  professional: "bg-purple-400/15 text-purple-300",
+  friendly: "bg-emerald-400/15 text-emerald-300",
+  firm: "bg-red-400/15 text-red-300",
+  empathetic: "bg-violet-400/15 text-violet-300",
+  urgent: "bg-amber-400/15 text-amber-300",
+}
+const COMPLIANCE_COLORS: Record<string, string> = {
+  standard: "bg-zinc-700 text-zinc-300",
+  strict: "bg-red-400/15 text-red-300",
+  lenient: "bg-amber-400/15 text-amber-300",
+}
+
+function PlaybookChip({
+  activePlaybook,
+  open,
+  setOpen,
+  onSelect,
+  onClear,
+}: {
+  activePlaybook: Playbook | null
+  open: boolean
+  setOpen: (open: boolean) => void
+  onSelect: (pb: Playbook) => void
+  onClear: () => void
+}) {
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className={cn(
+          "flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors",
+          activePlaybook
+            ? "border-emerald-500/30 bg-emerald-500/15 text-emerald-400"
+            : "border-border text-muted-foreground hover:text-foreground"
+        )}
+      >
+        Playbook: {activePlaybook ? activePlaybook.name : "none"}
+        {activePlaybook ? (
+          <span
+            onClick={(e) => { e.stopPropagation(); onClear() }}
+            className="ml-1 cursor-pointer rounded-full p-0.5 hover:bg-emerald-500/30"
+          >
+            <X className="h-2.5 w-2.5" />
+          </span>
+        ) : (
+          <ChevronDown className="h-3 w-3" />
+        )}
+      </button>
+
+      {open && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+          <div className="absolute right-0 top-full z-50 mt-1 w-[280px] rounded-lg border border-border bg-popover p-1 shadow-md">
+            <p className="px-2 py-1.5 text-[11px] font-semibold text-muted-foreground">Select a playbook</p>
+            {playbooks.map((pb) => (
+              <button
+                key={pb.id}
+                type="button"
+                onClick={() => onSelect(pb)}
+                className="flex w-full flex-col gap-0.5 rounded-md px-2 py-2 text-left transition-colors hover:bg-accent"
+              >
+                <span className="text-sm font-medium text-foreground">{pb.name}</span>
+                <span className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+                  <span className={cn("rounded-full px-1.5 py-0.5 text-[9px] font-medium", TONE_COLORS[pb.tone])}>
+                    {pb.tone}
+                  </span>
+                  <span className={cn("rounded-full px-1.5 py-0.5 text-[9px] font-medium", COMPLIANCE_COLORS[pb.compliancePosture])}>
+                    {pb.compliancePosture}
+                  </span>
+                </span>
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
   )
 }
 

@@ -7,7 +7,6 @@ import {
   Mail,
   MessageSquare,
   MessageCircle,
-  Phone,
   Plus,
   MoreHorizontal,
   Wand2,
@@ -98,7 +97,6 @@ const channelMeta: Record<
   email: { label: "Email", icon: Mail, color: "#3b82f6" },
   sms: { label: "SMS", icon: MessageSquare, color: "#22c55e" },
   whatsapp: { label: "WhatsApp", icon: MessageCircle, color: "#14b8a6" },
-  voice: { label: "AI Call", icon: Phone, color: "#a855f7" },
 }
 
 function lenderColor(lenderId: string): string {
@@ -270,15 +268,7 @@ function StrategyCard({
         </div>
 
         {/* ---- Actions ---- */}
-        <div className="mt-auto flex flex-col gap-2 pt-1">
-          <Link
-            href={`/email-generator?strategyId=${strategy.id}`}
-            className="inline-flex w-full items-center justify-center gap-1.5 rounded-lg border border-border bg-background px-2.5 py-1.5 text-sm font-medium text-foreground transition-colors hover:bg-muted"
-          >
-            <Wand2 className="h-3.5 w-3.5" />
-            Try in Composer
-          </Link>
-          <div className="flex items-center gap-2">
+        <div className="mt-auto flex items-center gap-2 pt-1">
           <Button size="sm" className="flex-1" onClick={onUse}>
             Use
           </Button>
@@ -304,7 +294,6 @@ function StrategyCard({
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
-          </div>
         </div>
       </CardContent>
     </Card>
@@ -342,7 +331,6 @@ function blankEditorState(): EditorState {
       { channel: "email", templateId: "tmpl-001", templateName: "Payment Reminder - Soft", enabled: true },
       { channel: "sms", templateId: "tmpl-009", templateName: "Partial Payment Thank You", enabled: true },
       { channel: "whatsapp", templateId: "tmpl-004", templateName: "Payment Link - WhatsApp", enabled: true },
-      { channel: "voice", templateId: "tmpl-vc-generic", templateName: "Generic Voice Reminder", enabled: false },
     ],
     cadence: "Day 1, Day 3, Day 7",
     systemPrompt: "",
@@ -418,7 +406,7 @@ function StrategyEditorDialog({
 
   const handleSave = () => {
     if (!state.name.trim()) {
-      toast.error("Please enter a strategy name")
+      toast.error("Please enter a playbook name")
       return
     }
     onSave(state)
@@ -429,10 +417,10 @@ function StrategyEditorDialog({
       <DialogContent className="sm:max-w-3xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>
-            {mode === "create" ? "New strategy" : `Edit: ${state.name || "Strategy"}`}
+            {mode === "create" ? "New playbook" : `Edit: ${state.name || "Playbook"}`}
           </DialogTitle>
           <DialogDescription>
-            A strategy bundles a tone, four channel templates, an AI prompt, and a cadence into one playbook.
+            A playbook bundles a tone, three channel templates, an AI prompt, and a cadence into one reusable package.
           </DialogDescription>
         </DialogHeader>
 
@@ -473,7 +461,7 @@ function StrategyEditorDialog({
           {/* ---- Overview ---- */}
           <TabsContent value="overview" className="space-y-4 pt-4">
             <div className="space-y-2">
-              <Label>Strategy name</Label>
+              <Label>Playbook name</Label>
               <Input
                 placeholder="e.g., Mashreq Broken Promise Recovery"
                 value={state.name}
@@ -483,7 +471,7 @@ function StrategyEditorDialog({
             <div className="space-y-2">
               <Label>Description</Label>
               <Textarea
-                placeholder="One or two sentences about when to use this strategy."
+                placeholder="One or two sentences about when to use this playbook."
                 value={state.description}
                 onChange={(e) => update("description", e.target.value)}
                 className="min-h-[70px]"
@@ -601,19 +589,12 @@ function StrategyEditorDialog({
           {/* ---- Templates ---- */}
           <TabsContent value="templates" className="space-y-4 pt-4">
             <p className="text-xs text-muted-foreground">
-              Each strategy bundles one template per channel. Toggle channels off if this strategy doesn&apos;t use them.
+              Each playbook bundles one template per channel. Toggle channels off if this playbook doesn&apos;t use them.
             </p>
             {state.channels.map((c, idx) => {
               const meta = channelMeta[c.channel]
               const Icon = meta.icon
-              const compatibleTemplates =
-                c.channel === "email"
-                  ? templateLibrary.filter((t) => t.channel === "email")
-                  : c.channel === "sms"
-                  ? templateLibrary.filter((t) => t.channel === "sms")
-                  : c.channel === "whatsapp"
-                  ? templateLibrary.filter((t) => t.channel === "whatsapp")
-                  : []
+              const compatibleTemplates = templateLibrary.filter((t) => t.channel === c.channel)
               const previewTemplate = templateLibrary.find(
                 (t) => t.id === c.templateId
               )
@@ -638,17 +619,7 @@ function StrategyEditorDialog({
                     />
                   </div>
 
-                  {c.channel === "voice" ? (
-                    <Input
-                      placeholder="AI call script name"
-                      value={c.templateName}
-                      disabled={!c.enabled}
-                      onChange={(e) =>
-                        updateChannel(idx, { templateName: e.target.value })
-                      }
-                    />
-                  ) : (
-                    <Select
+                  <Select
                       value={c.templateId}
                       onValueChange={(v) => {
                         if (!v) return
@@ -670,7 +641,6 @@ function StrategyEditorDialog({
                         ))}
                       </SelectContent>
                     </Select>
-                  )}
 
                   {previewTemplate && c.enabled && (
                     <div className="space-y-1.5">
@@ -694,7 +664,7 @@ function StrategyEditorDialog({
           <TabsContent value="prompt" className="space-y-3 pt-4">
             <Label>AI system prompt</Label>
             <p className="text-xs text-muted-foreground">
-              This is the instruction the AI receives whenever it generates a message from this strategy. Tell it the goal, the tone, and any do-not-say rules.
+              This is the instruction the AI receives whenever it generates a message from this playbook. Tell it the goal, the tone, and any do-not-say rules.
             </p>
             <Textarea
               className="min-h-[260px] font-mono text-xs"
@@ -723,7 +693,7 @@ function StrategyEditorDialog({
             Cancel
           </Button>
           <Button onClick={handleSave}>
-            {mode === "create" ? "Create strategy" : "Save changes"}
+            {mode === "create" ? "Create playbook" : "Save changes"}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -931,7 +901,7 @@ export function StrategiesGrid() {
         trendVsLastWeek: 0,
       }
       setAllStrategies((prev) => [newStrategy, ...prev])
-      toast.success(`Strategy "${state.name}" created`)
+      toast.success(`Playbook "${state.name}" created`)
     } else if (editingId) {
       setAllStrategies((prev) =>
         prev.map((s) =>
@@ -953,7 +923,7 @@ export function StrategiesGrid() {
             : s
         )
       )
-      toast.success("Strategy updated")
+      toast.success("Playbook updated")
     }
     setEditorOpen(false)
   }
@@ -989,7 +959,7 @@ export function StrategiesGrid() {
 
   const handleDelete = (strategy: Strategy) => {
     setAllStrategies((prev) => prev.filter((s) => s.id !== strategy.id))
-    toast.success(`Deleted "${strategy.name}"`)
+    toast.success(`Playbook "${strategy.name}" deleted`)
   }
 
   const lenderFilterLabel =
@@ -1075,7 +1045,7 @@ export function StrategiesGrid() {
               <div className="relative">
                 <Search className="absolute top-1/2 left-2.5 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
                 <Input
-                  placeholder="Search strategies"
+                  placeholder="Search playbooks"
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   className="h-9 w-[220px] pl-8"
@@ -1086,7 +1056,7 @@ export function StrategiesGrid() {
 
           <Button onClick={openCreate}>
             <Plus className="h-4 w-4" />
-            New strategy
+            New playbook
           </Button>
         </div>
 
@@ -1098,7 +1068,7 @@ export function StrategiesGrid() {
             </div>
             <div className="space-y-1">
               <h3 className="text-sm font-medium">
-                No strategies for {lenderFilterLabel} yet
+                No playbooks for {lenderFilterLabel} yet
               </h3>
               <p className="max-w-sm text-xs text-muted-foreground">
                 Create your first playbook for this lender, or change the filters above.
@@ -1106,7 +1076,7 @@ export function StrategiesGrid() {
             </div>
             <Button size="sm" onClick={openCreate}>
               <Plus className="h-3.5 w-3.5" />
-              New strategy
+              New playbook
             </Button>
           </div>
         ) : (

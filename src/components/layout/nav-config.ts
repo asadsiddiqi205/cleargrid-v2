@@ -1,7 +1,16 @@
 import {
+  Users, Handshake, CreditCard,
+  Inbox, Mail, MessageSquare,
+  BarChart3,
+  Bot,
+  Phone,
+  Megaphone, Sparkles,
   Layers,
+  GitBranch, Route,
+  FolderOpen,
+  Building2,
   Wand2, FileText, Target,
-  GitBranch,
+  ChevronDown,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
@@ -15,30 +24,96 @@ export interface NavItem {
 
 export interface NavGroup {
   label: string;
-  items: NavItem[];
+  icon: LucideIcon;
+  href?: string;
+  collapsible?: boolean;
+  defaultOpen?: boolean;
+  items?: NavItem[];
 }
 
 export const navGroups: NavGroup[] = [
   {
-    label: "CONTACTS",
+    label: "Borrowers",
+    icon: Users,
+    collapsible: true,
+    defaultOpen: true,
     items: [
-      { title: "Audiences", href: "/segments", icon: Layers },
+      { title: "All", href: "/borrowers", icon: Users },
+      { title: "Deals", href: "/borrowers/deals", icon: Handshake },
+      { title: "Accounts", href: "/borrowers/accounts", icon: CreditCard },
     ],
   },
   {
-    label: "MESSAGES",
+    label: "Inbound Support",
+    icon: Inbox,
+    collapsible: true,
+    defaultOpen: false,
+    items: [
+      { title: "Inbox", href: "/inbox", icon: Inbox },
+      { title: "Email Tickets", href: "/email-tickets", icon: Mail },
+    ],
+  },
+  {
+    label: "Reports",
+    icon: BarChart3,
+    href: "/reports",
+  },
+  {
+    label: "AI Agents",
+    icon: Bot,
+    href: "/ai-agents",
+  },
+  {
+    label: "Call History",
+    icon: Phone,
+    href: "/call-history",
+  },
+  {
+    label: "Campaigns",
+    icon: Megaphone,
+    href: "/campaigns",
+  },
+  {
+    label: "AI Campaigns",
+    icon: Sparkles,
+    href: "/ai-campaigns",
+  },
+  {
+    label: "Segments",
+    icon: Layers,
+    href: "/segments",
+  },
+  {
+    label: "Compose",
+    icon: Wand2,
+    collapsible: true,
+    defaultOpen: false,
     items: [
       { title: "Compose", href: "/email-generator", icon: Wand2 },
       { title: "Templates", href: "/templates", icon: FileText },
-      { title: "Writing Styles", href: "/strategies", icon: Target },
+      { title: "Playbooks", href: "/strategies", icon: Target },
     ],
   },
   {
-    label: "AUTOMATION",
-    items: [
-      { title: "Journeys", href: "/journeys", icon: GitBranch },
-    ],
+    label: "Journeys",
+    icon: Route,
+    href: "/journeys",
+  },
+  {
+    label: "Workflows",
+    icon: GitBranch,
+    href: "/workflows",
+  },
+  {
+    label: "Files",
+    icon: FolderOpen,
+    href: "/files",
+  },
+  {
+    label: "Lender Configurations",
+    icon: Building2,
+    href: "/lender-config",
   },
 ];
 
-export const bottomNavItems: NavItem[] = [];
+export { ChevronDown };

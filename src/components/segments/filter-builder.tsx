@@ -875,7 +875,7 @@ export function FilterBuilder({ onChange }: FilterBuilderProps) {
           </div>
         </div>
         <p className="mt-1.5 text-xs text-muted-foreground leading-relaxed">
-          Pick which borrowers belong in this audience. Use{" "}
+          Pick which borrowers belong in this segment. Use{" "}
           <span className="font-semibold text-foreground">AND</span> when
           borrowers must match every condition. Use{" "}
           <span className="font-semibold text-foreground">OR</span> when
@@ -923,7 +923,7 @@ export function FilterBuilder({ onChange }: FilterBuilderProps) {
               No filters added yet
             </p>
             <p className="mt-1 text-sm text-muted-foreground">
-              Pick a field below to start shaping your audience.
+              Pick a field below to start shaping your segment.
             </p>
           </div>
         )}

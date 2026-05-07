@@ -5,9 +5,9 @@ import { Plus } from "lucide-react"
 export default function SegmentsPage() {
   return (
     <PageShell
-      title="Audiences"
+      title="Segments"
       description="Groups of borrowers you can target with messages and journeys."
-      action={{ label: "New audience", href: "/segments/create", icon: Plus }}
+      action={{ label: "New segment", href: "/segments/create", icon: Plus }}
     >
       <SegmentsTable />
     </PageShell>

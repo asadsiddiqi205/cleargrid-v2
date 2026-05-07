@@ -10,14 +10,10 @@ import {
   AlertTriangle,
   Info,
   Send,
-  Save,
   Split,
-  GitBranch,
   Calendar,
   Clock,
-  Phone,
-  PhoneCall,
-  Volume2,
+  ChevronDown,
 } from "lucide-react"
 import { toast } from "sonner"
 
@@ -174,6 +170,7 @@ export function PreviewPanel({
   const [scheduleTime, setScheduleTime] = React.useState("09:00")
   const [abTest, setAbTest] = React.useState(false)
   const [confirmOpen, setConfirmOpen] = React.useState(false)
+  const [optionsExpanded, setOptionsExpanded] = React.useState(false)
 
   const samplePool = React.useMemo(
     () => SAMPLE_IDS.map((id) => borrowers.find((b) => b.id === id)).filter(Boolean) as Borrower[],
@@ -188,15 +185,12 @@ export function PreviewPanel({
   const renderedBody = React.useMemo(() => {
     if (state.channel === "email") return renderVars(state.body, previewBorrower)
     if (state.channel === "sms") return renderVars(state.smsBody, previewBorrower)
-    if (state.channel === "voice")
-      return renderVars(state.voiceScript, previewBorrower)
     const tpl = whatsappTemplates.find((t) => t.id === state.whatsappTemplateId)
     return renderVars(tpl?.body ?? "", previewBorrower)
   }, [
     state.channel,
     state.body,
     state.smsBody,
-    state.voiceScript,
     state.whatsappTemplateId,
     previewBorrower,
   ])
@@ -218,22 +212,14 @@ export function PreviewPanel({
       ? Mail
       : state.channel === "sms"
         ? MessageSquare
-        : state.channel === "voice"
-          ? Phone
-          : MessageCircle
+        : MessageCircle
 
   const channelLabel =
     state.channel === "email"
       ? "Email"
       : state.channel === "sms"
         ? "SMS"
-        : state.channel === "voice"
-          ? "AI Call (ClearVoice)"
-          : "WhatsApp"
-
-  const voiceLangLabel = state.voiceLang === "ar" ? "Arabic" : "English"
-  const voiceVoiceLabel =
-    state.voiceVoice === "female" ? "Female (Warm)" : "Male (Firm)"
+        : "WhatsApp"
 
   return (
     <TooltipProvider>
@@ -286,16 +272,6 @@ export function PreviewPanel({
         {state.channel === "whatsapp" && (
           <WhatsAppPreviewCard body={renderedBody} name={previewBorrower.name} />
         )}
-        {state.channel === "voice" && (
-          <VoiceCallPreviewCard
-            script={renderedBody}
-            borrowerName={previewBorrower.name}
-            phone={previewBorrower.phone}
-            voiceLabel={voiceVoiceLabel}
-            languageLabel={voiceLangLabel}
-            maxAttempts={state.voiceMaxAttempts}
-          />
-        )}
       </section>
 
       {/* ---- Compliance checks ---- */}
@@ -336,7 +312,7 @@ export function PreviewPanel({
       <section className="space-y-3 border-t border-border pt-4">
         <div className="rounded-lg border border-primary/30 bg-primary/5 p-3">
           <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
-            {state.channel === "voice" ? "Will be called" : "Will be sent to"}
+            Will be sent to
           </div>
           <div className="mt-0.5 flex items-baseline gap-1">
             <span className="font-heading text-xl font-semibold text-foreground">
@@ -349,112 +325,100 @@ export function PreviewPanel({
           </div>
         </div>
 
-        {/* Schedule toggle */}
-        <div className="space-y-1.5">
-          <div className="flex items-center justify-between rounded-lg border border-border bg-muted/10 p-3">
+        {/* Send options (collapsible) */}
+        <div className="rounded-lg border border-border">
+          <button
+            type="button"
+            onClick={() => setOptionsExpanded(!optionsExpanded)}
+            className="flex w-full items-center justify-between px-3 py-2 text-left"
+          >
+            <span className="text-xs font-medium text-foreground">Send options</span>
             <div className="flex items-center gap-2">
-              <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
-              <span className="text-xs">Schedule for later</span>
+              <span className="text-[10px] text-muted-foreground">
+                {schedule ? `Scheduled · ${scheduleDate || "No date"}` : "Send now"} · {abTest ? "A/B test" : "Single version"}
+              </span>
+              <ChevronDown className={cn("h-3 w-3 text-muted-foreground transition-transform", optionsExpanded && "rotate-180")} />
             </div>
-            <Switch
-              checked={schedule}
-              onCheckedChange={(val) => setSchedule(val)}
-            />
-          </div>
-          <p className="px-1 text-[10px] leading-relaxed text-muted-foreground">
-            Pick a date and time instead of sending right away.
-          </p>
-        </div>
-        {schedule && (
-          <div className="grid grid-cols-2 gap-2">
-            <div className="space-y-1">
-              <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">
-                Date
-              </Label>
-              <Input
-                type="date"
-                className="h-8 text-xs"
-                value={scheduleDate}
-                onChange={(e) => setScheduleDate(e.target.value)}
-              />
-            </div>
-            <div className="space-y-1">
-              <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">
-                Time
-              </Label>
-              <Input
-                type="time"
-                className="h-8 text-xs"
-                value={scheduleTime}
-                onChange={(e) => setScheduleTime(e.target.value)}
-              />
-            </div>
-          </div>
-        )}
+          </button>
+          {optionsExpanded && (
+            <div className="border-t border-border p-3 space-y-3">
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between rounded-lg border border-border bg-muted/10 p-3">
+                  <div className="flex items-center gap-2">
+                    <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
+                    <span className="text-xs">Schedule for later</span>
+                  </div>
+                  <Switch
+                    checked={schedule}
+                    onCheckedChange={(val) => setSchedule(val)}
+                  />
+                </div>
+                <p className="px-1 text-[10px] leading-relaxed text-muted-foreground">
+                  Pick a date and time instead of sending right away.
+                </p>
+              </div>
+              {schedule && (
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="space-y-1">
+                    <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                      Date
+                    </Label>
+                    <Input
+                      type="date"
+                      className="h-8 text-xs"
+                      value={scheduleDate}
+                      onChange={(e) => setScheduleDate(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                      Time
+                    </Label>
+                    <Input
+                      type="time"
+                      className="h-8 text-xs"
+                      value={scheduleTime}
+                      onChange={(e) => setScheduleTime(e.target.value)}
+                    />
+                  </div>
+                </div>
+              )}
 
-        <div className="space-y-1.5">
-          <div className="flex items-center justify-between rounded-lg border border-border bg-muted/10 p-3">
-            <div className="flex items-center gap-2">
-              <Split className="h-3.5 w-3.5 text-muted-foreground" />
-              <span className="text-xs">Try two versions (A/B test)</span>
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between rounded-lg border border-border bg-muted/10 p-3">
+                  <div className="flex items-center gap-2">
+                    <Split className="h-3.5 w-3.5 text-muted-foreground" />
+                    <span className="text-xs">Try two versions (A/B test)</span>
+                  </div>
+                  <Switch checked={abTest} onCheckedChange={(val) => setAbTest(val)} />
+                </div>
+                <p className="px-1 text-[10px] leading-relaxed text-muted-foreground">
+                  Splits the audience in half and sends two versions to find the better one.
+                </p>
+              </div>
             </div>
-            <Switch checked={abTest} onCheckedChange={(val) => setAbTest(val)} />
-          </div>
-          <p className="px-1 text-[10px] leading-relaxed text-muted-foreground">
-            Splits the audience in half and sends two versions to find the better one.
-          </p>
+          )}
         </div>
 
-        {/* Buttons */}
-        <div className="space-y-2 pt-1">
+        {/* Primary action */}
+        <div className="space-y-1 pt-1">
           <Button
             size="lg"
             className="w-full bg-primary text-primary-foreground hover:bg-primary/90"
             onClick={() => setConfirmOpen(true)}
           >
-            {state.channel === "voice" ? (
-              <PhoneCall className="h-4 w-4" />
-            ) : (
-              <Send className="h-4 w-4" />
-            )}
-            {state.channel === "voice"
-              ? state.mode === "segment"
-                ? `Start AI Calls to ${sendLabel}`
-                : `Start AI Call to ${sendLabel}`
-              : schedule
-                ? `Schedule for ${sendLabel}`
-                : `Send to ${sendLabel}`}
+            <Send className="h-4 w-4" />
+            {schedule
+              ? `Schedule for ${sendLabel}`
+              : `Send to ${sendLabel}`}
           </Button>
-          <Button
-            variant="outline"
-            size="lg"
-            className="w-full"
-            onClick={() =>
-              toast.success("Draft saved", {
-                description: "You can come back and finish this anytime.",
-              })
-            }
+          <button
+            type="button"
+            onClick={() => toast.success("Draft saved")}
+            className="w-full text-center text-xs text-muted-foreground hover:text-foreground py-1"
           >
-            <Save className="h-4 w-4" />
             Save as draft
-          </Button>
-          <Button
-            variant="outline"
-            size="lg"
-            className="w-full"
-            onClick={() =>
-              toast.info("Opening journey builder...", {
-                description:
-                  "Your message will become the first step of a new journey.",
-              })
-            }
-          >
-            <GitBranch className="h-4 w-4" />
-            Turn into multi-step flow
-          </Button>
-          <p className="text-center text-[10px] text-muted-foreground">
-            Add follow-ups, branches, and waits to build an automated journey.
-          </p>
+          </button>
         </div>
       </section>
 
@@ -463,36 +427,11 @@ export function PreviewPanel({
         <DialogContent>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              {state.channel === "voice" ? (
-                <PhoneCall className="h-4 w-4 text-primary" />
-              ) : (
-                <Send className="h-4 w-4 text-primary" />
-              )}
-              {state.channel === "voice" ? "Trigger AI calls?" : "Ready to send?"}
+              <Send className="h-4 w-4 text-primary" />
+              Ready to send?
             </DialogTitle>
             <DialogDescription>
-              {state.channel === "voice" ? (
-                state.mode === "segment" ? (
-                  <>
-                    Trigger AI calls to{" "}
-                    <span className="font-medium text-foreground">
-                      {sendCount.toLocaleString()} borrowers
-                    </span>{" "}
-                    via ClearVoice? Calls will be made between 09:00–19:00 GST.
-                    Voice: {voiceVoiceLabel} · Language: {voiceLangLabel} · Max attempts:{" "}
-                    {state.voiceMaxAttempts}.
-                  </>
-                ) : (
-                  <>
-                    Trigger an AI call to{" "}
-                    <span className="font-medium text-foreground">
-                      {selectedBorrower.name}
-                    </span>{" "}
-                    via ClearVoice? The call will be made within contact hours
-                    (09:00–19:00 GST).
-                  </>
-                )
-              ) : state.mode === "segment" ? (
+              {state.mode === "segment" ? (
                 <>
                   We&apos;ll send this {state.channel === "email" ? "email" : state.channel === "sms" ? "SMS" : "WhatsApp message"} to{" "}
                   <span className="font-medium text-foreground">
@@ -521,7 +460,7 @@ export function PreviewPanel({
                 onSend()
               }}
             >
-              {state.channel === "voice" ? "Yes, start calls" : "Yes, send now"}
+              Yes, send now
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -639,142 +578,6 @@ function SmsPreviewCard({ body, phone }: { body: string; phone: string }) {
         ClearGrid · just now
       </div>
     </div>
-  )
-}
-
-function VoiceCallPreviewCard({
-  script,
-  borrowerName,
-  phone,
-  voiceLabel,
-  languageLabel,
-  maxAttempts,
-}: {
-  script: string
-  borrowerName: string
-  phone: string
-  voiceLabel: string
-  languageLabel: string
-  maxAttempts: number
-}) {
-  // Build a simple "transcript" by splitting the script into sentences and
-  // assigning rough timestamps based on character count.
-  const sentences = React.useMemo(() => {
-    const trimmed = script.trim()
-    if (!trimmed) return [] as { ts: string; text: string }[]
-    const parts = trimmed
-      .split(/(?<=[.!?])\s+/)
-      .map((s) => s.trim())
-      .filter(Boolean)
-    let cursor = 0
-    return parts.map((text) => {
-      const seconds = cursor
-      cursor += Math.max(2, Math.ceil(text.length / 14))
-      const mm = String(Math.floor(seconds / 60)).padStart(2, "0")
-      const ss = String(seconds % 60).padStart(2, "0")
-      return { ts: `${mm}:${ss}`, text }
-    })
-  }, [script])
-
-  const totalSeconds =
-    sentences.length > 0
-      ? Math.max(5, Math.ceil(script.length / 14))
-      : 0
-  const durationLabel =
-    totalSeconds >= 60
-      ? `~${Math.floor(totalSeconds / 60)}m ${totalSeconds % 60}s`
-      : `~${totalSeconds}s`
-
-  return (
-    <div className="overflow-hidden rounded-lg border border-border bg-background">
-      <div className="flex items-center gap-2 border-b border-border/60 bg-primary/5 px-3 py-2">
-        <div className="flex h-7 w-7 items-center justify-center rounded-full bg-primary/20 text-primary">
-          <Phone className="h-3.5 w-3.5" />
-        </div>
-        <div className="min-w-0 flex-1">
-          <div className="truncate text-[11px] font-semibold text-foreground">
-            AI Call Preview
-          </div>
-          <div className="truncate text-[10px] text-muted-foreground">
-            ClearVoice · ClearGrid
-          </div>
-        </div>
-        <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
-          <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-primary" />
-          Live
-        </div>
-      </div>
-
-      <div className="space-y-1 border-b border-border/60 px-3 py-2">
-        <div className="flex items-center gap-1.5 text-[11px] text-foreground">
-          <PhoneCall className="h-3 w-3 text-primary" />
-          Calling: <span className="font-medium">{borrowerName}</span>
-        </div>
-        <div className="text-[10px] text-muted-foreground">{phone}</div>
-      </div>
-
-      <div className="max-h-64 overflow-y-auto px-3 py-3">
-        {sentences.length === 0 ? (
-          <div className="text-[11px] text-muted-foreground">
-            Your AI call script will appear here as a transcript...
-          </div>
-        ) : (
-          <div className="space-y-1.5">
-            {sentences.map((line, i) => (
-              <div key={i} className="flex gap-2 text-[11px] leading-relaxed">
-                <span className="shrink-0 font-mono text-[10px] text-muted-foreground">
-                  [{line.ts}]
-                </span>
-                <span className="text-muted-foreground">AI:</span>
-                <TranscriptLine text={line.text} />
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      <div className="space-y-1.5 border-t border-border/60 bg-muted/10 px-3 py-2">
-        <div className="text-[10px] text-muted-foreground">
-          Voice: <span className="text-foreground">{voiceLabel}</span> · Language:{" "}
-          <span className="text-foreground">{languageLabel}</span> · Max attempts:{" "}
-          <span className="text-foreground">{maxAttempts}</span>
-        </div>
-        <div className="flex items-center justify-between text-[10px] text-muted-foreground">
-          <span>Estimated call duration: {durationLabel}</span>
-        </div>
-        <Button
-          variant="outline"
-          size="sm"
-          className="w-full"
-          onClick={() => toast.info("Voice preview not available in prototype")}
-        >
-          <Volume2 className="h-3 w-3" />
-          Listen to preview
-        </Button>
-      </div>
-    </div>
-  )
-}
-
-function TranscriptLine({ text }: { text: string }) {
-  // Highlight {{tokens}} inline
-  const parts = text.split(/(\{\{[^}]+\}\})/g)
-  return (
-    <span className="text-foreground">
-      {parts.map((part, i) => {
-        if (/^\{\{[^}]+\}\}$/.test(part)) {
-          return (
-            <span
-              key={i}
-              className="mx-0.5 inline-block rounded bg-primary/15 px-1 py-0.5 font-mono text-[9px] font-medium text-primary ring-1 ring-primary/30"
-            >
-              {part}
-            </span>
-          )
-        }
-        return <span key={i}>{part}</span>
-      })}
-    </span>
   )
 }
 

@@ -40,7 +40,6 @@ import {
   Mail,
   MessageSquare,
   MessageCircle,
-  Phone,
   Plus,
   Search,
   ArrowLeft,
@@ -77,14 +76,12 @@ const CHANNEL_ICONS: Record<TemplateChannel, React.ComponentType<{ className?: s
   email: Mail,
   sms: MessageSquare,
   whatsapp: MessageCircle,
-  voice: Phone,
 };
 
 const CHANNEL_TINTS: Record<TemplateChannel, string> = {
   email: "text-blue-400 bg-blue-500/10 border-blue-500/20",
   sms: "text-purple-400 bg-purple-500/10 border-purple-500/20",
   whatsapp: "text-green-400 bg-green-500/10 border-green-500/20",
-  voice: "text-amber-400 bg-amber-500/10 border-amber-500/20",
 };
 
 const STATUS_TINTS: Record<Template["status"], string> = {
@@ -402,9 +399,6 @@ interface EditableTemplate {
   channel: TemplateChannel;
   subject: string;
   body: string;
-  voiceLang: "en" | "ar";
-  voiceVoice: "male" | "female";
-  voiceMaxAttempts: number;
 }
 
 function fromTemplate(t: Template): EditableTemplate {
@@ -414,9 +408,6 @@ function fromTemplate(t: Template): EditableTemplate {
     channel: t.channel,
     subject: t.subject ?? "",
     body: t.body,
-    voiceLang: t.language === "ar" ? "ar" : "en",
-    voiceVoice: "female",
-    voiceMaxAttempts: 3,
   };
 }
 
@@ -636,83 +627,6 @@ function InlineEditor({
                 className="min-h-[280px] font-mono text-[13px] leading-relaxed"
               />
             </div>
-          )}
-
-          {/* Voice-specific */}
-          {draft.channel === "voice" && (
-            <>
-              <div className="space-y-2">
-                <Label htmlFor="tmpl-body">Call script</Label>
-                <Textarea
-                  id="tmpl-body"
-                  ref={bodyRef}
-                  value={draft.body}
-                  onFocus={() => setActiveField("body")}
-                  onChange={(e) =>
-                    setDraft((d) => ({ ...d, body: e.target.value }))
-                  }
-                  className="min-h-[320px] font-mono text-[13px] leading-relaxed"
-                />
-              </div>
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                <div className="space-y-2">
-                  <Label>Voice</Label>
-                  <Select
-                    value={draft.voiceVoice}
-                    onValueChange={(v: string | null) =>
-                      setDraft((d) => ({
-                        ...d,
-                        voiceVoice: (v ?? "female") as "male" | "female",
-                      }))
-                    }
-                  >
-                    <SelectTrigger className="w-full">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="female">Female</SelectItem>
-                      <SelectItem value="male">Male</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label>Language</Label>
-                  <Select
-                    value={draft.voiceLang}
-                    onValueChange={(v: string | null) =>
-                      setDraft((d) => ({
-                        ...d,
-                        voiceLang: (v ?? "en") as "en" | "ar",
-                      }))
-                    }
-                  >
-                    <SelectTrigger className="w-full">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="en">English</SelectItem>
-                      <SelectItem value="ar">Arabic</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="tmpl-attempts">Max attempts</Label>
-                  <Input
-                    id="tmpl-attempts"
-                    type="number"
-                    min={1}
-                    max={10}
-                    value={draft.voiceMaxAttempts}
-                    onChange={(e) =>
-                      setDraft((d) => ({
-                        ...d,
-                        voiceMaxAttempts: Math.max(1, Number(e.target.value) || 1),
-                      }))
-                    }
-                  />
-                </div>
-              </div>
-            </>
           )}
 
           {/* Live preview */}
@@ -1197,7 +1111,7 @@ export function TemplatesView() {
             <h1 className="text-2xl font-bold tracking-tight">Templates</h1>
             <p className="mt-1 text-sm text-muted-foreground">
               Pre-written messages organized by lender and purpose. Each purpose has
-              variants for Email, SMS, WhatsApp, and AI calls.
+              variants for Email, SMS, and WhatsApp.
             </p>
           </div>
           <Button onClick={() => setShowCreate(true)}>
@@ -1207,82 +1121,97 @@ export function TemplatesView() {
         </div>
 
         {/* Sub-header / filter bar */}
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="relative">
-            <Search className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search templates..."
-              className="h-8 w-56 pl-7"
-            />
+        <div className="flex flex-wrap items-end gap-3">
+          <div className="space-y-1.5">
+            <label className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Search</label>
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search templates..."
+                className="h-9 w-56 pl-8"
+              />
+            </div>
           </div>
 
-          <Select
-            value={selectedLenderId}
-            onValueChange={(v: string | null) => setSelectedLender(v ?? ALL_LENDERS)}
-          >
-            <SelectTrigger size="sm">
-              <SelectValue placeholder="Lender" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={ALL_LENDERS}>All lenders</SelectItem>
-              {lenders.map((l) => (
-                <SelectItem key={l.id} value={l.id}>
-                  {l.shortName}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <div className="space-y-1.5">
+            <label className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Lender</label>
+            <Select
+              value={selectedLenderId}
+              onValueChange={(v: string | null) => setSelectedLender(v ?? ALL_LENDERS)}
+            >
+              <SelectTrigger className="h-9 w-[160px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={ALL_LENDERS}>All lenders</SelectItem>
+                {lenders.map((l) => (
+                  <SelectItem key={l.id} value={l.id}>
+                    {l.shortName}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
 
-          <Select
-            value={purposeFilter}
-            onValueChange={(v: string | null) => setPurposeFilter(v ?? "all")}
-          >
-            <SelectTrigger size="sm">
-              <SelectValue placeholder="Purpose" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All purposes</SelectItem>
-              {PURPOSE_ORDER.map((p) => (
-                <SelectItem key={p} value={p}>
-                  {PURPOSE_LABELS[p]}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <div className="space-y-1.5">
+            <label className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Purpose</label>
+            <Select
+              value={purposeFilter}
+              onValueChange={(v: string | null) => setPurposeFilter(v ?? "all")}
+            >
+              <SelectTrigger className="h-9 w-[180px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All purposes</SelectItem>
+                {PURPOSE_ORDER.map((p) => (
+                  <SelectItem key={p} value={p}>
+                    {PURPOSE_LABELS[p]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
 
-          <Select
-            value={channelFilter}
-            onValueChange={(v: string | null) => setChannelFilter(v ?? "all")}
-          >
-            <SelectTrigger size="sm">
-              <SelectValue placeholder="Channel" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All channels</SelectItem>
-              {CHANNEL_ORDER.map((c) => (
-                <SelectItem key={c} value={c}>
-                  {CHANNEL_LABELS[c]}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <div className="space-y-1.5">
+            <label className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Channel</label>
+            <Select
+              value={channelFilter}
+              onValueChange={(v: string | null) => setChannelFilter(v ?? "all")}
+            >
+              <SelectTrigger className="h-9 w-[160px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All channels</SelectItem>
+                {CHANNEL_ORDER.map((c) => (
+                  <SelectItem key={c} value={c}>
+                    {CHANNEL_LABELS[c]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
 
-          <Select
-            value={statusFilter}
-            onValueChange={(v: string | null) => setStatusFilter(v ?? "all")}
-          >
-            <SelectTrigger size="sm">
-              <SelectValue placeholder="Status" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All statuses</SelectItem>
-              <SelectItem value="active">Active</SelectItem>
-              <SelectItem value="draft">Draft</SelectItem>
-              <SelectItem value="archived">Archived</SelectItem>
-            </SelectContent>
-          </Select>
+          <div className="space-y-1.5">
+            <label className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Status</label>
+            <Select
+              value={statusFilter}
+              onValueChange={(v: string | null) => setStatusFilter(v ?? "all")}
+            >
+              <SelectTrigger className="h-9 w-[140px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All statuses</SelectItem>
+                <SelectItem value="active">Active</SelectItem>
+                <SelectItem value="draft">Draft</SelectItem>
+                <SelectItem value="archived">Archived</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
 
           {(purposeFilter !== "all" ||
             channelFilter !== "all" ||
@@ -1291,6 +1220,7 @@ export function TemplatesView() {
             <Button
               variant="ghost"
               size="sm"
+              className="h-9"
               onClick={() => {
                 setPurposeFilter("all");
                 setChannelFilter("all");

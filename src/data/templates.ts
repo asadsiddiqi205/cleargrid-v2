@@ -7,7 +7,7 @@ export type TemplatePurpose =
   | "final-notice"
   | "hardship";
 
-export type TemplateChannel = "email" | "sms" | "whatsapp" | "voice";
+export type TemplateChannel = "email" | "sms" | "whatsapp";
 
 export interface Template {
   id: string;
@@ -48,7 +48,6 @@ export const CHANNEL_LABELS: Record<TemplateChannel, string> = {
   email: "Email",
   sms: "SMS",
   whatsapp: "WhatsApp",
-  voice: "AI Call Script",
 };
 
 export const PURPOSE_ORDER: TemplatePurpose[] = [
@@ -65,7 +64,6 @@ export const CHANNEL_ORDER: TemplateChannel[] = [
   "email",
   "sms",
   "whatsapp",
-  "voice",
 ];
 
 /* ─────────────────────────────────────────────────────────────────────────
@@ -200,31 +198,6 @@ If you'd like to set up a payment plan or have any questions, just reply to this
     usedInStrategies: 1,
     lastUsedAt: "2026-04-02",
   }),
-  mk({
-    id: "tmpl-gen-welcome-voice",
-    name: "General — Welcome (AI Call)",
-    lenderId: "general",
-    lenderName: "General",
-    purpose: "welcome",
-    channel: "voice",
-    body: `Hello, this is an automated call from {{lender_name}}. May I speak with {{borrower_name}}?
-
-We're calling about a recent balance on your account of AED {{amount_due}}. We'd like to help you resolve this in the way that works best for you.
-
-To pay your balance now, press 1.
-To set up a payment plan, press 2.
-To speak with one of our agents, press 3.
-To opt out of future calls, press 9.
-
-Thank you for choosing {{lender_name}}.`,
-    sentCount: 940,
-    openRate: 0,
-    clickRate: 0,
-    conversionRate: 3.4,
-    usedInJourneys: 1,
-    usedInStrategies: 1,
-    lastUsedAt: "2026-04-01",
-  }),
 
   // ── General > Reminder
   mk({
@@ -292,31 +265,6 @@ If you'd like to discuss a different arrangement, reply to this message and we'l
     usedInJourneys: 3,
     usedInStrategies: 2,
     lastUsedAt: "2026-04-03",
-  }),
-  mk({
-    id: "tmpl-gen-reminder-voice",
-    name: "General — Payment Reminder (AI Call)",
-    lenderId: "general",
-    lenderName: "General",
-    purpose: "reminder",
-    channel: "voice",
-    body: `Hello, this is an automated reminder from {{lender_name}}. May I speak with {{borrower_name}}?
-
-We're calling to remind you that a payment of AED {{amount_due}} is due on {{due_date}}.
-
-To make a payment now using a saved method, press 1.
-To receive a payment link by SMS, press 2.
-To speak with an agent, press 3.
-To opt out of future reminders, press 9.
-
-Thank you, and have a good day.`,
-    sentCount: 1620,
-    openRate: 0,
-    clickRate: 0,
-    conversionRate: 3.1,
-    usedInJourneys: 2,
-    usedInStrategies: 1,
-    lastUsedAt: "2026-04-02",
   }),
 
   // ── General > PTP Confirmation
@@ -394,28 +342,6 @@ Need to change the date? Just reply to this message.
     usedInJourneys: 2,
     usedInStrategies: 2,
     lastUsedAt: "2026-04-03",
-  }),
-  mk({
-    id: "tmpl-gen-ptp-voice",
-    name: "General — PTP Confirmation (AI Call)",
-    lenderId: "general",
-    lenderName: "General",
-    purpose: "ptp-confirmation",
-    channel: "voice",
-    body: `Hello {{borrower_name}}, this is {{lender_name}} calling to confirm your promise to pay AED {{amount_due}} on {{due_date}}.
-
-To confirm this arrangement, press 1.
-To change the amount or date, press 2.
-To speak with an agent, press 3.
-
-Thank you for working with us.`,
-    sentCount: 820,
-    openRate: 0,
-    clickRate: 0,
-    conversionRate: 36.8,
-    usedInJourneys: 1,
-    usedInStrategies: 1,
-    lastUsedAt: "2026-04-02",
   }),
 ];
 
@@ -499,31 +425,6 @@ Mashreq Bank PSC`,
     usedInStrategies: 2,
     lastUsedAt: "2026-04-03",
   }),
-  mk({
-    ...mashreqLender,
-    id: "tmpl-mashreq-reminder-voice",
-    name: "Mashreq — Payment Reminder (AI Call)",
-    purpose: "reminder",
-    channel: "voice",
-    body: `Good day. This is an automated call from Mashreq Bank Collections Department. May I please speak with {{borrower_name}}?
-
-This call is in reference to account number {{account_number}}. A payment of AED {{amount_due}} is due on {{due_date}}.
-
-To pay now using your registered card on file, press 1.
-To receive a payment link by SMS, press 2.
-To be transferred to a Mashreq Collections agent, press 3.
-To repeat this message, press star.
-To opt out of automated calls, press 9.
-
-Thank you for banking with Mashreq.`,
-    sentCount: 2140,
-    openRate: 0,
-    clickRate: 0,
-    conversionRate: 3.8,
-    usedInJourneys: 2,
-    usedInStrategies: 1,
-    lastUsedAt: "2026-04-02",
-  }),
 
   // Broken Promise
   mk({
@@ -595,32 +496,6 @@ Mashreq Bank PSC`,
     usedInJourneys: 2,
     usedInStrategies: 2,
     lastUsedAt: "2026-04-03",
-  }),
-  mk({
-    ...mashreqLender,
-    id: "tmpl-mashreq-bp-voice",
-    name: "Mashreq — Broken Promise Recovery (AI Call)",
-    purpose: "broken-promise",
-    channel: "voice",
-    body: `Good day. This is Mashreq Bank Collections Department calling for {{borrower_name}}.
-
-This call concerns account {{account_number}}. Your promised payment of AED {{amount_due}}, scheduled for {{due_date}}, has not been received.
-
-Please be advised that immediate action is required to avoid further escalation.
-
-To pay the full outstanding amount now, press 1.
-To arrange a new payment date, press 2.
-To speak with a Mashreq Collections agent immediately, press 3.
-To repeat this message, press star.
-
-This is your formal notification. Thank you.`,
-    sentCount: 1080,
-    openRate: 0,
-    clickRate: 0,
-    conversionRate: 7.6,
-    usedInJourneys: 2,
-    usedInStrategies: 1,
-    lastUsedAt: "2026-04-02",
   }),
 
   // PTP Confirmation
@@ -699,29 +574,6 @@ Mashreq Bank PSC`,
     usedInJourneys: 2,
     usedInStrategies: 2,
     lastUsedAt: "2026-04-03",
-  }),
-  mk({
-    ...mashreqLender,
-    id: "tmpl-mashreq-ptp-voice",
-    name: "Mashreq — PTP Confirmation (AI Call)",
-    purpose: "ptp-confirmation",
-    channel: "voice",
-    body: `Good day, {{borrower_name}}. This is Mashreq Bank confirming your payment arrangement on account {{account_number}}.
-
-You have agreed to pay AED {{amount_due}} on {{due_date}}. Your reference number is {{reference_id}}.
-
-To confirm this arrangement, press 1.
-To change the date or amount, press 2.
-To speak with a Mashreq Collections agent, press 3.
-
-Thank you for your cooperation.`,
-    sentCount: 720,
-    openRate: 0,
-    clickRate: 0,
-    conversionRate: 39.4,
-    usedInJourneys: 1,
-    usedInStrategies: 1,
-    lastUsedAt: "2026-04-02",
   }),
 
   // Settlement
@@ -803,32 +655,6 @@ Mashreq Bank PSC`,
     usedInStrategies: 2,
     lastUsedAt: "2026-04-03",
   }),
-  mk({
-    ...mashreqLender,
-    id: "tmpl-mashreq-settle-voice",
-    name: "Mashreq — Settlement Offer (AI Call)",
-    purpose: "settlement",
-    channel: "voice",
-    body: `Good day. This is Mashreq Bank Collections calling for {{borrower_name}}.
-
-We are pleased to extend a one-time settlement offer on your account {{account_number}}. Your current balance is AED {{amount_due}}, and we are willing to settle this for AED {{settlement_amount}}, a discount of {{discount_percent}} percent.
-
-This offer is valid until {{expiry_date}}.
-
-To accept this settlement and pay now, press 1.
-To speak with a Mashreq agent for full details, press 2.
-To receive the offer details by SMS, press 3.
-To opt out, press 9.
-
-Thank you.`,
-    sentCount: 460,
-    openRate: 0,
-    clickRate: 0,
-    conversionRate: 13.2,
-    usedInJourneys: 1,
-    usedInStrategies: 1,
-    lastUsedAt: "2026-04-01",
-  }),
 
   // Final Notice
   mk({
@@ -907,29 +733,6 @@ Mashreq Bank PSC`,
     usedInStrategies: 2,
     lastUsedAt: "2026-04-03",
   }),
-  mk({
-    ...mashreqLender,
-    id: "tmpl-mashreq-final-voice",
-    name: "Mashreq — Final Notice (AI Call)",
-    purpose: "final-notice",
-    channel: "voice",
-    body: `This is a final notice from Mashreq Bank Collections Department for {{borrower_name}}.
-
-The outstanding balance of AED {{amount_due}} on account {{account_number}} has remained unpaid for {{dpd}} days. Unless this matter is resolved within seven days, your account will be referred for legal action and credit bureau reporting.
-
-To pay the full balance now, press 1.
-To arrange immediate payment with a Mashreq agent, press 2.
-To request a settlement offer, press 3.
-
-This is your final automated notice. Thank you.`,
-    sentCount: 320,
-    openRate: 0,
-    clickRate: 0,
-    conversionRate: 9.6,
-    usedInJourneys: 1,
-    usedInStrategies: 1,
-    lastUsedAt: "2026-04-01",
-  }),
 ];
 
 /* ─────────────────────────────────────────────────────────────────────────
@@ -1004,30 +807,6 @@ Need to talk? Just reply to this message and we'll get you sorted. No judgement,
     usedInStrategies: 2,
     lastUsedAt: "2026-04-03",
   }),
-  mk({
-    ...tamaraLender,
-    id: "tmpl-tamara-welcome-voice",
-    name: "Tamara — Welcome (AI Call)",
-    purpose: "welcome",
-    channel: "voice",
-    body: `Hey there, this is an automated message from Tamara. Could I speak with {{borrower_name}}?
-
-We're calling to give you a friendly heads up — your installment of AED {{amount_due}} is due on {{due_date}}.
-
-To get a payment link sent to your phone right now, press 1.
-To set up a more flexible payment plan, press 2.
-To talk to a human, press 3.
-To stop these reminders, press 9.
-
-Thanks for shopping with Tamara!`,
-    sentCount: 1840,
-    openRate: 0,
-    clickRate: 0,
-    conversionRate: 5.4,
-    usedInJourneys: 2,
-    usedInStrategies: 1,
-    lastUsedAt: "2026-04-02",
-  }),
 
   // Reminder
   mk({
@@ -1092,30 +871,6 @@ Need flexibility? Just reply.
     usedInJourneys: 4,
     usedInStrategies: 2,
     lastUsedAt: "2026-04-04",
-  }),
-  mk({
-    ...tamaraLender,
-    id: "tmpl-tamara-reminder-voice",
-    name: "Tamara — Friendly Reminder (AI Call)",
-    purpose: "reminder",
-    channel: "voice",
-    body: `Hey, this is a quick automated reminder from Tamara for {{borrower_name}}.
-
-Your installment of AED {{amount_due}} is due on {{due_date}}.
-
-To get a payment link by SMS right now, press 1.
-To talk to a Tamara agent, press 2.
-If you've already paid, press 3 — sorry for the bother!
-To stop these reminders, press 9.
-
-Thanks!`,
-    sentCount: 2640,
-    openRate: 0,
-    clickRate: 0,
-    conversionRate: 6.2,
-    usedInJourneys: 2,
-    usedInStrategies: 1,
-    lastUsedAt: "2026-04-03",
   }),
 
   // Broken Promise
@@ -1183,30 +938,6 @@ Or reply to this message and tell us what's going on. We've got options that mig
     usedInJourneys: 2,
     usedInStrategies: 2,
     lastUsedAt: "2026-04-03",
-  }),
-  mk({
-    ...tamaraLender,
-    id: "tmpl-tamara-bp-voice",
-    name: "Tamara — Broken Promise (AI Call)",
-    purpose: "broken-promise",
-    channel: "voice",
-    body: `Hey there, this is Tamara calling for {{borrower_name}}. Looks like the AED {{amount_due}} payment you promised on {{due_date}} didn't go through.
-
-No stress — we just want to help you sort it.
-
-To get a fresh payment link by SMS, press 1.
-To set up a new date that works better, press 2.
-To talk to a Tamara team member, press 3.
-To stop these calls, press 9.
-
-Thanks for being a Tamara customer.`,
-    sentCount: 720,
-    openRate: 0,
-    clickRate: 0,
-    conversionRate: 9.4,
-    usedInJourneys: 1,
-    usedInStrategies: 1,
-    lastUsedAt: "2026-04-02",
   }),
 ];
 
@@ -1291,32 +1022,6 @@ Emirates NBD Bank PJSC`,
     usedInStrategies: 2,
     lastUsedAt: "2026-04-03",
   }),
-  mk({
-    ...enbdLender,
-    id: "tmpl-enbd-reminder-voice",
-    name: "Emirates NBD — Payment Reminder (AI Call)",
-    purpose: "reminder",
-    channel: "voice",
-    body: `Good day. This is a courtesy call from Emirates NBD. May we speak with {{borrower_name}}?
-
-We are calling regarding your account {{account_number}}. A payment of AED {{amount_due}} is scheduled for {{due_date}}.
-
-Your relationship manager remains available for any assistance.
-
-To be connected to your relationship manager directly, press 1.
-To receive a secure payment link by SMS, press 2.
-To repeat this message, press star.
-To opt out of automated calls, press 9.
-
-Thank you for banking with Emirates NBD.`,
-    sentCount: 180,
-    openRate: 0,
-    clickRate: 0,
-    conversionRate: 7.4,
-    usedInJourneys: 1,
-    usedInStrategies: 1,
-    lastUsedAt: "2026-04-02",
-  }),
 
   // Settlement
   mk({
@@ -1395,29 +1100,6 @@ Emirates NBD Bank PJSC`,
     usedInJourneys: 1,
     usedInStrategies: 2,
     lastUsedAt: "2026-04-03",
-  }),
-  mk({
-    ...enbdLender,
-    id: "tmpl-enbd-settle-voice",
-    name: "Emirates NBD — Settlement Offer (AI Call)",
-    purpose: "settlement",
-    channel: "voice",
-    body: `Good day. This is Emirates NBD calling for {{borrower_name}}. We have a confidential settlement proposal regarding your account {{account_number}}.
-
-Your current balance is AED {{amount_due}}, and we are pleased to offer a settlement of AED {{settlement_amount}}, a discount of {{discount_percent}} percent. This proposal is valid until {{expiry_date}}.
-
-To be connected to your relationship manager to discuss this, press 1.
-To receive the proposal in writing by email, press 2.
-To proceed with payment via secure link, press 3.
-
-Thank you for your continued banking relationship with Emirates NBD.`,
-    sentCount: 60,
-    openRate: 0,
-    clickRate: 0,
-    conversionRate: 16.4,
-    usedInJourneys: 1,
-    usedInStrategies: 1,
-    lastUsedAt: "2026-04-01",
   }),
 ];
 
@@ -1499,30 +1181,6 @@ If you need to talk about a hardship plan or change of date, just reply to this 
     usedInStrategies: 2,
     lastUsedAt: "2026-04-03",
   }),
-  mk({
-    ...cashnowLender,
-    id: "tmpl-cashnow-reminder-voice",
-    name: "CashNow — Payment Reminder (AI Call)",
-    purpose: "reminder",
-    channel: "voice",
-    body: `Hello, this is an automated message from CashNow. May I speak with {{borrower_name}}?
-
-This call is about your loan {{account_number}}. An installment of AED {{amount_due}} is due on {{due_date}}.
-
-To pay your installment now using your saved card, press 1.
-To receive a payment link by SMS, press 2.
-To speak with a CashNow agent about hardship options, press 3.
-To opt out of automated calls, press 9.
-
-Thank you for being a CashNow customer.`,
-    sentCount: 980,
-    openRate: 0,
-    clickRate: 0,
-    conversionRate: 5.2,
-    usedInJourneys: 2,
-    usedInStrategies: 1,
-    lastUsedAt: "2026-04-02",
-  }),
 
   // Hardship
   mk({
@@ -1603,30 +1261,6 @@ We work with you, not against you.
     usedInJourneys: 2,
     usedInStrategies: 2,
     lastUsedAt: "2026-04-03",
-  }),
-  mk({
-    ...cashnowLender,
-    id: "tmpl-cashnow-hardship-voice",
-    name: "CashNow — Hardship Outreach (AI Call)",
-    purpose: "hardship",
-    channel: "voice",
-    body: `Hello, this is CashNow calling for {{borrower_name}}. We're not calling to chase a payment — we're calling because we may be able to help.
-
-If you're experiencing financial difficulty, we have hardship options including reduced payments, payment pauses, and settlement plans. There is no cost to discussing your situation with us.
-
-To be connected with a hardship specialist now, press 1.
-To request a callback at a better time, press 2.
-To receive information by SMS, press 3.
-To opt out of these calls, press 9.
-
-Whatever you decide, we appreciate you being a CashNow customer.`,
-    sentCount: 240,
-    openRate: 0,
-    clickRate: 0,
-    conversionRate: 11.4,
-    usedInJourneys: 1,
-    usedInStrategies: 1,
-    lastUsedAt: "2026-04-02",
   }),
 ];
 

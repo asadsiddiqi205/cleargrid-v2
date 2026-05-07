@@ -15,11 +15,8 @@ import { EditorPanel } from "@/components/composer/editor-panel"
 import { PreviewPanel } from "@/components/composer/preview-panel"
 
 export type ComposerMode = "single" | "segment"
-export type Channel = "email" | "sms" | "whatsapp" | "voice"
+export type Channel = "email" | "sms" | "whatsapp"
 export type CompliancePosture = "standard" | "strict" | "lenient"
-export type VoiceLang = "en" | "ar"
-export type VoiceVoice = "male" | "female"
-export type CallWindow = "anytime" | "morning" | "afternoon" | "evening"
 
 /** Three-mode email editor (Khalil's model). */
 export type EmailMode = "template" | "inline" | "ai_generated"
@@ -67,14 +64,6 @@ export interface ComposerState {
   // WhatsApp
   whatsappTemplateId: string
 
-  // Voice (AI Call)
-  voiceScript: string
-  voiceScriptName: string
-  voiceLang: VoiceLang
-  voiceVoice: VoiceVoice
-  voiceMaxAttempts: number
-  voiceCallWindow: CallWindow
-
   previewBorrowerId: string
 }
 
@@ -93,26 +82,17 @@ const DEFAULT_STATE: ComposerState = {
   body: "",
   smsBody: "",
   whatsappTemplateId: whatsappTemplates[0].id,
-  voiceScript: "",
-  voiceScriptName: "custom",
-  voiceLang: "en",
-  voiceVoice: "female",
-  voiceMaxAttempts: 3,
-  voiceCallWindow: "anytime",
   previewBorrowerId: borrowers[0].id,
 }
 
 export function ComposerView() {
   const [state, setState] = React.useState<ComposerState>(DEFAULT_STATE)
-  const [bannerDismissed, setBannerDismissed] = React.useState(false)
   const searchParams = useSearchParams()
 
   const selectedBorrower: Borrower =
     borrowers.find((b) => b.id === state.selectedBorrowerId) ?? borrowers[0]
   const selectedSegment: Segment =
     segments.find((s) => s.id === state.selectedSegmentId) ?? segments[0]
-  const strategy = strategies.find((s) => s.id === state.strategyId)
-
   const update = React.useCallback(
     <K extends keyof ComposerState>(key: K, value: ComposerState[K]) => {
       setState((prev) => ({ ...prev, [key]: value }))
@@ -127,8 +107,6 @@ export function ComposerView() {
       previewText: "",
       body: "",
       smsBody: "",
-      voiceScript: "",
-      voiceScriptName: "custom",
     }))
   }, [])
 
@@ -177,8 +155,7 @@ export function ComposerView() {
       if (
         channelParam === "email" ||
         channelParam === "sms" ||
-        channelParam === "whatsapp" ||
-        channelParam === "voice"
+        channelParam === "whatsapp"
       ) {
         channelFromParam = channelParam
         next.channel = channelParam
@@ -188,15 +165,12 @@ export function ComposerView() {
       if (templateId) {
         const tmpl = allTemplates.find((t) => t.id === templateId)
         if (tmpl) {
-          // New data model uses lowercase channel keys including "voice"; map to composer channel
           const templateChannel: Channel =
             tmpl.channel === "email"
               ? "email"
               : tmpl.channel === "sms"
                 ? "sms"
-                : tmpl.channel === "whatsapp"
-                  ? "whatsapp"
-                  : "voice"
+                : "whatsapp"
           if (!channelFromParam) next.channel = templateChannel
 
           if (templateChannel === "email") {
@@ -212,10 +186,6 @@ export function ComposerView() {
               (w) => w.id === tmpl.id || w.id === templateId
             )
             if (match) next.whatsappTemplateId = match.id
-          } else {
-            // voice
-            next.voiceScript = tmpl.body
-            next.voiceScriptName = tmpl.name
           }
         }
       }
@@ -231,27 +201,6 @@ export function ComposerView() {
   const handleSend = React.useCallback(() => {
     const count =
       state.mode === "segment" ? selectedSegment.borrowers - 56 : 1
-
-    if (state.channel === "voice") {
-      const recipientLabel =
-        state.mode === "segment"
-          ? `${count.toLocaleString()} borrowers`
-          : selectedBorrower.name
-      toast.success(`Initiating ClearVoice calls to ${recipientLabel}...`)
-      window.setTimeout(() => {
-        toast.success(
-          state.mode === "segment"
-            ? `${count.toLocaleString()} calls queued`
-            : `Call queued for ${selectedBorrower.name}`,
-          {
-            description:
-              "ClearVoice will dial during your selected call window (09:00–19:00 GST).",
-          }
-        )
-        clearEditor()
-      }, 1000)
-      return
-    }
 
     const channelLabel =
       state.channel === "email"
@@ -288,23 +237,6 @@ export function ComposerView() {
 
   return (
     <div className="flex h-[calc(100vh-3.5rem)] w-full flex-col overflow-hidden bg-background">
-      {/* Onboarding banner */}
-      {!bannerDismissed && (
-        <div className="flex shrink-0 items-center justify-between gap-4 border-b border-border bg-muted px-5 py-2">
-          <p className="text-sm text-muted-foreground">
-            Pick your audience on the left&nbsp;&rarr;&nbsp;Write your message in the centre&nbsp;&rarr;&nbsp;Preview and send on the right.
-          </p>
-          <button
-            type="button"
-            onClick={() => setBannerDismissed(true)}
-            className="shrink-0 text-muted-foreground hover:text-foreground transition-colors leading-none"
-            aria-label="Dismiss"
-          >
-            ✕
-          </button>
-        </div>
-      )}
-
       {/* Three-panel layout */}
       <div className="flex flex-1 min-h-0 overflow-hidden">
       <aside className="w-[300px] shrink-0 border-r border-border overflow-y-auto">
@@ -313,7 +245,6 @@ export function ComposerView() {
           update={update}
           selectedBorrower={selectedBorrower}
           selectedSegment={selectedSegment}
-          strategy={strategy}
         />
       </aside>
 

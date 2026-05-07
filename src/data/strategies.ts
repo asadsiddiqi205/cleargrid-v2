@@ -18,7 +18,7 @@ export type StrategyTone =
 
 export type CompliancePosture = "standard" | "strict" | "lenient"
 
-export type StrategyChannel = "email" | "sms" | "whatsapp" | "voice"
+export type StrategyChannel = "email" | "sms" | "whatsapp"
 
 export interface StrategyChannelTemplate {
   channel: StrategyChannel
@@ -36,7 +36,7 @@ export interface Strategy {
   purpose: StrategyPurpose
   tone: StrategyTone
   compliancePosture: CompliancePosture
-  channels: StrategyChannelTemplate[] // 4 entries: email, sms, whatsapp, voice
+  channels: StrategyChannelTemplate[] // 3 entries: email, sms, whatsapp
   cadence: string
   systemPrompt: string
   status: "active" | "draft" | "archived"
@@ -138,7 +138,6 @@ function chans(
   email: { id: string; name: string; enabled?: boolean },
   sms: { id: string; name: string; enabled?: boolean },
   whatsapp: { id: string; name: string; enabled?: boolean },
-  voice: { id: string; name: string; enabled?: boolean }
 ): StrategyChannelTemplate[] {
   return [
     {
@@ -158,12 +157,6 @@ function chans(
       templateId: whatsapp.id,
       templateName: whatsapp.name,
       enabled: whatsapp.enabled ?? true,
-    },
-    {
-      channel: "voice",
-      templateId: voice.id,
-      templateName: voice.name,
-      enabled: voice.enabled ?? true,
     },
   ]
 }
@@ -189,7 +182,6 @@ export const strategies: Strategy[] = [
       { id: "tmpl-001", name: "Payment Reminder - Soft" },
       { id: "tmpl-009", name: "Partial Payment Thank You" },
       { id: "tmpl-004", name: "Payment Link - WhatsApp" },
-      { id: "tmpl-vc-generic", name: "Generic Voice Reminder" }
     ),
     cadence: "Day 1, Day 4, Day 8",
     systemPrompt:
@@ -216,7 +208,6 @@ export const strategies: Strategy[] = [
       { id: "tmpl-010", name: "Welcome - New Delinquent" },
       { id: "tmpl-009", name: "Partial Payment Thank You" },
       { id: "tmpl-004", name: "Payment Link - WhatsApp" },
-      { id: "tmpl-vc-welcome", name: "Welcome Voice Script", enabled: false }
     ),
     cadence: "Day 1, Day 5",
     systemPrompt:
@@ -243,7 +234,6 @@ export const strategies: Strategy[] = [
       { id: "tmpl-001", name: "Payment Reminder - Soft" },
       { id: "tmpl-003", name: "PTP Confirmation" },
       { id: "tmpl-008", name: "Callback Confirmation" },
-      { id: "tmpl-vc-ptp", name: "PTP Reminder Voice" }
     ),
     cadence: "Same day, Day before due, Due date",
     systemPrompt:
@@ -274,7 +264,6 @@ export const strategies: Strategy[] = [
       { id: "tmpl-002", name: "Overdue Notice - Firm" },
       { id: "tmpl-006", name: "Broken Promise Follow-up" },
       { id: "tmpl-004", name: "Payment Link - WhatsApp" },
-      { id: "tmpl-vc-mashreq-bp", name: "Mashreq Broken Promise Call" }
     ),
     cadence: "Day after PTP miss, +2 days, +5 days",
     systemPrompt:
@@ -301,7 +290,6 @@ export const strategies: Strategy[] = [
       { id: "tmpl-002", name: "Overdue Notice - Firm" },
       { id: "tmpl-003", name: "PTP Confirmation" },
       { id: "tmpl-008", name: "Callback Confirmation" },
-      { id: "tmpl-vc-mashreq-ptp", name: "Mashreq PTP Voice", enabled: false }
     ),
     cadence: "Same day, Day before due",
     systemPrompt:
@@ -328,7 +316,6 @@ export const strategies: Strategy[] = [
       { id: "tmpl-007", name: "Settlement Offer" },
       { id: "tmpl-003", name: "PTP Confirmation" },
       { id: "tmpl-004", name: "Payment Link - WhatsApp" },
-      { id: "tmpl-vc-mashreq-settlement", name: "Mashreq Settlement Voice" }
     ),
     cadence: "Day 1, Day 7 (final reminder)",
     systemPrompt:
@@ -355,7 +342,6 @@ export const strategies: Strategy[] = [
       { id: "tmpl-005", name: "Legal Notice Preview" },
       { id: "tmpl-002", name: "Overdue Notice - Firm" },
       { id: "tmpl-011", name: "Escalation Warning" },
-      { id: "tmpl-vc-mashreq-final", name: "Mashreq Final Notice Call" }
     ),
     cadence: "Day 1, Day 4, Day 7 (escalation)",
     systemPrompt:
@@ -386,7 +372,6 @@ export const strategies: Strategy[] = [
       { id: "tmpl-001", name: "Payment Reminder - Soft" },
       { id: "tmpl-009", name: "Partial Payment Thank You" },
       { id: "tmpl-004", name: "Payment Link - WhatsApp" },
-      { id: "tmpl-vc-tamara-reminder", name: "Tamara Reminder Call", enabled: false }
     ),
     cadence: "Day 1, Day 3, Day 7",
     systemPrompt:
@@ -413,7 +398,6 @@ export const strategies: Strategy[] = [
       { id: "tmpl-006", name: "Broken Promise Follow-up" },
       { id: "tmpl-006", name: "Broken Promise Follow-up" },
       { id: "tmpl-004", name: "Payment Link - WhatsApp" },
-      { id: "tmpl-vc-tamara-bp", name: "Tamara Empathy Call" }
     ),
     cadence: "Day 1, Day 4",
     systemPrompt:
@@ -440,7 +424,6 @@ export const strategies: Strategy[] = [
       { id: "tmpl-010", name: "Welcome - New Delinquent" },
       { id: "tmpl-009", name: "Partial Payment Thank You" },
       { id: "tmpl-004", name: "Payment Link - WhatsApp" },
-      { id: "tmpl-vc-tamara-welcome", name: "Tamara Welcome Voice", enabled: false }
     ),
     cadence: "Day 1 only",
     systemPrompt:
@@ -467,7 +450,6 @@ export const strategies: Strategy[] = [
       { id: "tmpl-007", name: "Settlement Offer" },
       { id: "tmpl-003", name: "PTP Confirmation" },
       { id: "tmpl-004", name: "Payment Link - WhatsApp" },
-      { id: "tmpl-vc-tamara-settlement", name: "Tamara Settlement Voice" }
     ),
     cadence: "Day 1, Day 6",
     systemPrompt:
@@ -498,7 +480,6 @@ export const strategies: Strategy[] = [
       { id: "tmpl-001", name: "Payment Reminder - Soft" },
       { id: "tmpl-009", name: "Partial Payment Thank You" },
       { id: "tmpl-004", name: "Payment Link - WhatsApp" },
-      { id: "tmpl-vc-cashnow", name: "CashNow Standard Voice" }
     ),
     cadence: "Day 1, Day 5, Day 10",
     systemPrompt:
@@ -525,7 +506,6 @@ export const strategies: Strategy[] = [
       { id: "tmpl-010", name: "Welcome - New Delinquent" },
       { id: "tmpl-009", name: "Partial Payment Thank You" },
       { id: "tmpl-004", name: "Payment Link - WhatsApp" },
-      { id: "tmpl-vc-cashnow-hardship", name: "CashNow Hardship Voice" }
     ),
     cadence: "Day 1, Day 7, Day 14",
     systemPrompt:
@@ -556,7 +536,6 @@ export const strategies: Strategy[] = [
       { id: "tmpl-001", name: "Payment Reminder - Soft" },
       { id: "tmpl-009", name: "Partial Payment Thank You" },
       { id: "tmpl-004", name: "Payment Link - WhatsApp" },
-      { id: "tmpl-vc-enbd-nudge", name: "ENBD Early Nudge Voice", enabled: false }
     ),
     cadence: "Day 1, Day 4",
     systemPrompt:
@@ -583,7 +562,6 @@ export const strategies: Strategy[] = [
       { id: "tmpl-002", name: "Overdue Notice - Firm" },
       { id: "tmpl-006", name: "Broken Promise Follow-up" },
       { id: "tmpl-004", name: "Payment Link - WhatsApp" },
-      { id: "tmpl-vc-enbd-recovery", name: "ENBD Recovery Voice" }
     ),
     cadence: "Day 1, Day 4, Day 8",
     systemPrompt:
@@ -610,7 +588,6 @@ export const strategies: Strategy[] = [
       { id: "tmpl-007", name: "Settlement Offer" },
       { id: "tmpl-003", name: "PTP Confirmation" },
       { id: "tmpl-008", name: "Callback Confirmation" },
-      { id: "tmpl-vc-enbd-vip", name: "ENBD VIP Settlement Call" }
     ),
     cadence: "Day 1 (manual trigger)",
     systemPrompt:
@@ -640,7 +617,6 @@ export const strategies: Strategy[] = [
       { id: "tmpl-002", name: "Overdue Notice - Firm" },
       { id: "tmpl-006", name: "Broken Promise Follow-up" },
       { id: "tmpl-004", name: "Payment Link - WhatsApp", enabled: false },
-      { id: "tmpl-vc-tamara-legacy", name: "Tamara Legacy Voice", enabled: false }
     ),
     cadence: "Day 1, Day 5",
     systemPrompt:

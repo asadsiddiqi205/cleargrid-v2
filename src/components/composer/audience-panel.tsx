@@ -18,7 +18,6 @@ import {
 
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import {
@@ -35,12 +34,16 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover"
 
 import { formatAED } from "@/lib/formatters"
 import { cn } from "@/lib/utils"
 import { borrowers, type Borrower } from "@/data/borrowers"
 import { segments, type Segment } from "@/data/segments"
-import { strategies, type Strategy } from "@/data/strategies"
 
 import type { ComposerState } from "@/components/composer/composer-view"
 
@@ -49,10 +52,9 @@ interface AudiencePanelProps {
   update: <K extends keyof ComposerState>(key: K, value: ComposerState[K]) => void
   selectedBorrower: Borrower
   selectedSegment: Segment
-  strategy: Strategy | undefined
 }
 
-const REACH = { email: 92, sms: 98, whatsapp: 76, voice: 84 }
+const REACH = { email: 92, sms: 98, whatsapp: 76 }
 
 function initials(name: string) {
   return name
@@ -79,7 +81,6 @@ export function AudiencePanel({
   update,
   selectedBorrower,
   selectedSegment,
-  strategy,
 }: AudiencePanelProps) {
   const [search, setSearch] = React.useState("")
   const [sampleIdx, setSampleIdx] = React.useState(0)
@@ -242,7 +243,6 @@ export function AudiencePanel({
                 label="WhatsApp"
                 pct={REACH.whatsapp}
               />
-              <ReachBar icon={<Phone className="h-3 w-3" />} label="Voice" pct={REACH.voice} />
             </div>
 
             <Tooltip>
@@ -306,68 +306,6 @@ export function AudiencePanel({
         </div>
       )}
 
-      {/* ---- Context section ---- */}
-      <div className="space-y-3 border-t border-border pt-4">
-        <h2 className="font-heading text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-          Tone &amp; rules
-        </h2>
-        <p className="text-[11px] leading-relaxed text-muted-foreground">
-          Optional. Tell the AI how to write and how strictly to follow compliance rules.
-        </p>
-
-        <div className="space-y-2">
-          <Label className="text-[11px] uppercase tracking-wider text-muted-foreground">
-            Writing style
-          </Label>
-          <Select
-            value={state.strategyId || "__none__"}
-            onValueChange={(v) =>
-              update("strategyId", v === "__none__" ? "" : v ?? "")
-            }
-          >
-            <SelectTrigger className="w-full">
-              <SelectValue placeholder="None" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="__none__">None</SelectItem>
-              {strategies.map((s) => (
-                <SelectItem key={s.id} value={s.id}>
-                  {s.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          {strategy && (
-            <p className="text-[11px] leading-relaxed text-muted-foreground">
-              {strategy.description}
-            </p>
-          )}
-        </div>
-
-        <div className="space-y-2">
-          <Label className="text-[11px] uppercase tracking-wider text-muted-foreground">
-            How strict on compliance
-          </Label>
-          <Select
-            value={state.compliance}
-            onValueChange={(v) =>
-              update("compliance", ((v ?? "standard") as ComposerState["compliance"]))
-            }
-          >
-            <SelectTrigger className="w-full">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="standard">Standard — recommended</SelectItem>
-              <SelectItem value="strict">Strict — extra cautious</SelectItem>
-              <SelectItem value="lenient">Lenient — fewer guardrails</SelectItem>
-            </SelectContent>
-          </Select>
-          <p className="text-[10px] leading-relaxed text-muted-foreground/80">
-            Controls how cautiously the message follows your contact rules.
-          </p>
-        </div>
-      </div>
     </div>
     </TooltipProvider>
   )
@@ -418,14 +356,26 @@ function BorrowerCard({ borrower }: { borrower: Borrower }) {
         <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
           Risk Score
         </span>
-        <span
-          className={cn(
-            "rounded-full px-2 py-0.5 text-[10px] font-medium",
-            riskColor(borrower.riskScore)
-          )}
-        >
-          {borrower.riskScore}
-        </span>
+        <Popover>
+          <PopoverTrigger>
+            <span
+              className={cn(
+                "cursor-pointer rounded-full px-2 py-0.5 text-[10px] font-semibold",
+                riskColor(borrower.riskScore)
+              )}
+            >
+              {borrower.riskScore}
+            </span>
+          </PopoverTrigger>
+          <PopoverContent side="bottom" className="w-[240px] p-3 text-xs space-y-2">
+            <p className="font-semibold text-foreground">Risk Score Breakdown</p>
+            <div className="space-y-1 text-muted-foreground">
+              <div className="flex justify-between"><span>DPD Bucket</span><span className="text-foreground">{borrower.dpdBucket}</span></div>
+              <div className="flex justify-between"><span>Broken Promises</span><span className="text-foreground">2</span></div>
+              <div className="flex justify-between"><span>Recent Reachability</span><span className="text-foreground">3/4 channels</span></div>
+            </div>
+          </PopoverContent>
+        </Popover>
       </div>
     </div>
   )

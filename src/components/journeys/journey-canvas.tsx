@@ -1,6 +1,6 @@
 "use client";
 
-import {
+import React, {
   useCallback,
   useEffect,
   useRef,
@@ -47,11 +47,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
-import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -73,14 +68,15 @@ import {
   Archive,
   Trash2,
   User,
-  CreditCard,
   FileText,
-  ChevronDown,
   Settings as SettingsIcon,
   Check,
   Undo2,
   Redo2,
   Eye,
+  BarChart3,
+  Handshake,
+  Calendar,
   GitBranch,
   Info,
   Maximize2,
@@ -104,6 +100,15 @@ import {
   AlertDialogFooter,
   AlertDialogAction,
 } from "@/components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+  DialogClose,
+} from "@/components/ui/dialog";
 
 /* ------------------------------------------------------------------ */
 /*  Node types registry                                               */
@@ -123,7 +128,7 @@ const nodeTypes = {
 /*  Execution levels                                                   */
 /* ------------------------------------------------------------------ */
 
-type ExecutionLevel = "borrower" | "account" | "sub_account";
+type ExecutionLevel = "deal";
 
 interface ExecutionLevelConfig {
   id: ExecutionLevel;
@@ -135,38 +140,16 @@ interface ExecutionLevelConfig {
   badgeColor: string;
 }
 
-const EXECUTION_LEVELS: ExecutionLevelConfig[] = [
-  {
-    id: "borrower",
-    label: "Borrower",
-    icon: User,
-    description: "Customer-wide",
-    helperText:
-      "One active instance per borrower. Use for portfolio-level decisions like total exposure, risk segment, communication fatigue.",
-    dedupLabel: "One active instance per borrower",
-    badgeColor: "text-emerald-400",
-  },
-  {
-    id: "account",
-    label: "Account",
-    icon: CreditCard,
-    description: "Per product / obligation",
-    helperText:
-      "One active instance per account. Use for per-product decisions like credit card, loan, or BNPL flows.",
-    dedupLabel: "One active instance per account",
-    badgeColor: "text-cyan-400",
-  },
-  {
-    id: "sub_account",
-    label: "Sub-account",
-    icon: FileText,
-    description: "Per installment / due item",
-    helperText:
-      "One active instance per sub-account. Use for installment-level decisions, statement cycles, or due tranches.",
-    dedupLabel: "One active instance per sub-account",
-    badgeColor: "text-orange-400",
-  },
-];
+const DEAL_LEVEL: ExecutionLevelConfig = {
+  id: "deal",
+  label: "Deal",
+  icon: Handshake,
+  description: "Per deal",
+  helperText:
+    "One active instance per deal. Use for deal-level collection decisions, payment follow-ups, and escalation flows.",
+  dedupLabel: "One active instance per deal",
+  badgeColor: "text-emerald-400",
+};
 
 /* ------------------------------------------------------------------ */
 /*  Props                                                              */
@@ -194,14 +177,12 @@ export default function JourneyCanvas({ journeyId }: JourneyCanvasProps) {
   const [isSimulating, setIsSimulating] = useState(false);
   const [nameValue, setNameValue] = useState(journeyName);
   const [isEditingName, setIsEditingName] = useState(false);
-  const [status, setStatus] = useState<"draft" | "published">("draft");
+  const [status, setStatus] = useState<"draft" | "published" | "scheduled">("draft");
+  const [scheduleDialogOpen, setScheduleDialogOpen] = useState(false);
 
   // Execution level
-  const [executionLevel, setExecutionLevel] = useState<ExecutionLevel>("borrower");
-  const currentLevel = useMemo(
-    () => EXECUTION_LEVELS.find((l) => l.id === executionLevel)!,
-    [executionLevel]
-  );
+  const executionLevel: ExecutionLevel = "deal";
+  const currentLevel = DEAL_LEVEL;
 
   // Pre-launch validation dialog
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
@@ -210,6 +191,18 @@ export default function JourneyCanvas({ journeyId }: JourneyCanvasProps) {
   // Settings panel
   const [showSettings, setShowSettings] = useState(false);
   const [showMinimap, setShowMinimap] = useState(true);
+  const [showAnalytics, setShowAnalytics] = useState(false);
+
+  // Journey analytics (mock stats derived from node count)
+  const journeyStats = useMemo(() => {
+    const base = nodes.length * 47;
+    return {
+      entered: Math.round(base * 8),
+      active: Math.round(base * 5.2),
+      converted: Math.round(base * 1.8),
+      exited: Math.round(base * 0.6),
+    };
+  }, [nodes.length]);
   const [journeySettings, setJourneySettings] = useState({
     segment: "",
     entryRule: "once",
@@ -240,7 +233,6 @@ export default function JourneyCanvas({ journeyId }: JourneyCanvasProps) {
   const [validateState, setValidateState] = useState<"idle" | "validating" | "valid" | "invalid">(
     "idle"
   );
-  const [statsPulse, setStatsPulse] = useState(false);
 
   /* ---------- history helpers ---------- */
   const pushHistory = useCallback(
@@ -283,6 +275,15 @@ export default function JourneyCanvas({ journeyId }: JourneyCanvasProps) {
     toast.info("Redone");
   }, [history, historyIndex, setNodes, setEdges]);
 
+  /* ---------- delete selected node ---------- */
+  const deleteSelectedNode = React.useCallback(() => {
+    if (!selectedNode) return
+    setNodes((nds) => nds.filter((n) => n.id !== selectedNode.id))
+    setEdges((eds) => eds.filter((e) => e.source !== selectedNode.id && e.target !== selectedNode.id))
+    setSelectedNode(null)
+    toast.info("Node deleted")
+  }, [selectedNode, setNodes, setEdges])
+
   // Keyboard: Cmd+Z / Cmd+Shift+Z
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -303,10 +304,14 @@ export default function JourneyCanvas({ journeyId }: JourneyCanvasProps) {
         e.preventDefault();
         redo();
       }
+      if ((e.key === "Delete" || e.key === "Backspace") && selectedNode && !(e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement)) {
+        e.preventDefault();
+        deleteSelectedNode();
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [undo, redo]);
+  }, [undo, redo, selectedNode, deleteSelectedNode]);
 
   /* ---------- connections ---------- */
   const onConnect = useCallback(
@@ -500,13 +505,6 @@ export default function JourneyCanvas({ journeyId }: JourneyCanvasProps) {
     toast.success("Journey is valid — ready to publish");
     return true;
   }, [nodes, edges, setNodes]);
-
-  /* ---------- pulse stats when node count changes ---------- */
-  useEffect(() => {
-    setStatsPulse(true);
-    const id = window.setTimeout(() => setStatsPulse(false), 520);
-    return () => window.clearTimeout(id);
-  }, [nodes.length]);
 
   /* ---------- simulate with borrower counts ---------- */
   const simulate = useCallback(async () => {
@@ -719,6 +717,19 @@ export default function JourneyCanvas({ journeyId }: JourneyCanvasProps) {
     });
   }, [nodes, edges, validateJourney, currentLevel]);
 
+  /* ---------- schedule (opens dialog after validation) ---------- */
+  const handleScheduleOpen = useCallback(() => {
+    const triggerNodes = nodes.filter(
+      (n) => n.type === "trigger" || String((n.data as Record<string, unknown>).blockType ?? "").endsWith("_trigger")
+    );
+    if (triggerNodes.length === 0) {
+      toast.error("Add a trigger node before scheduling");
+      return;
+    }
+    if (!validateJourney()) return;
+    setScheduleDialogOpen(true);
+  }, [nodes, validateJourney]);
+
   /* ---------- hydrate from composer (?fromComposer=true) ---------- */
   const searchParams = useSearchParams();
   const fromComposerRef = useRef(false);
@@ -794,17 +805,6 @@ export default function JourneyCanvas({ journeyId }: JourneyCanvasProps) {
     []
   );
 
-  /* ---------- mock stats from node count ---------- */
-  const stats = useMemo(() => {
-    const base = nodes.length * 47;
-    return {
-      entered: base * 8,
-      active: Math.round(base * 5.2),
-      converted: Math.round(base * 1.8),
-      exited: Math.round(base * 0.6),
-    };
-  }, [nodes.length]);
-
   /* ---------- inject live counts when published ---------- */
   const liveCounts = liveNodeCounts[journeyId] ?? {};
   const displayNodes = useMemo(() => {
@@ -856,11 +856,17 @@ export default function JourneyCanvas({ journeyId }: JourneyCanvasProps) {
           )}
 
           {/* Status badge */}
-          {status === "draft" ? (
+          {status === "draft" && (
             <Badge variant="secondary" className="text-[10px]">
               Draft
             </Badge>
-          ) : (
+          )}
+          {status === "scheduled" && (
+            <Badge className="bg-amber-500/20 text-[10px] text-amber-400">
+              Scheduled
+            </Badge>
+          )}
+          {status === "published" && (
             <Badge className="bg-emerald-500/20 text-[10px] text-emerald-400">
               Published
             </Badge>
@@ -868,61 +874,14 @@ export default function JourneyCanvas({ journeyId }: JourneyCanvasProps) {
 
           <div className="h-5 w-px bg-border" />
 
-          {/* Execution Level selector */}
-          <Popover>
-            <PopoverTrigger>
-              <span className="flex cursor-pointer items-center gap-1.5 rounded-md border border-border px-2 py-1 text-[11px] text-foreground transition-colors hover:bg-muted">
-                <currentLevel.icon className={cn("h-3.5 w-3.5", currentLevel.badgeColor)} />
-                <span className="font-medium">{currentLevel.label}</span>
-                <span className="hidden text-muted-foreground sm:inline">
-                  · {currentLevel.description}
-                </span>
-                <ChevronDown className="h-3 w-3 text-muted-foreground" />
-              </span>
-            </PopoverTrigger>
-            <PopoverContent side="bottom" align="start" className="w-[360px] p-0">
-              <div className="border-b border-border bg-muted/30 px-4 py-3">
-                <p className="text-sm font-semibold text-foreground">Execution Level</p>
-                <p className="mt-0.5 text-[11px] text-muted-foreground">
-                  Set once per journey. Determines what entity each instance runs against.
-                </p>
-              </div>
-              <div className="space-y-2 p-3">
-                {EXECUTION_LEVELS.map((level) => {
-                  const Icon = level.icon;
-                  const active = executionLevel === level.id;
-                  return (
-                    <button
-                      key={level.id}
-                      onClick={() => {
-                        setExecutionLevel(level.id);
-                        toast.success(`Execution level: ${level.label}`);
-                      }}
-                      className={cn(
-                        "w-full rounded-lg border-2 p-3 text-left transition-all",
-                        active
-                          ? "border-primary bg-primary/10"
-                          : "border-border/50 hover:border-border hover:bg-accent/20"
-                      )}
-                    >
-                      <div className="mb-1 flex items-center gap-2">
-                        <Icon className={cn("h-4 w-4", level.badgeColor)} />
-                        <span className="text-xs font-semibold text-foreground">
-                          {level.label}
-                        </span>
-                        <span className="text-[10px] text-muted-foreground">
-                          — {level.description}
-                        </span>
-                      </div>
-                      <p className="text-[10px] leading-relaxed text-muted-foreground">
-                        {level.helperText}
-                      </p>
-                    </button>
-                  );
-                })}
-              </div>
-            </PopoverContent>
-          </Popover>
+          {/* Execution Level (Deal only) */}
+          <span className="flex items-center gap-1.5 rounded-md border border-border px-2 py-1 text-[11px] text-foreground">
+            <Handshake className={cn("h-3.5 w-3.5", currentLevel.badgeColor)} />
+            <span className="font-medium">{currentLevel.label}</span>
+            <span className="hidden text-muted-foreground sm:inline">
+              · {currentLevel.description}
+            </span>
+          </span>
         </div>
 
         <div className="flex items-center gap-1.5">
@@ -1003,6 +962,15 @@ export default function JourneyCanvas({ journeyId }: JourneyCanvasProps) {
           </Button>
 
           <Button
+            variant="outline"
+            size="sm"
+            onClick={handleScheduleOpen}
+          >
+            <Calendar className="h-3.5 w-3.5" />
+            <span>Schedule</span>
+          </Button>
+
+          <Button
             size="sm"
             className="bg-primary text-primary-foreground hover:bg-primary/90"
             onClick={handlePublish}
@@ -1043,24 +1011,6 @@ export default function JourneyCanvas({ journeyId }: JourneyCanvasProps) {
             {/* Audience / Entry */}
             <SettingsSection title="Audience & entry" helper="Who enters this journey and when.">
               <SettingField
-                label={`${currentLevel.label} segment`}
-                helper="Filter the population allowed to enter this journey."
-              >
-                <select
-                  value={journeySettings.segment}
-                  onChange={(e) =>
-                    setJourneySettings({ ...journeySettings, segment: e.target.value })
-                  }
-                  className="h-8 w-full rounded-lg border border-input bg-transparent px-2 text-xs outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30"
-                >
-                  <option value="">Select segment...</option>
-                  <option value="all">All {currentLevel.label}s</option>
-                  <option value="high_risk">High Risk</option>
-                  <option value="overdue_30">Overdue 30+ Days</option>
-                  <option value="new">New {currentLevel.label}s</option>
-                </select>
-              </SettingField>
-              <SettingField
                 label="Entry rule"
                 helper="How many times a user can enter this journey."
               >
@@ -1076,22 +1026,6 @@ export default function JourneyCanvas({ journeyId }: JourneyCanvasProps) {
                   <option value="re_entry">Allow re-entry after exit</option>
                 </select>
               </SettingField>
-              <SettingField
-                label="Exit trigger"
-                helper="Condition that pulls users out of the journey immediately."
-              >
-                <Input
-                  className="h-8 text-xs"
-                  placeholder="e.g. payment_received"
-                  value={journeySettings.exitTrigger}
-                  onChange={(e) =>
-                    setJourneySettings({
-                      ...journeySettings,
-                      exitTrigger: e.target.value,
-                    })
-                  }
-                />
-              </SettingField>
               <SettingToggle
                 label="Allow re-entry"
                 helper="Permit the same user to re-enter after completion."
@@ -1100,127 +1034,6 @@ export default function JourneyCanvas({ journeyId }: JourneyCanvasProps) {
               />
             </SettingsSection>
 
-            {/* Conversion */}
-            <SettingsSection title="Conversion" helper="Track success and isolate a control group.">
-              <SettingField
-                label="Conversion event"
-                helper="Success event attributed to this journey."
-              >
-                <Input
-                  className="h-8 text-xs"
-                  placeholder="e.g. payment_received"
-                  value={journeySettings.conversionEvent}
-                  onChange={(e) =>
-                    setJourneySettings({
-                      ...journeySettings,
-                      conversionEvent: e.target.value,
-                    })
-                  }
-                />
-              </SettingField>
-              <SettingField
-                label="Conversion window"
-                helper="Maximum delay after entry to still count as converted."
-              >
-                <select
-                  value={journeySettings.conversionWindow}
-                  onChange={(e) =>
-                    setJourneySettings({
-                      ...journeySettings,
-                      conversionWindow: e.target.value,
-                    })
-                  }
-                  className="h-8 w-full rounded-lg border border-input bg-transparent px-2 text-xs outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30"
-                >
-                  <option value="3">3 days</option>
-                  <option value="7">7 days</option>
-                  <option value="14">14 days</option>
-                  <option value="30">30 days</option>
-                </select>
-              </SettingField>
-              <SettingField
-                label="Control group %"
-                helper="Holdout sample that receives no messages. Used to measure lift."
-              >
-                <Input
-                  className="h-8 text-xs"
-                  type="number"
-                  min={0}
-                  max={100}
-                  value={journeySettings.controlGroupPct}
-                  onChange={(e) =>
-                    setJourneySettings({
-                      ...journeySettings,
-                      controlGroupPct: e.target.value,
-                    })
-                  }
-                />
-              </SettingField>
-            </SettingsSection>
-
-            {/* Frequency & DND */}
-            <SettingsSection title="Frequency & quiet hours" helper="Respect user-level limits.">
-              <SettingField
-                label="Frequency cap"
-                helper="Max number of messages per user per period."
-              >
-                <Input
-                  className="h-8 text-xs"
-                  placeholder="e.g. 3 per week"
-                  value={journeySettings.frequencyCap}
-                  onChange={(e) =>
-                    setJourneySettings({
-                      ...journeySettings,
-                      frequencyCap: e.target.value,
-                    })
-                  }
-                />
-              </SettingField>
-              <SettingToggle
-                label="Respect DND / quiet hours"
-                helper="Never deliver messages during configured quiet hours."
-                checked={journeySettings.dnd}
-                onChange={(val) => setJourneySettings({ ...journeySettings, dnd: val })}
-              />
-            </SettingsSection>
-
-            {/* Queueing & concurrency */}
-            <SettingsSection title="Queueing & concurrency" helper="How multiple instances interact.">
-              <SettingField
-                label="Queueing mode"
-                helper="Immediate = send as soon as ready. Batch = group sends into queues."
-              >
-                <select
-                  value={journeySettings.queueing}
-                  onChange={(e) =>
-                    setJourneySettings({
-                      ...journeySettings,
-                      queueing: e.target.value,
-                    })
-                  }
-                  className="h-8 w-full rounded-lg border border-input bg-transparent px-2 text-xs outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30"
-                >
-                  <option value="immediate">Send immediately</option>
-                  <option value="batch">Batch in queue</option>
-                </select>
-              </SettingField>
-              <SettingToggle
-                label="Allow parallel children"
-                helper="Let child journeys run in parallel with this one."
-                checked={journeySettings.parallelChildren}
-                onChange={(val) =>
-                  setJourneySettings({ ...journeySettings, parallelChildren: val })
-                }
-              />
-              <SettingToggle
-                label={currentLevel.dedupLabel}
-                helper="Prevent duplicate instances at the current execution level."
-                checked={journeySettings.preventDuplicateInstances}
-                onChange={(val) =>
-                  setJourneySettings({ ...journeySettings, preventDuplicateInstances: val })
-                }
-              />
-            </SettingsSection>
           </div>
 
           <SheetFooter className="border-t border-border px-5 py-3">
@@ -1263,6 +1076,22 @@ export default function JourneyCanvas({ journeyId }: JourneyCanvasProps) {
         </AlertDialogContent>
       </AlertDialog>
 
+      {/* ====== Schedule dialog ====== */}
+      <ScheduleDialog
+        open={scheduleDialogOpen}
+        onOpenChange={setScheduleDialogOpen}
+        onConfirm={(schedule) => {
+          setStatus("scheduled");
+          setScheduleDialogOpen(false);
+          const dayNames = schedule.days.map((d) => WEEKDAYS[d]).join(", ");
+          toast.success("Journey scheduled", {
+            description: schedule.recurring
+              ? `Runs every ${dayNames}, ${schedule.time}–${schedule.endTime}`
+              : `One-time on ${schedule.startDate}, ${schedule.time}–${schedule.endTime}`,
+          });
+        }}
+      />
+
       {/* ====== Canvas area ====== */}
       <div className="flex flex-1 overflow-hidden">
         {/* Left: Node Palette */}
@@ -1278,25 +1107,15 @@ export default function JourneyCanvas({ journeyId }: JourneyCanvasProps) {
             validateState === "invalid" && "journey-shake"
           )}
         >
-          {/* Floating stats bar */}
+          {/* Floating top bar */}
           <div className="pointer-events-none absolute left-1/2 top-3 z-20 -translate-x-1/2">
-            <div
-              className={cn(
-                "flex items-center gap-4 rounded-xl border border-border/70 bg-card/80 px-4 py-2 shadow-lg backdrop-blur-md transition-transform",
-                statsPulse && "journey-stat-pulse"
-              )}
-            >
+            <div className="pointer-events-auto flex items-center gap-3 rounded-xl border border-border/70 bg-card/80 px-4 py-2 shadow-lg backdrop-blur-md">
               <div className="flex items-center gap-2">
                 <currentLevel.icon className={cn("h-3.5 w-3.5", currentLevel.badgeColor)} />
                 <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
                   {currentLevel.label} Journey
                 </span>
               </div>
-              <div className="h-4 w-px bg-border" />
-              <Stat label="Entered" value={stats.entered} />
-              <Stat label="Active" value={stats.active} />
-              <Stat label="Converted" value={stats.converted} highlight="emerald" />
-              <Stat label="Exited" value={stats.exited} highlight="red" />
               <div className="h-4 w-px bg-border" />
               <div className="text-center">
                 <div className="text-sm font-bold tabular-nums text-foreground">
@@ -1306,7 +1125,30 @@ export default function JourneyCanvas({ journeyId }: JourneyCanvasProps) {
                   Nodes
                 </div>
               </div>
+              <div className="h-4 w-px bg-border" />
+              <button
+                onClick={() => setShowAnalytics((s) => !s)}
+                className={cn(
+                  "flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-medium transition-colors",
+                  showAnalytics
+                    ? "border-primary/50 bg-primary/10 text-primary"
+                    : "border-border bg-background/80 text-foreground hover:bg-muted"
+                )}
+              >
+                <BarChart3 className="h-3.5 w-3.5" />
+                Analytics
+              </button>
             </div>
+
+            {/* Expandable analytics panel */}
+            {showAnalytics && (
+              <div className="mt-2 flex items-center gap-4 rounded-xl border border-border/70 bg-card/80 px-4 py-2.5 shadow-lg backdrop-blur-md">
+                <JourneyStat label="Entered" value={journeyStats.entered} />
+                <JourneyStat label="Active" value={journeyStats.active} />
+                <JourneyStat label="Converted" value={journeyStats.converted} highlight="emerald" />
+                <JourneyStat label="Exited" value={journeyStats.exited} highlight="red" />
+              </div>
+            )}
           </div>
 
           {/* Toggle minimap button (top-right) */}
@@ -1408,6 +1250,7 @@ export default function JourneyCanvas({ journeyId }: JourneyCanvasProps) {
             node={selectedNode}
             onClose={() => setSelectedNode(null)}
             onUpdate={onNodeDataUpdate}
+            onDeleteNode={deleteSelectedNode}
           />
         )}
       </div>
@@ -1453,8 +1296,36 @@ export default function JourneyCanvas({ journeyId }: JourneyCanvasProps) {
 }
 
 /* ------------------------------------------------------------------ */
-/*  Stat sub-component                                                 */
+/*  Analytics stat sub-component                                       */
 /* ------------------------------------------------------------------ */
+
+function JourneyStat({
+  label,
+  value,
+  highlight,
+}: {
+  label: string;
+  value: number;
+  highlight?: "emerald" | "red";
+}) {
+  return (
+    <div className="text-center">
+      <div
+        className={cn(
+          "text-sm font-bold tabular-nums",
+          highlight === "emerald" && "text-emerald-500",
+          highlight === "red" && "text-red-400",
+          !highlight && "text-foreground"
+        )}
+      >
+        {value.toLocaleString()}
+      </div>
+      <div className="text-[9px] uppercase tracking-wider text-muted-foreground">
+        {label}
+      </div>
+    </div>
+  );
+}
 
 function SettingsSection({
   title,
@@ -1531,29 +1402,199 @@ function SettingToggle({
   );
 }
 
-function Stat({
-  label,
-  value,
-  highlight,
+/* ------------------------------------------------------------------ */
+/*  Schedule dialog                                                    */
+/* ------------------------------------------------------------------ */
+
+const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
+
+const TIME_SLOTS = [
+  "06:00", "07:00", "08:00", "09:00", "10:00", "11:00", "12:00",
+  "13:00", "14:00", "15:00", "16:00", "17:00", "18:00", "19:00", "20:00",
+];
+
+interface ScheduleConfig {
+  recurring: boolean;
+  days: number[];
+  time: string;
+  endTime: string;
+  startDate: string;
+  endDate: string;
+}
+
+function ScheduleDialog({
+  open,
+  onOpenChange,
+  onConfirm,
 }: {
-  label: string;
-  value: number;
-  highlight?: "emerald" | "red";
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onConfirm: (schedule: ScheduleConfig) => void;
 }) {
-  const colorClass =
-    highlight === "emerald"
-      ? "text-emerald-400"
-      : highlight === "red"
-        ? "text-red-400"
-        : "text-foreground";
+  const today = new Date().toISOString().split("T")[0];
+  const [recurring, setRecurring] = useState(true);
+  const [days, setDays] = useState<number[]>([1, 3, 5]); // Mon, Wed, Fri
+  const [time, setTime] = useState("09:00");
+  const [endTime, setEndTime] = useState("17:00");
+  const [startDate, setStartDate] = useState(today);
+  const [endDate, setEndDate] = useState("");
+
+  const toggleDay = (idx: number) => {
+    setDays((prev) =>
+      prev.includes(idx) ? prev.filter((d) => d !== idx) : [...prev, idx].sort()
+    );
+  };
+
   return (
-    <div className="text-center leading-tight">
-      <div className={cn("text-sm font-bold tabular-nums", colorClass)}>
-        {value.toLocaleString()}
-      </div>
-      <div className="text-[9px] uppercase tracking-wider text-muted-foreground">
-        {label}
-      </div>
-    </div>
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-[460px]">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Calendar className="h-4 w-4 text-primary" />
+            Schedule Journey
+          </DialogTitle>
+          <DialogDescription>
+            Set when this journey should run. Choose a one-time schedule or recurring days.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-5 py-2">
+          {/* Recurring toggle */}
+          <div className="flex items-center justify-between rounded-lg border border-border bg-muted/20 p-3">
+            <div>
+              <p className="text-sm font-medium text-foreground">Recurring schedule</p>
+              <p className="text-[11px] text-muted-foreground">
+                Run on selected days every week
+              </p>
+            </div>
+            <Switch checked={recurring} onCheckedChange={setRecurring} />
+          </div>
+
+          {/* Day picker (Google Calendar style) */}
+          {recurring && (
+            <div className="space-y-2">
+              <label className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+                Repeat on
+              </label>
+              <div className="flex gap-1.5">
+                {WEEKDAYS.map((day, idx) => {
+                  const active = days.includes(idx);
+                  return (
+                    <button
+                      key={day}
+                      type="button"
+                      onClick={() => toggleDay(idx)}
+                      className={cn(
+                        "flex h-9 w-9 items-center justify-center rounded-full text-xs font-medium transition-all",
+                        active
+                          ? "bg-primary text-primary-foreground shadow-sm"
+                          : "border border-border text-muted-foreground hover:border-primary/50 hover:text-foreground"
+                      )}
+                    >
+                      {day.charAt(0)}
+                    </button>
+                  );
+                })}
+              </div>
+              {days.length > 0 && (
+                <p className="text-[11px] text-muted-foreground">
+                  Every {days.map((d) => WEEKDAYS[d]).join(", ")}
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* Start time / End time */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-2">
+              <label className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+                Start time
+              </label>
+              <select
+                value={time}
+                onChange={(e) => setTime(e.target.value)}
+                className="h-9 w-full rounded-lg border border-input bg-transparent px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30"
+              >
+                {TIME_SLOTS.map((t) => (
+                  <option key={t} value={t}>{t} GST</option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-2">
+              <label className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+                End time
+              </label>
+              <select
+                value={endTime}
+                onChange={(e) => setEndTime(e.target.value)}
+                className="h-9 w-full rounded-lg border border-input bg-transparent px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30"
+              >
+                {TIME_SLOTS.map((t) => (
+                  <option key={t} value={t}>{t} GST</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {/* Start date */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-2">
+              <label className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+                Start date
+              </label>
+              <input
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                min={today}
+                className="h-9 w-full rounded-lg border border-input bg-transparent px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30"
+              />
+            </div>
+            {recurring && (
+              <div className="space-y-2">
+                <label className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+                  End date (optional)
+                </label>
+                <input
+                  type="date"
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                  min={startDate}
+                  className="h-9 w-full rounded-lg border border-input bg-transparent px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30"
+                />
+              </div>
+            )}
+          </div>
+
+          {/* Summary */}
+          <div className="rounded-lg border border-border bg-muted/30 p-3">
+            <p className="text-xs font-medium text-foreground">Summary</p>
+            <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+              {recurring && days.length > 0
+                ? `Runs every ${days.map((d) => WEEKDAYS[d]).join(", ")}, ${time}–${endTime} GST, starting ${startDate}${endDate ? ` until ${endDate}` : ""}.`
+                : recurring
+                  ? "Select at least one day."
+                  : `One-time run on ${startDate}, ${time}–${endTime} GST.`}
+            </p>
+          </div>
+        </div>
+
+        <DialogFooter className="gap-2">
+          <DialogClose render={<Button variant="outline" />}>
+            Cancel
+          </DialogClose>
+          <Button
+            onClick={() =>
+              onConfirm({ recurring, days, time, endTime, startDate, endDate })
+            }
+            disabled={recurring && days.length === 0}
+          >
+            <Calendar className="h-3.5 w-3.5" />
+            Confirm schedule
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
+

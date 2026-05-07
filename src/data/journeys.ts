@@ -8,13 +8,9 @@ import {
   MapPin,
   MessageCircle,
   Phone,
-  ExternalLink,
   Mail,
   MessageSquare,
-  Smartphone,
-  Bell,
   Layers,
-  Globe,
   GitBranch,
   MousePointer,
   Activity,
@@ -36,13 +32,8 @@ import {
   BookOpen,
   Webhook,
   ArrowRightLeft,
-  Code,
-  Mic,
-  Bot,
   Brain,
-  Sparkles,
   FlaskConical,
-  Flag,
   Power,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -58,7 +49,6 @@ export type BlockCategoryId =
   | "flow"
   | "data"
   | "integrations"
-  | "conversational"
   | "ai"
   | "exit";
 
@@ -151,15 +141,6 @@ export const BLOCK_CATEGORIES: BlockCategory[] = [
     accent: "#818cf8",
   },
   {
-    id: "conversational",
-    label: "Conversational",
-    icon: MessageSquare,
-    color: "text-pink-400",
-    bgColor: "bg-pink-500/10",
-    borderColor: "border-pink-500/30",
-    accent: "#f472b6",
-  },
-  {
     id: "ai",
     label: "AI & Optimization",
     icon: Brain,
@@ -180,7 +161,7 @@ export const BLOCK_CATEGORIES: BlockCategory[] = [
 ];
 
 export const BLOCK_TYPES: BlockType[] = [
-  // ───── Entry / Trigger (9) ─────
+  // ───── Entry / Trigger (8) ─────
   { type: "event_trigger", label: "Event Trigger", icon: Zap, description: "Start when user performs an event", category: "entry", nodeKind: "trigger", defaultData: { label: "Event Trigger", triggerType: "event" } },
   { type: "segment_trigger", label: "Segment Membership", icon: Users, description: "Start when user enters/exits a segment", category: "entry", nodeKind: "trigger", defaultData: { label: "Segment Membership", triggerType: "segment_entry" } },
   { type: "profile_change_trigger", label: "Profile Attribute Change", icon: User, description: "Start when a profile attribute changes", category: "entry", nodeKind: "trigger", defaultData: { label: "Profile Attribute Change", triggerType: "attribute_change" } },
@@ -189,18 +170,11 @@ export const BLOCK_TYPES: BlockType[] = [
   { type: "geofence_trigger", label: "Geofence Trigger", icon: MapPin, description: "Start when user enters/exits a location", category: "entry", nodeKind: "trigger", defaultData: { label: "Geofence Trigger", triggerType: "geofence" } },
   { type: "inbound_message_trigger", label: "Inbound Message", icon: MessageCircle, description: "Start when user sends an inbound message", category: "entry", nodeKind: "trigger", defaultData: { label: "Inbound Message", triggerType: "inbound_message" } },
   { type: "incoming_call_trigger", label: "Incoming Call", icon: Phone, description: "Start when an inbound call arrives", category: "entry", nodeKind: "trigger", defaultData: { label: "Incoming Call", triggerType: "incoming_call" } },
-  { type: "external_source_trigger", label: "External Source", icon: ExternalLink, description: "Start from API, file import, or webhook", category: "entry", nodeKind: "trigger", defaultData: { label: "External Source", triggerType: "external_source" } },
 
-  // ───── Channels / Actions (10) ─────
+  // ───── Channels / Actions (4) ─────
   { type: "send_email", label: "Send Email", icon: Mail, description: "Send email with personalization", category: "channels", nodeKind: "action", defaultData: { label: "Send Email", actionType: "email" } },
   { type: "send_sms", label: "Send SMS", icon: MessageSquare, description: "Send SMS with delivery controls", category: "channels", nodeKind: "action", defaultData: { label: "Send SMS", actionType: "sms" } },
-  { type: "send_push", label: "Mobile Push", icon: Smartphone, description: "Send app push notification", category: "channels", nodeKind: "action", defaultData: { label: "Mobile Push", actionType: "push" } },
-  { type: "send_web_push", label: "Web Push", icon: Bell, description: "Send web push notification", category: "channels", nodeKind: "action", defaultData: { label: "Web Push", actionType: "web_push" } },
   { type: "show_inapp", label: "In-App Message", icon: Layers, description: "Display in-app content", category: "channels", nodeKind: "action", defaultData: { label: "In-App Message", actionType: "inapp" } },
-  { type: "show_onsite", label: "On-site Content", icon: Globe, description: "Display web personalization", category: "channels", nodeKind: "action", defaultData: { label: "On-site Content", actionType: "onsite" } },
-  { type: "send_whatsapp", label: "WhatsApp / OTT", icon: MessageCircle, description: "Send WhatsApp or chat-app message", category: "channels", nodeKind: "action", defaultData: { label: "Send WhatsApp", actionType: "whatsapp" } },
-  { type: "send_rich_media", label: "Rich Media", icon: Layers, description: "Send MMS, buttons, images, video", category: "channels", nodeKind: "action", defaultData: { label: "Rich Media", actionType: "rich_media" } },
-  { type: "notify_internal", label: "Notify Internal", icon: Bell, description: "Notify internal team members", category: "channels", nodeKind: "action", defaultData: { label: "Notify Internal", actionType: "notify_internal" } },
   { type: "trigger_ai_call", label: "Trigger AI Call", icon: Phone, description: "Trigger an AI calling agent", category: "channels", nodeKind: "action", defaultData: { label: "Trigger AI Call", actionType: "call" } },
 
   // ───── Conditions (8) ─────
@@ -231,23 +205,12 @@ export const BLOCK_TYPES: BlockType[] = [
   { type: "consent_management", label: "Consent / DNC", icon: ShieldOff, description: "Manage DNC and consent states", category: "data", nodeKind: "generic", defaultData: { label: "Consent / DNC" } },
   { type: "catalog_lookup", label: "Catalog Lookup", icon: BookOpen, description: "Retrieve data from catalog", category: "data", nodeKind: "generic", defaultData: { label: "Catalog Lookup" } },
 
-  // ───── Integrations (4) ─────
-  { type: "call_api", label: "Call API / Webhook", icon: Webhook, description: "Call external system, map response", category: "integrations", maxOutputs: 2, nodeKind: "generic", defaultData: { label: "Call API / Webhook", branchKind: "call_api", branches: 2 } },
+  // ───── Integrations (2) ─────
   { type: "flow_handoff", label: "Journey Handoff", icon: ArrowRightLeft, description: "Pass user to another journey", category: "integrations", nodeKind: "generic", defaultData: { label: "Journey Handoff" } },
   { type: "audience_sync", label: "Audience Sync", icon: RefreshCw, description: "Sync to ad platforms", category: "integrations", nodeKind: "generic", defaultData: { label: "Audience Sync" } },
-  { type: "custom_action", label: "Custom Action", icon: Code, description: "Reusable custom business action", category: "integrations", nodeKind: "generic", defaultData: { label: "Custom Action" } },
 
-  // ───── Conversational (4) ─────
-  { type: "transfer_chat", label: "Transfer to Chat Agent", icon: MessageSquare, description: "Hand off to live chat agent", category: "conversational", nodeKind: "generic", defaultData: { label: "Transfer to Chat Agent" } },
-  { type: "transfer_call", label: "Transfer to Call Agent", icon: Phone, description: "Hand off to live voice agent", category: "conversational", nodeKind: "generic", defaultData: { label: "Transfer to Call Agent" } },
-  { type: "transfer_voice_app", label: "Transfer to Voice App", icon: Mic, description: "Hand off to voice application", category: "conversational", nodeKind: "generic", defaultData: { label: "Transfer to Voice App" } },
-  { type: "start_chatbot", label: "Start Chatbot", icon: Bot, description: "Move user into chatbot session", category: "conversational", nodeKind: "generic", defaultData: { label: "Start Chatbot" } },
-
-  // ───── AI & Optimization (4) ─────
-  { type: "ai_agent", label: "AI Agent Step", icon: Brain, description: "Send to AI agent, route on output", category: "ai", nodeKind: "generic", defaultData: { label: "AI Agent Step" } },
-  { type: "content_optimizer", label: "Content Optimizer", icon: Sparkles, description: "Optimize creative variants", category: "ai", nodeKind: "generic", defaultData: { label: "Content Optimizer" } },
+  // ───── AI & Optimization (1) ─────
   { type: "experiment", label: "Experiment / A-B Test", icon: FlaskConical, description: "Test paths with control group", category: "ai", maxOutputs: 4, nodeKind: "split", defaultData: { label: "Experiment", variantCount: 4, splitA: 25, splitB: 25, splitC: 25, splitD: 25 } },
-  { type: "feature_flag", label: "Feature Flag", icon: Flag, description: "Assign or override feature flags", category: "ai", nodeKind: "generic", defaultData: { label: "Feature Flag" } },
 
   // ───── Exit / Governance (1) ─────
   { type: "global_exit", label: "Global Exit Trigger Manager", icon: Power, description: "Remove users when conditions met", category: "exit", nodeKind: "end", defaultData: { label: "Global Exit", outcome: "Exited" } },
@@ -274,6 +237,9 @@ export interface JourneyListItem {
   status: JourneyStatus;
   lastRun: string | null;
   enrolled: number;
+  createdBy: string;
+  createdDate: string;
+  lenderId: string;
 }
 
 export const journeysList: JourneyListItem[] = [
@@ -284,6 +250,9 @@ export const journeysList: JourneyListItem[] = [
     status: "running",
     lastRun: "Apr 3, 2026",
     enrolled: 1248,
+    createdBy: "Rabab Abbas",
+    createdDate: "2026-02-15",
+    lenderId: "lnd-mashreq",
   },
   {
     id: "broken-promise",
@@ -292,6 +261,9 @@ export const journeysList: JourneyListItem[] = [
     status: "scheduled",
     lastRun: null,
     enrolled: 0,
+    createdBy: "Asad Siddiqi",
+    createdDate: "2026-03-20",
+    lenderId: "lnd-tamara",
   },
   {
     id: "new-overdue",
@@ -300,6 +272,9 @@ export const journeysList: JourneyListItem[] = [
     status: "draft",
     lastRun: null,
     enrolled: 0,
+    createdBy: "Rabab Abbas",
+    createdDate: "2026-04-01",
+    lenderId: "general",
   },
   {
     id: "q1-recovery",
@@ -308,6 +283,9 @@ export const journeysList: JourneyListItem[] = [
     status: "completed",
     lastRun: "Mar 31, 2026",
     enrolled: 3421,
+    createdBy: "Khalil Ahmed",
+    createdDate: "2026-01-10",
+    lenderId: "lnd-cashnow",
   },
   {
     id: "escalation",
@@ -316,6 +294,9 @@ export const journeysList: JourneyListItem[] = [
     status: "paused",
     lastRun: "Mar 28, 2026",
     enrolled: 156,
+    createdBy: "Asad Siddiqi",
+    createdDate: "2026-03-05",
+    lenderId: "lnd-mashreq",
   },
   {
     id: "early-delinquency",
@@ -324,6 +305,9 @@ export const journeysList: JourneyListItem[] = [
     status: "running",
     lastRun: "Apr 3, 2026",
     enrolled: 892,
+    createdBy: "Khalil Ahmed",
+    createdDate: "2026-02-28",
+    lenderId: "lnd-tamara",
   },
   {
     id: "settlement-offer",
@@ -332,6 +316,9 @@ export const journeysList: JourneyListItem[] = [
     status: "running",
     lastRun: "Apr 3, 2026",
     enrolled: 2340,
+    createdBy: "Rabab Abbas",
+    createdDate: "2026-03-15",
+    lenderId: "lnd-enbd",
   },
   {
     id: "welcome-new",
@@ -340,6 +327,9 @@ export const journeysList: JourneyListItem[] = [
     status: "draft",
     lastRun: null,
     enrolled: 0,
+    createdBy: "Asad Siddiqi",
+    createdDate: "2026-04-05",
+    lenderId: "general",
   },
 ];
 

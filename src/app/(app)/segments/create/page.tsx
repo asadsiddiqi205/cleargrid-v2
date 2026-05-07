@@ -26,14 +26,14 @@ export default function CreateSegmentPage() {
 
   function handleCreate() {
     if (!name.trim()) {
-      toast.error("Please add a name before saving this audience.")
+      toast.error("Please add a name before saving this segment.")
       return
     }
     if (filterCount === 0) {
-      toast.error("Add at least one filter so the audience has conditions.")
+      toast.error("Add at least one filter so the segment has conditions.")
       return
     }
-    toast.success(`Audience "${name}" saved`, {
+    toast.success(`Segment "${name}" saved`, {
       description:
         "You can now use it when sending a message or building a journey.",
     })
@@ -57,10 +57,10 @@ export default function CreateSegmentPage() {
                 Segments
               </Link>
               <span>/</span>
-              <span className="text-foreground">New audience</span>
+              <span className="text-foreground">New segment</span>
             </div>
             <h1 className="text-2xl font-bold tracking-tight text-foreground">
-              Build a new audience
+              Build a new segment
             </h1>
             <p className="text-sm text-muted-foreground mt-1 max-w-2xl">
               Add filters to pick which borrowers belong in this group. For
@@ -94,13 +94,13 @@ export default function CreateSegmentPage() {
               <CardTitle>Segment details</CardTitle>
               <p className="text-xs text-muted-foreground mt-1">
                 A short label and description so teammates know what this
-                audience is for.
+                segment is for.
               </p>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-1.5">
                 <label className="text-xs font-medium text-foreground">
-                  Audience name <span className="text-red-400">*</span>
+                  Segment name <span className="text-red-400">*</span>
                 </label>
                 <Input
                   placeholder="e.g. UAE 60+ Days Past Due"
@@ -113,7 +113,7 @@ export default function CreateSegmentPage() {
                   Description (optional)
                 </label>
                 <Textarea
-                  placeholder="What is this audience for?"
+                  placeholder="What is this segment for?"
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
                   className="min-h-[80px]"
@@ -128,7 +128,7 @@ export default function CreateSegmentPage() {
               <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-muted-foreground">
                 Step 2
               </p>
-              <CardTitle>How should this audience update?</CardTitle>
+              <CardTitle>How should this segment update?</CardTitle>
               <p className="text-xs text-muted-foreground mt-1">
                 Decide whether the list of borrowers stays fixed, or refreshes
                 itself every day.
@@ -219,7 +219,7 @@ export default function CreateSegmentPage() {
               <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-muted-foreground">
                 Step 3
               </p>
-              <CardTitle>Who should be in this audience?</CardTitle>
+              <CardTitle>Who should be in this segment?</CardTitle>
               <p className="text-xs text-muted-foreground mt-1">
                 Add filter conditions below. You can reuse a saved calculated
                 field, or create a new one with the calculator.
@@ -297,7 +297,7 @@ export default function CreateSegmentPage() {
               className="gap-1.5"
             >
               <Save className="size-3.5" />
-              Save audience
+              Save segment
             </Button>
           </div>
         </div>
