@@ -1,7 +1,8 @@
 "use client";
 
+import * as React from "react";
 import { useCallback, useState } from "react";
-import type { Node } from "@xyflow/react";
+import type { Node, Edge } from "@xyflow/react";
 import Link from "next/link";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -177,14 +178,47 @@ interface NodeConfigPanelProps {
   onClose: () => void;
   onUpdate: (id: string, data: Record<string, unknown>) => void;
   onDeleteNode?: () => void;
+  /** Full canvas graph — used to compute upstream-action context for
+   *  nodes like Action Path Split that adapt to their predecessor. */
+  nodes?: Node[];
+  edges?: Edge[];
 }
 
 /* ------------------------------------------------------------------ */
 /*  Component                                                          */
 /* ------------------------------------------------------------------ */
 
-export function NodeConfigPanel({ node, onClose, onUpdate, onDeleteNode }: NodeConfigPanelProps) {
+export function NodeConfigPanel({ node, onClose, onUpdate, onDeleteNode, nodes = [], edges = [] }: NodeConfigPanelProps) {
   const d = (node?.data ?? {}) as Record<string, unknown>;
+
+  // Walk the graph backward from the selected node to find the nearest
+  // upstream action node. We hop through pass-through nodes (waits, splits)
+  // so a Send Email → Wait → Action Path Split still detects "email".
+  const upstreamActionType = React.useMemo<
+    "email" | "sms" | "whatsapp" | "call" | null
+  >(() => {
+    if (!node) return null;
+    const byId = new Map(nodes.map((n) => [n.id, n] as const));
+    const visited = new Set<string>();
+    let cursor = node.id;
+    // Walk back up to 6 hops to avoid pathological loops.
+    for (let i = 0; i < 6; i++) {
+      const inbound = edges.find((e) => e.target === cursor);
+      if (!inbound) return null;
+      if (visited.has(inbound.source)) return null;
+      visited.add(inbound.source);
+      const src = byId.get(inbound.source);
+      if (!src) return null;
+      if (src.type === "action") {
+        const at = (src.data as Record<string, unknown>).actionType as string | undefined;
+        if (at === "email" || at === "sms" || at === "whatsapp" || at === "call") {
+          return at;
+        }
+      }
+      cursor = src.id;
+    }
+    return null;
+  }, [node, nodes, edges]);
 
   const update = useCallback(
     (key: string, value: unknown) => {
@@ -346,6 +380,18 @@ export function NodeConfigPanel({ node, onClose, onUpdate, onDeleteNode }: NodeC
               <Filter className="h-3 w-3" />
               Logic
             </TabsTrigger>
+            {isActionNode && (
+              <TabsTrigger value="delivery" className="flex-none px-2 text-[10px]">
+                <SendIcon className="h-3 w-3" />
+                Delivery
+              </TabsTrigger>
+            )}
+            {isBranchNode && (
+              <TabsTrigger value="branches" className="flex-none px-2 text-[10px]">
+                <GitBranch className="h-3 w-3" />
+                Branches
+              </TabsTrigger>
+            )}
             <TabsTrigger value="advanced" className="flex-none px-2 text-[10px]">
               <SlidersHorizontal className="h-3 w-3" />
               Advanced
@@ -397,6 +443,116 @@ export function NodeConfigPanel({ node, onClose, onUpdate, onDeleteNode }: NodeC
         </TabsContent>
 
 
+        {/* Delivery tab — for action / channel nodes only */}
+        {isActionNode && (
+          <TabsContent value="delivery" className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
+            <Section title="Provider / sender">
+              <p className="text-[11px] text-muted-foreground">
+                Delivery provider and sender ID are set inside the Logic tab for this action.
+                See <span className="font-medium text-foreground">From</span> /{" "}
+                <span className="font-medium text-foreground">Sender ID</span> /{" "}
+                <span className="font-medium text-foreground">Provider</span>.
+              </p>
+            </Section>
+            <Section title="Send window">
+              <NativeSelect
+                value={(d.sendWindow as string) ?? "anytime"}
+                onChange={(v) => update("sendWindow", v)}
+              >
+                <option value="anytime">Anytime (default)</option>
+                <option value="business">Business hours (09:00–18:00)</option>
+                <option value="morning">Morning (09:00–12:00)</option>
+                <option value="afternoon">Afternoon (12:00–17:00)</option>
+                <option value="evening">Evening (17:00–20:00)</option>
+              </NativeSelect>
+              <p className="mt-1 text-[10px] text-muted-foreground">
+                Messages outside this window queue until the next allowed slot.
+              </p>
+            </Section>
+            <Section title="Retry policy">
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">Max attempts</Label>
+                  <Input
+                    type="number"
+                    value={(d.maxAttempts as number) ?? 3}
+                    onChange={(e) => update("maxAttempts", Number(e.target.value))}
+                    className="mt-1 h-7 text-xs"
+                    min={1}
+                    max={10}
+                  />
+                </div>
+                <div>
+                  <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">Retry interval (min)</Label>
+                  <Input
+                    type="number"
+                    value={(d.retryIntervalMin as number) ?? 30}
+                    onChange={(e) => update("retryIntervalMin", Number(e.target.value))}
+                    className="mt-1 h-7 text-xs"
+                    min={1}
+                  />
+                </div>
+              </div>
+            </Section>
+            <Section title="Frequency cap override">
+              <label className="flex cursor-pointer items-center justify-between">
+                <span className="text-[11px] text-foreground">Bypass journey-level frequency cap</span>
+                <Switch
+                  checked={(d.bypassFrequencyCap as boolean) ?? false}
+                  onCheckedChange={(v) => update("bypassFrequencyCap", v)}
+                  size="sm"
+                />
+              </label>
+              <p className="mt-1 text-[10px] text-muted-foreground">
+                Use only for critical compliance messages (e.g. final notices).
+              </p>
+            </Section>
+          </TabsContent>
+        )}
+
+        {/* Branches tab — for branching nodes only */}
+        {isBranchNode && (
+          <TabsContent value="branches" className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
+            <Section title="Outgoing branches">
+              <p className="text-[11px] text-muted-foreground mb-2">
+                Branches are derived from the Logic tab. Edit them here only to rename labels for display on the canvas.
+              </p>
+              {(() => {
+                const persisted = (d.branchLabels as string[] | undefined) ?? [];
+                const fallback = defaultBranches(node, block);
+                const labels = persisted.length > 0 ? persisted : fallback;
+                if (labels.length === 0) {
+                  return (
+                    <p className="rounded-md border border-dashed border-border bg-muted/20 px-2 py-3 text-center text-[11px] text-muted-foreground">
+                      This block has no configured branches yet.
+                    </p>
+                  );
+                }
+                return (
+                  <div className="space-y-1.5">
+                    {labels.map((label, idx) => (
+                      <div key={idx} className="flex items-center gap-2">
+                        <span className="w-6 shrink-0 rounded bg-muted px-1.5 py-0.5 text-center font-mono text-[10px] text-muted-foreground">
+                          {idx + 1}
+                        </span>
+                        <Input
+                          value={label}
+                          onChange={(e) => {
+                            const next = [...labels];
+                            next[idx] = e.target.value;
+                            update("branchLabels", next);
+                          }}
+                          className="h-7 flex-1 text-xs"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
+            </Section>
+          </TabsContent>
+        )}
+
         {/* Advanced tab */}
         <TabsContent value="advanced" className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
           <Section title="Custom properties">
@@ -437,7 +593,7 @@ export function NodeConfigPanel({ node, onClose, onUpdate, onDeleteNode }: NodeC
         {/* Block-specific form from block-configs.tsx (covers the 40+
             new block types that don't have a legacy rich form). */}
         {BlockConfigComponent && !hasLegacyRichConfig && (
-          <BlockConfigComponent data={d} update={update} />
+          <BlockConfigComponent data={d} update={update} upstreamActionType={upstreamActionType} />
         )}
         {/* ============================================================ */}
         {/*  TRIGGER CONFIG                                              */}
@@ -738,25 +894,107 @@ export function NodeConfigPanel({ node, onClose, onUpdate, onDeleteNode }: NodeC
             {/* ---- Send Email ---- */}
             {(d.actionType as string) === "email" && (
               <>
-                <Section title="Email Template">
+                {/* Template / Manual mode toggle */}
+                <ModeToggle
+                  value={((d.composeMode as string) ?? "template") as "template" | "manual"}
+                  onChange={(v) => update("composeMode", v)}
+                />
+
+                {((d.composeMode as string) ?? "template") === "template" ? (
+                  <>
+                    <Section title="Email Template">
+                      <NativeSelect
+                        value={(d.template as string) ?? ""}
+                        onChange={(v) => update("template", v)}
+                      >
+                        <option value="">Select template...</option>
+                        {EMAIL_TEMPLATES.map((t) => (
+                          <option key={t} value={t}>{t}</option>
+                        ))}
+                      </NativeSelect>
+                    </Section>
+                    {(d.template as string) && (
+                      <div className="rounded-lg border border-border bg-muted/20 p-3 space-y-2">
+                        <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                          Locked fields (sourced from template)
+                        </p>
+                        {EMAIL_PREVIEWS[d.template as string] && (
+                          <p className="text-xs leading-relaxed text-muted-foreground/80">
+                            {EMAIL_PREVIEWS[d.template as string]}
+                          </p>
+                        )}
+                        <div className="pt-1 border-t border-border/50">
+                          <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">
+                            Mustache variables in this template
+                          </p>
+                          <div className="flex flex-wrap gap-1">
+                            {["{{borrower.first_name}}", "{{borrower.outstanding}}", "{{borrower.due_date}}"].map((v) => (
+                              <span key={v} className="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] text-foreground">
+                                {v}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <Section title="Subject">
+                      <Input
+                        value={(d.manualSubject as string) ?? ""}
+                        onChange={(e) => update("manualSubject", e.target.value)}
+                        placeholder="Use {{borrower.first_name}} for personalization"
+                        className="h-8 text-xs"
+                      />
+                    </Section>
+                    <Section title="HTML body">
+                      <textarea
+                        value={(d.manualBodyHtml as string) ?? ""}
+                        onChange={(e) => update("manualBodyHtml", e.target.value)}
+                        placeholder="<p>Hi {{borrower.first_name}},</p>"
+                        className="min-h-[80px] w-full rounded-md border border-input bg-transparent p-2 font-mono text-xs outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30"
+                      />
+                    </Section>
+                    <Section title="Plain-text fallback">
+                      <textarea
+                        value={(d.manualBodyText as string) ?? ""}
+                        onChange={(e) => update("manualBodyText", e.target.value)}
+                        placeholder="Hi {{borrower.first_name}}, ..."
+                        className="min-h-[60px] w-full rounded-md border border-input bg-transparent p-2 text-xs outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30"
+                      />
+                    </Section>
+                  </>
+                )}
+
+                {/* Shared between both modes */}
+                <Section title="From">
+                  <Input
+                    value={(d.fromAddress as string) ?? ""}
+                    onChange={(e) => update("fromAddress", e.target.value)}
+                    placeholder="collections@cleargrid.co"
+                    className="h-8 text-xs"
+                  />
+                </Section>
+                <Section title="Reply-to">
+                  <Input
+                    value={(d.replyTo as string) ?? ""}
+                    onChange={(e) => update("replyTo", e.target.value)}
+                    placeholder="replies@cleargrid.co"
+                    className="h-8 text-xs"
+                  />
+                </Section>
+                <Section title="Provider">
                   <NativeSelect
-                    value={(d.template as string) ?? ""}
-                    onChange={(v) => update("template", v)}
+                    value={(d.provider as string) ?? "default"}
+                    onChange={(v) => update("provider", v)}
                   >
-                    <option value="">Select template...</option>
-                    {EMAIL_TEMPLATES.map((t) => (
-                      <option key={t} value={t}>{t}</option>
-                    ))}
+                    <option value="default">Default ESP</option>
+                    <option value="sendgrid">SendGrid</option>
+                    <option value="ses">Amazon SES</option>
                   </NativeSelect>
                 </Section>
-                {(d.template as string) && EMAIL_PREVIEWS[d.template as string] && (
-                  <div className="rounded-lg border border-border bg-muted/20 p-3">
-                    <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Preview</p>
-                    <p className="mt-1 text-xs leading-relaxed text-muted-foreground/80">
-                      {EMAIL_PREVIEWS[d.template as string]}
-                    </p>
-                  </div>
-                )}
+
                 <Link
                   href="/email-generator?channel=email&context=journey"
                   target="_blank"
@@ -767,44 +1005,94 @@ export function NodeConfigPanel({ node, onClose, onUpdate, onDeleteNode }: NodeC
                   Compose in Composer
                   <ExternalLink className="h-3 w-3" />
                 </Link>
-                {(d.template as string) && (
-                  <Link
-                    href="/templates/editor"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
-                  >
-                    Edit template
-                    <ExternalLink className="h-3 w-3" />
-                  </Link>
-                )}
               </>
             )}
 
             {/* ---- Send SMS ---- */}
             {(d.actionType as string) === "sms" && (
               <>
-                <Section title="SMS Template">
+                {/* Template / Manual mode toggle */}
+                <ModeToggle
+                  value={((d.composeMode as string) ?? "template") as "template" | "manual"}
+                  onChange={(v) => update("composeMode", v)}
+                />
+
+                {((d.composeMode as string) ?? "template") === "template" ? (
+                  <>
+                    <Section title="SMS Template">
+                      <NativeSelect
+                        value={(d.template as string) ?? ""}
+                        onChange={(v) => update("template", v)}
+                      >
+                        <option value="">Select template...</option>
+                        {SMS_TEMPLATES.map((t) => (
+                          <option key={t} value={t}>{t}</option>
+                        ))}
+                      </NativeSelect>
+                    </Section>
+                    {(d.template as string) && SMS_CHAR_COUNTS[d.template as string] && (
+                      <div className="flex items-center justify-between rounded-lg border border-border bg-muted/20 px-3 py-2">
+                        <span className="text-xs text-muted-foreground">Character count</span>
+                        <span className={`text-xs font-medium ${
+                          SMS_CHAR_COUNTS[d.template as string] > 160 ? "text-amber-400" : "text-emerald-400"
+                        }`}>
+                          {SMS_CHAR_COUNTS[d.template as string]}/160
+                        </span>
+                      </div>
+                    )}
+                    {(d.template as string) && (
+                      <div className="rounded-lg border border-border bg-muted/20 p-3">
+                        <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">
+                          Mustache variables in this template
+                        </p>
+                        <div className="flex flex-wrap gap-1">
+                          {["{{borrower.first_name}}", "{{borrower.outstanding}}"].map((v) => (
+                            <span key={v} className="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] text-foreground">
+                              {v}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <Section title="SMS body">
+                    <textarea
+                      value={(d.manualBodyText as string) ?? ""}
+                      onChange={(e) => update("manualBodyText", e.target.value)}
+                      placeholder="Hi {{borrower.first_name}}, your payment of {{borrower.outstanding}} is due..."
+                      className="min-h-[80px] w-full rounded-md border border-input bg-transparent p-2 text-xs outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30"
+                    />
+                    <div className="mt-1 flex justify-end">
+                      <span className={`text-[10px] ${
+                        (((d.manualBodyText as string) ?? "").length > 160) ? "text-amber-400" : "text-muted-foreground"
+                      }`}>
+                        {((d.manualBodyText as string) ?? "").length}/160
+                      </span>
+                    </div>
+                  </Section>
+                )}
+
+                {/* Shared between both modes */}
+                <Section title="Sender ID">
+                  <Input
+                    value={(d.smsSenderId as string) ?? ""}
+                    onChange={(e) => update("smsSenderId", e.target.value)}
+                    placeholder="ClearGrid"
+                    className="h-8 text-xs"
+                  />
+                </Section>
+                <Section title="Provider">
                   <NativeSelect
-                    value={(d.template as string) ?? ""}
-                    onChange={(v) => update("template", v)}
+                    value={(d.provider as string) ?? "default"}
+                    onChange={(v) => update("provider", v)}
                   >
-                    <option value="">Select template...</option>
-                    {SMS_TEMPLATES.map((t) => (
-                      <option key={t} value={t}>{t}</option>
-                    ))}
+                    <option value="default">Default SMS provider</option>
+                    <option value="twilio">Twilio</option>
+                    <option value="unifonic">Unifonic</option>
                   </NativeSelect>
                 </Section>
-                {(d.template as string) && SMS_CHAR_COUNTS[d.template as string] && (
-                  <div className="flex items-center justify-between rounded-lg border border-border bg-muted/20 px-3 py-2">
-                    <span className="text-xs text-muted-foreground">Character count</span>
-                    <span className={`text-xs font-medium ${
-                      SMS_CHAR_COUNTS[d.template as string] > 160 ? "text-amber-400" : "text-emerald-400"
-                    }`}>
-                      {SMS_CHAR_COUNTS[d.template as string]}/160
-                    </span>
-                  </div>
-                )}
+
                 <Link
                   href="/email-generator?channel=sms&context=journey"
                   target="_blank"
@@ -815,17 +1103,6 @@ export function NodeConfigPanel({ node, onClose, onUpdate, onDeleteNode }: NodeC
                   Compose in Composer
                   <ExternalLink className="h-3 w-3" />
                 </Link>
-                {(d.template as string) && (
-                  <Link
-                    href="/templates/editor"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
-                  >
-                    Edit template
-                    <ExternalLink className="h-3 w-3" />
-                  </Link>
-                )}
               </>
             )}
 
@@ -1314,4 +1591,44 @@ function defaultBranches(node: Node | null, block: ReturnType<typeof getBlockTyp
     }
   }
   return [];
+}
+
+
+/* ------------------------------------------------------------------ */
+/*  Template / Manual mode toggle (used by Send Email + Send SMS)     */
+/* ------------------------------------------------------------------ */
+
+function ModeToggle({
+  value,
+  onChange,
+}: {
+  value: "template" | "manual";
+  onChange: (v: "template" | "manual") => void;
+}) {
+  return (
+    <div className="flex rounded-lg border border-border bg-muted/20 p-0.5">
+      <button
+        type="button"
+        onClick={() => onChange("template")}
+        className={`flex-1 rounded-md px-2 py-1 text-xs font-medium transition-colors ${
+          value === "template"
+            ? "bg-primary text-primary-foreground shadow-sm"
+            : "text-muted-foreground hover:text-foreground"
+        }`}
+      >
+        Template
+      </button>
+      <button
+        type="button"
+        onClick={() => onChange("manual")}
+        className={`flex-1 rounded-md px-2 py-1 text-xs font-medium transition-colors ${
+          value === "manual"
+            ? "bg-primary text-primary-foreground shadow-sm"
+            : "text-muted-foreground hover:text-foreground"
+        }`}
+      >
+        Manual
+      </button>
+    </div>
+  );
 }

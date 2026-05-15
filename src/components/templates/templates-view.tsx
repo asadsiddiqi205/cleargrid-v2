@@ -697,7 +697,11 @@ function CreateTemplateDialog({
   const [purpose, setPurpose] = React.useState<TemplatePurpose | "">("");
   const [channel, setChannel] = React.useState<TemplateChannel | "">("");
   const [name, setName] = React.useState("");
+  const [subject, setSubject] = React.useState("");
   const [body, setBody] = React.useState("");
+  const [activeField, setActiveField] = React.useState<"subject" | "body">("body");
+  const newBodyRef = React.useRef<HTMLTextAreaElement | null>(null);
+  const newSubjectRef = React.useRef<HTMLInputElement | null>(null);
 
   React.useEffect(() => {
     if (open) {
@@ -706,9 +710,48 @@ function CreateTemplateDialog({
       setPurpose("");
       setChannel("");
       setName("");
+      setSubject("");
       setBody("");
+      setActiveField("body");
     }
   }, [open, defaultLenderId]);
+
+  function insertNewVariable(token: string) {
+    if (channel === "email" && activeField === "subject") {
+      const el = newSubjectRef.current;
+      if (!el) {
+        setSubject((s) => s + token);
+        return;
+      }
+      const start = el.selectionStart ?? subject.length;
+      const end = el.selectionEnd ?? subject.length;
+      const next = subject.slice(0, start) + token + subject.slice(end);
+      setSubject(next);
+      requestAnimationFrame(() => {
+        el.focus();
+        const caret = start + token.length;
+        el.setSelectionRange(caret, caret);
+      });
+      return;
+    }
+    const el = newBodyRef.current;
+    if (!el) {
+      setBody((b) => b + token);
+      return;
+    }
+    const start = el.selectionStart ?? body.length;
+    const end = el.selectionEnd ?? body.length;
+    const next = body.slice(0, start) + token + body.slice(end);
+    setBody(next);
+    requestAnimationFrame(() => {
+      el.focus();
+      const caret = start + token.length;
+      el.setSelectionRange(caret, caret);
+    });
+  }
+
+  const newSmsCharCount = body.length;
+  const newSmsOverLimit = newSmsCharCount > 160;
 
   const lenderOptions = React.useMemo(() => {
     return [
@@ -728,7 +771,7 @@ function CreateTemplateDialog({
 
   return (
     <Dialog open={open} onOpenChange={(v: boolean) => onOpenChange(v)}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className={cn("sm:max-w-lg", step === 4 && "sm:max-w-3xl")}>
         <DialogHeader>
           <DialogTitle>New template</DialogTitle>
           <DialogDescription>
@@ -811,25 +854,107 @@ function CreateTemplateDialog({
         )}
 
         {step === 4 && (
-          <div className="space-y-3">
-            <div className="space-y-2">
-              <Label htmlFor="new-name">Template name</Label>
-              <Input
-                id="new-name"
-                value={name}
-                placeholder="e.g. Payment Reminder — Soft"
-                onChange={(e) => setName(e.target.value)}
-              />
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_240px]">
+            {/* Left: editor */}
+            <div className="space-y-3">
+              <div className="space-y-2">
+                <Label htmlFor="new-name">Template name</Label>
+                <Input
+                  id="new-name"
+                  value={name}
+                  placeholder="e.g. Payment Reminder — Soft"
+                  onChange={(e) => setName(e.target.value)}
+                />
+              </div>
+
+              {channel === "email" && (
+                <div className="space-y-2">
+                  <Label htmlFor="new-subject">Subject line</Label>
+                  <Input
+                    id="new-subject"
+                    ref={newSubjectRef}
+                    value={subject}
+                    onFocus={() => setActiveField("subject")}
+                    onChange={(e) => setSubject(e.target.value)}
+                    placeholder="e.g. Reminder: your payment of {{amount_due}} is due"
+                    className="font-medium"
+                  />
+                </div>
+              )}
+
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="new-body">{channel === "email" ? "Body" : "Message"}</Label>
+                  {channel === "sms" && (
+                    <span
+                      className={cn(
+                        "text-[11px] font-medium tabular-nums",
+                        newSmsOverLimit ? "text-amber-400" : "text-muted-foreground",
+                      )}
+                    >
+                      {newSmsCharCount}/160
+                    </span>
+                  )}
+                </div>
+                <Textarea
+                  id="new-body"
+                  ref={newBodyRef}
+                  value={body}
+                  onFocus={() => setActiveField("body")}
+                  onChange={(e) => setBody(e.target.value)}
+                  placeholder="Type your template content here. Click a variable on the right to insert it at the cursor."
+                  className={cn(
+                    "font-mono text-[13px] leading-relaxed",
+                    channel === "email" ? "min-h-[200px]" : "min-h-[140px]",
+                  )}
+                />
+                {channel === "sms" && newSmsOverLimit && (
+                  <p className="text-[11px] text-amber-400">
+                    This message exceeds 160 characters and will be split across multiple SMS.
+                  </p>
+                )}
+              </div>
+
+              {/* Live preview */}
+              {(subject || body) && (
+                <div className="space-y-1.5">
+                  <Label>Preview (sample data)</Label>
+                  <Card className="bg-muted/30">
+                    <CardContent className="space-y-2 p-3">
+                      {channel === "email" && subject && (
+                        <p className="text-sm font-semibold">{renderPreview(subject)}</p>
+                      )}
+                      <pre className="whitespace-pre-wrap font-sans text-[12px] leading-relaxed text-foreground/90">
+                        {renderPreview(body)}
+                      </pre>
+                    </CardContent>
+                  </Card>
+                </div>
+              )}
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="new-body">Starter content</Label>
-              <Textarea
-                id="new-body"
-                value={body}
-                onChange={(e) => setBody(e.target.value)}
-                placeholder="Type your template content here, or leave blank to start from scratch."
-                className="min-h-[140px]"
-              />
+
+            {/* Right: variable picker */}
+            <div className="space-y-2 lg:border-l lg:border-border lg:pl-4">
+              <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                Variables
+              </h4>
+              <p className="text-[11px] text-muted-foreground">
+                Click to insert at cursor
+                {channel === "email" ? ` in ${activeField}` : ""}.
+              </p>
+              <div className="flex max-h-[400px] flex-col gap-1.5 overflow-y-auto pr-1">
+                {AVAILABLE_VARIABLES.map((v) => (
+                  <button
+                    key={v.token}
+                    type="button"
+                    onClick={() => insertNewVariable(v.token)}
+                    className="group flex flex-col items-start gap-0.5 rounded-md border border-border/60 bg-background/40 px-2.5 py-1.5 text-left transition-colors hover:border-primary/40 hover:bg-primary/5"
+                  >
+                    <span className="font-mono text-[11px] text-primary">{v.token}</span>
+                    <span className="text-[10px] text-muted-foreground">{v.description}</span>
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
         )}

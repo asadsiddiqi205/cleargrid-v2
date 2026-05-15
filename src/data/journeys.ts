@@ -170,6 +170,7 @@ export const BLOCK_TYPES: BlockType[] = [
   { type: "geofence_trigger", label: "Geofence Trigger", icon: MapPin, description: "Start when user enters/exits a location", category: "entry", nodeKind: "trigger", defaultData: { label: "Geofence Trigger", triggerType: "geofence" } },
   { type: "inbound_message_trigger", label: "Inbound Message", icon: MessageCircle, description: "Start when user sends an inbound message", category: "entry", nodeKind: "trigger", defaultData: { label: "Inbound Message", triggerType: "inbound_message" } },
   { type: "incoming_call_trigger", label: "Incoming Call", icon: Phone, description: "Start when an inbound call arrives", category: "entry", nodeKind: "trigger", defaultData: { label: "Incoming Call", triggerType: "incoming_call" } },
+  { type: "journey_handoff_entry", label: "Journey Handoff Entry", icon: ArrowRightLeft, description: "Accept borrowers handed off from other journeys (runs in parallel with the journey's normal Trigger)", category: "entry", nodeKind: "trigger", defaultData: { label: "Journey Handoff Entry", triggerType: "journey_handoff_entry", acceptFrom: "all" } },
 
   // ───── Channels / Actions (4) ─────
   { type: "send_email", label: "Send Email", icon: Mail, description: "Send email with personalization", category: "channels", nodeKind: "action", defaultData: { label: "Send Email", actionType: "email" } },
@@ -193,7 +194,9 @@ export const BLOCK_TYPES: BlockType[] = [
   { type: "wait_time_slots", label: "Wait for Time Slots", icon: Clock, description: "Progress only during allowed windows", category: "flow", nodeKind: "wait", defaultData: { label: "Wait for Time Slots", waitMode: "time_slots" } },
   { type: "wait_for_event", label: "Wait for Event", icon: AlarmClock, description: "Hold until event or timeout", category: "flow", maxOutputs: 2, nodeKind: "generic", defaultData: { label: "Wait for Event", branchKind: "wait_for_event", branches: 2 } },
   { type: "wait_profile_change", label: "Wait for Profile Change", icon: RefreshCw, description: "Hold until attribute changes", category: "flow", nodeKind: "wait", defaultData: { label: "Wait for Profile Change", waitMode: "profile_change" } },
-  { type: "pause", label: "Pause / Hold", icon: Pause, description: "Explicit pause block", category: "flow", nodeKind: "wait", defaultData: { label: "Pause / Hold", waitMode: "pause" } },
+  // Pause / Hold descoped — keep the underlying PauseHoldForm in block-configs.tsx
+  // so it can be re-enabled later.
+  // { type: "pause", label: "Pause / Hold", icon: Pause, description: "Explicit pause block", category: "flow", nodeKind: "wait", defaultData: { label: "Pause / Hold", waitMode: "pause" } },
   { type: "traffic_split", label: "Traffic Split", icon: Split, description: "Split users by percentage", category: "flow", maxOutputs: 5, nodeKind: "generic", defaultData: { label: "Traffic Split", branchKind: "traffic_split", branches: 2, splits: [50, 50] } },
   { type: "end_journey", label: "End Journey", icon: Square, description: "End the journey", category: "flow", nodeKind: "end", defaultData: { label: "End Journey", outcome: "Completed" } },
 
@@ -201,7 +204,10 @@ export const BLOCK_TYPES: BlockType[] = [
   { type: "context_variable", label: "Context Variable", icon: Variable, description: "Create journey-scoped variable", category: "data", nodeKind: "generic", defaultData: { label: "Context Variable" } },
   { type: "update_variable", label: "Update Variable", icon: Edit, description: "Update variable with formula", category: "data", nodeKind: "generic", defaultData: { label: "Update Variable" } },
   { type: "update_profile", label: "Update Profile", icon: UserCog, description: "Write permanent profile updates", category: "data", nodeKind: "generic", defaultData: { label: "Update Profile" } },
-  { type: "tag_management", label: "Tag Management", icon: Tag, description: "Add or remove tags/labels", category: "data", nodeKind: "generic", defaultData: { label: "Tag Management" } },
+  // Tag Management descoped for v1 — borrower profiles don't carry tags yet,
+  // so the node has nothing to write to. Re-enable once tagging is added to
+  // the borrower data model. Underlying form is kept in block-configs.tsx.
+  // { type: "tag_management", label: "Tag Management", icon: Tag, description: "Add or remove tags/labels", category: "data", nodeKind: "generic", defaultData: { label: "Tag Management" } },
   { type: "consent_management", label: "Consent / DNC", icon: ShieldOff, description: "Manage DNC and consent states", category: "data", nodeKind: "generic", defaultData: { label: "Consent / DNC" } },
   { type: "catalog_lookup", label: "Catalog Lookup", icon: BookOpen, description: "Retrieve data from catalog", category: "data", nodeKind: "generic", defaultData: { label: "Catalog Lookup" } },
 

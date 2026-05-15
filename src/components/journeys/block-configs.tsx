@@ -19,6 +19,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Info } from "lucide-react";
+import * as React from "react";
 import type { ReactNode } from "react";
 
 /* ------------------------------------------------------------------ */
@@ -90,9 +91,18 @@ function FieldLabel({ children, hint }: { children: ReactNode; hint?: string }) 
 
 type D = Record<string, unknown>;
 
+/**
+ * Upstream-action context: when a node is wired into the graph, the panel
+ * passes in the immediate predecessor action node (if any). Used today by
+ * Action Path Split to render the correct branch vocabulary, but threaded
+ * generically so other condition nodes can use it later.
+ */
+export type UpstreamActionType = "email" | "sms" | "whatsapp" | "call" | null;
+
 export interface BlockConfigFormProps {
   data: D;
   update: (key: string, value: unknown) => void;
+  upstreamActionType?: UpstreamActionType;
 }
 
 /* ------------------------------------------------------------------ */
@@ -149,28 +159,83 @@ const TAG_GROUPS = ["risk_tier", "segment", "language", "channel_pref", "campaig
 /*  ===== TRIGGERS ===== (9)                                          */
 /* ------------------------------------------------------------------ */
 
+// Collections event catalogue (v1 spec) — overrides the generic EVENTS list
+// for the Event Trigger form only. Will move to canonical event registry once
+// the data layer lands.
+const COLLECTIONS_EVENTS = [
+  "pay_in_full_success",
+  "pay_in_full_clicked",
+  "schedule_payment_success",
+  "schedule_payment_clicked",
+  "payment_plan_success",
+  "payment_plan_clicked",
+  "account_settlement_success",
+  "account_settlement_clicked",
+  "paid_to_lender_partial",
+  "dob_verified",
+  "land_on_dob_verification_page",
+  "id_number_verified",
+  "borrower_account_login",
+  "borrower_account_login_all",
+  "consent_form_i_accept_clicked",
+  "promise_to_pay_clicked",
+];
+
 export function EventTriggerForm({ data, update }: BlockConfigFormProps) {
+  const frequency = (data.frequency as string) ?? "every";
   return (
     <SectionCard title="Event trigger" helper="Start the journey when a user performs a specific event.">
       <div>
         <FieldLabel>Event</FieldLabel>
         <NS value={(data.event as string) ?? ""} onChange={(v) => update("event", v)}>
           <option value="">Select event...</option>
-          {EVENTS.map((e) => (
+          {COLLECTIONS_EVENTS.map((e) => (
             <option key={e} value={e}>
               {e}
             </option>
           ))}
         </NS>
       </div>
-      <div className="grid grid-cols-2 gap-2">
-        <div>
-          <FieldLabel>Frequency</FieldLabel>
-          <NS value={(data.frequency as string) ?? "once"} onChange={(v) => update("frequency", v)}>
-            <option value="once">Once</option>
-            <option value="every">Every time</option>
-          </NS>
+      <div>
+        <FieldLabel>Frequency</FieldLabel>
+        <NS value={frequency} onChange={(v) => update("frequency", v)}>
+          <option value="first">On first occurrence</option>
+          <option value="every">On every occurrence</option>
+          <option value="nth">On Nth occurrence within window</option>
+        </NS>
+      </div>
+      {frequency === "nth" && (
+        <div className="grid grid-cols-3 gap-2">
+          <div>
+            <FieldLabel>Nth</FieldLabel>
+            <Input
+              type="number"
+              value={(data.nthOccurrence as number) ?? 2}
+              onChange={(e) => update("nthOccurrence", Number(e.target.value))}
+              className="h-7 text-xs"
+              min={1}
+            />
+          </div>
+          <div>
+            <FieldLabel>Window</FieldLabel>
+            <Input
+              type="number"
+              value={(data.window as number) ?? 7}
+              onChange={(e) => update("window", Number(e.target.value))}
+              className="h-7 text-xs"
+              min={1}
+            />
+          </div>
+          <div>
+            <FieldLabel>Unit</FieldLabel>
+            <NS value={(data.windowUnit as string) ?? "days"} onChange={(v) => update("windowUnit", v)}>
+              <option value="hours">Hours</option>
+              <option value="days">Days</option>
+            </NS>
+          </div>
         </div>
+      )}
+      {frequency === "every" && (
         <div>
           <FieldLabel>Cooldown (hours)</FieldLabel>
           <Input
@@ -181,7 +246,7 @@ export function EventTriggerForm({ data, update }: BlockConfigFormProps) {
             min={0}
           />
         </div>
-      </div>
+      )}
       <div>
         <FieldLabel>Source</FieldLabel>
         <NS value={(data.source as string) ?? "any"} onChange={(v) => update("source", v)}>
@@ -222,64 +287,134 @@ export function SegmentMembershipForm({ data, update }: BlockConfigFormProps) {
 }
 
 export function ProfileChangeTriggerForm({ data, update }: BlockConfigFormProps) {
+  const attrId = (data.attributeId as string) ?? "";
+  const attr = CATEGORICAL_ATTRIBUTES.find((a) => a.id === attrId);
+
+  // Group categorical attributes for the dropdown (mirrors DecisionSplitForm).
+  const grouped = React.useMemo(() => {
+    const m = new Map<string, typeof CATEGORICAL_ATTRIBUTES>();
+    CATEGORICAL_ATTRIBUTES.forEach((a) => {
+      if (!m.has(a.group)) m.set(a.group, []);
+      m.get(a.group)!.push(a);
+    });
+    return Array.from(m.entries());
+  }, []);
+
+  // NOTE: when the data layer lands, operators should be typed per-attribute:
+  //   numeric  -> equals, not_equals, gt, lt, gte, lte, between, changes
+  //   date     -> equals, before, after, between, changes
+  //   boolean  -> is_true, is_false, changes
+  // For v1 we only carry categorical attributes here, so the operator set is
+  // restricted to the four below.
+  const operator = (data.operator as string) ?? "is";
+
   return (
     <SectionCard title="Profile attribute change" helper="Start when a profile attribute changes.">
       <div>
         <FieldLabel>Attribute</FieldLabel>
-        <NS value={(data.attribute as string) ?? ""} onChange={(v) => update("attribute", v)}>
-          <option value="">Select attribute...</option>
-          {ATTRIBUTES.map((a) => (
-            <option key={a} value={a}>
-              {a}
-            </option>
+        <NS value={attrId} onChange={(v) => update("attributeId", v)}>
+          <option value="">Pick an attribute...</option>
+          {grouped.map(([group, items]) => (
+            <optgroup key={group} label={group}>
+              {items.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.label}
+                </option>
+              ))}
+            </optgroup>
           ))}
         </NS>
       </div>
-      <div>
-        <FieldLabel>Operator</FieldLabel>
-        <NS value={(data.operator as string) ?? "changes"} onChange={(v) => update("operator", v)}>
-          <option value="equals">Equals</option>
-          <option value="increases">Increases</option>
-          <option value="decreases">Decreases</option>
-          <option value="changes">Any change</option>
-        </NS>
-      </div>
-      <div className="grid grid-cols-2 gap-2">
-        <div>
-          <FieldLabel>From (optional)</FieldLabel>
-          <Input
-            value={(data.fromValue as string) ?? ""}
-            onChange={(e) => update("fromValue", e.target.value)}
-            className="h-7 text-xs"
-            placeholder="any"
-          />
-        </div>
-        <div>
-          <FieldLabel>To</FieldLabel>
-          <Input
-            value={(data.toValue as string) ?? ""}
-            onChange={(e) => update("toValue", e.target.value)}
-            className="h-7 text-xs"
-            placeholder="e.g. 60"
-          />
-        </div>
-      </div>
+      {attr ? (
+        <>
+          <div>
+            <FieldLabel>Operator</FieldLabel>
+            <NS value={operator} onChange={(v) => update("operator", v)}>
+              <option value="is">is</option>
+              <option value="is_not">is not</option>
+              <option value="is_in">is in</option>
+              <option value="is_not_in">is not in</option>
+            </NS>
+          </div>
+          <div>
+            <FieldLabel>Value</FieldLabel>
+            <NS value={(data.value as string) ?? ""} onChange={(v) => update("value", v)}>
+              <option value="">Select value...</option>
+              {attr.values.map((v) => (
+                <option key={v} value={v}>
+                  {v}
+                </option>
+              ))}
+            </NS>
+          </div>
+        </>
+      ) : (
+        <>
+          <div>
+            <FieldLabel>Operator</FieldLabel>
+            <NS value={operator} onChange={(v) => update("operator", v)}>
+              <option value="equals">Equals</option>
+              <option value="increases">Increases</option>
+              <option value="decreases">Decreases</option>
+              <option value="changes">Any change</option>
+            </NS>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <FieldLabel>From (optional)</FieldLabel>
+              <Input
+                value={(data.fromValue as string) ?? ""}
+                onChange={(e) => update("fromValue", e.target.value)}
+                className="h-7 text-xs"
+                placeholder="any"
+              />
+            </div>
+            <div>
+              <FieldLabel>To</FieldLabel>
+              <Input
+                value={(data.toValue as string) ?? ""}
+                onChange={(e) => update("toValue", e.target.value)}
+                className="h-7 text-xs"
+                placeholder="e.g. 60"
+              />
+            </div>
+          </div>
+        </>
+      )}
     </SectionCard>
   );
 }
 
+// Stub list of date-typed attributes for relative date triggers.
+// Will be replaced by a typed attribute catalogue once the data layer lands.
+const DATE_ATTRIBUTES = [
+  { id: "cf_due_date", label: "Due Date" },
+  { id: "cf_ptp_date", label: "Promise-to-Pay Date" },
+  { id: "cf_submit_date", label: "Account Submit Date" },
+  { id: "cf_last_payment_date", label: "Last Payment Date" },
+  { id: "cf_visa_expiry_date", label: "Visa Expiry Date" },
+];
+
 export function DateTimeTriggerForm({ data, update }: BlockConfigFormProps) {
   const mode = (data.dateMode as string) ?? "specific";
+  const recurringCadence = (data.recurringCadence as string) ?? "daily";
+  const weekDays = (data.weekDays as string[]) ?? [];
+  const toggleWeekDay = (d: string) => {
+    const next = weekDays.includes(d) ? weekDays.filter((x) => x !== d) : [...weekDays, d];
+    update("weekDays", next);
+  };
   return (
-    <SectionCard title="Date / time trigger" helper="Run on a specific date/time or a recurring schedule.">
+    <SectionCard title="Date / time trigger" helper="Run on a specific date/time, a recurring schedule, or relative to a borrower date attribute.">
       <div>
         <FieldLabel>Mode</FieldLabel>
         <NS value={mode} onChange={(v) => update("dateMode", v)}>
           <option value="specific">Specific date</option>
           <option value="recurring">Recurring</option>
+          <option value="relative">Relative to attribute</option>
         </NS>
       </div>
-      {mode === "specific" ? (
+
+      {mode === "specific" && (
         <div>
           <FieldLabel>Date & time</FieldLabel>
           <Input
@@ -289,20 +424,77 @@ export function DateTimeTriggerForm({ data, update }: BlockConfigFormProps) {
             className="h-7 text-xs"
           />
         </div>
-      ) : (
-        <div className="grid grid-cols-2 gap-2">
+      )}
+
+      {mode === "recurring" && (
+        <>
           <div>
-            <FieldLabel>Day of week</FieldLabel>
-            <NS value={(data.dayOfWeek as string) ?? "Mon"} onChange={(v) => update("dayOfWeek", v)}>
-              {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((d) => (
-                <option key={d} value={d}>
-                  {d}
-                </option>
-              ))}
+            <FieldLabel>Cadence</FieldLabel>
+            <NS value={recurringCadence} onChange={(v) => update("recurringCadence", v)}>
+              <option value="daily">Daily</option>
+              <option value="weekly">Weekly</option>
+              <option value="monthly">Monthly</option>
             </NS>
           </div>
+
+          {recurringCadence === "weekly" && (
+            <div>
+              <FieldLabel>Days of week</FieldLabel>
+              <div className="flex flex-wrap gap-1">
+                {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((d) => (
+                  <button
+                    key={d}
+                    type="button"
+                    onClick={() => toggleWeekDay(d)}
+                    className={`rounded px-2 py-0.5 text-[10px] font-medium transition-colors ${
+                      weekDays.includes(d)
+                        ? "bg-primary/20 text-primary"
+                        : "bg-muted/40 text-muted-foreground"
+                    }`}
+                  >
+                    {d}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {recurringCadence === "monthly" && (
+            <div>
+              <FieldLabel>Day of month</FieldLabel>
+              <NS value={(data.monthDay as string) ?? "1"} onChange={(v) => update("monthDay", v)}>
+                {Array.from({ length: 31 }, (_, i) => String(i + 1)).map((d) => (
+                  <option key={d} value={d}>
+                    {d}
+                  </option>
+                ))}
+                <option value="last">Last day of month</option>
+              </NS>
+            </div>
+          )}
+
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <FieldLabel>Start date</FieldLabel>
+              <Input
+                type="date"
+                value={(data.startDate as string) ?? ""}
+                onChange={(e) => update("startDate", e.target.value)}
+                className="h-7 text-xs"
+              />
+            </div>
+            <div>
+              <FieldLabel>End date (optional)</FieldLabel>
+              <Input
+                type="date"
+                value={(data.endDate as string) ?? ""}
+                onChange={(e) => update("endDate", e.target.value)}
+                className="h-7 text-xs"
+              />
+            </div>
+          </div>
           <div>
-            <FieldLabel>Time</FieldLabel>
+            <FieldLabel>Time of day</FieldLabel>
             <Input
               type="time"
               value={(data.timeOfDay as string) ?? "09:00"}
@@ -310,8 +502,60 @@ export function DateTimeTriggerForm({ data, update }: BlockConfigFormProps) {
               className="h-7 text-xs"
             />
           </div>
-        </div>
+        </>
       )}
+
+      {mode === "relative" && (
+        <>
+          <div className="grid grid-cols-3 gap-2">
+            <div>
+              <FieldLabel>Direction</FieldLabel>
+              <NS
+                value={(data.relativeDirection as string) ?? "before"}
+                onChange={(v) => update("relativeDirection", v)}
+              >
+                <option value="before">Before</option>
+                <option value="after">After</option>
+              </NS>
+            </div>
+            <div>
+              <FieldLabel>Amount</FieldLabel>
+              <Input
+                type="number"
+                value={(data.relativeAmount as number) ?? 1}
+                onChange={(e) => update("relativeAmount", Number(e.target.value))}
+                className="h-7 text-xs"
+                min={0}
+              />
+            </div>
+            <div>
+              <FieldLabel>Unit</FieldLabel>
+              <NS
+                value={(data.relativeUnit as string) ?? "days"}
+                onChange={(v) => update("relativeUnit", v)}
+              >
+                <option value="hours">Hours</option>
+                <option value="days">Days</option>
+              </NS>
+            </div>
+          </div>
+          <div>
+            <FieldLabel>Anchor attribute</FieldLabel>
+            <NS
+              value={(data.anchorAttribute as string) ?? ""}
+              onChange={(v) => update("anchorAttribute", v)}
+            >
+              <option value="">Select date attribute...</option>
+              {DATE_ATTRIBUTES.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.label}
+                </option>
+              ))}
+            </NS>
+          </div>
+        </>
+      )}
+
       <div>
         <FieldLabel>Timezone</FieldLabel>
         <NS value={(data.timezone as string) ?? "UTC"} onChange={(v) => update("timezone", v)}>
@@ -456,6 +700,87 @@ export function IncomingCallTriggerForm({ data, update }: BlockConfigFormProps) 
             <option value="business">Business hours</option>
             <option value="off">Off hours</option>
           </NS>
+        </div>
+      </div>
+    </SectionCard>
+  );
+}
+
+// Stub list of existing journeys for the "Specific journeys" picker.
+// Will be replaced by a query to the journeys list when the data layer lands.
+const STUB_JOURNEYS = [
+  { id: "high-dpd", name: "High DPD Collection Flow" },
+  { id: "broken-promise", name: "Broken Promise Follow-up" },
+  { id: "new-overdue", name: "New Overdue Reminder" },
+  { id: "early-delinquency", name: "Early Delinquency Nudge" },
+  { id: "settlement-offer", name: "Settlement Offer Outreach" },
+];
+
+export function JourneyHandoffEntryForm({ data, update }: BlockConfigFormProps) {
+  const mode = (data.acceptFrom as string) ?? "all";
+  const sourceJourneys = (data.sourceJourneys as string[]) ?? [];
+
+  const toggleJourney = (id: string) => {
+    const next = sourceJourneys.includes(id)
+      ? sourceJourneys.filter((j) => j !== id)
+      : [...sourceJourneys, id];
+    update("sourceJourneys", next);
+  };
+
+  return (
+    <SectionCard
+      title="Journey Handoff Entry"
+      helper="Accept borrowers handed off from other journeys. Runs in parallel with the journey's normal Trigger node."
+    >
+      <div>
+        <FieldLabel>Accept from</FieldLabel>
+        <NS value={mode} onChange={(v) => update("acceptFrom", v)}>
+          <option value="all">All journeys</option>
+          <option value="specific">Specific journeys</option>
+        </NS>
+      </div>
+
+      {mode === "specific" && (
+        <div>
+          <FieldLabel>Source journeys</FieldLabel>
+          <div className="space-y-1 rounded-md border border-border bg-muted/20 p-2">
+            {STUB_JOURNEYS.map((j) => (
+              <label
+                key={j.id}
+                className="flex cursor-pointer items-center gap-2 rounded px-1.5 py-1 text-xs text-foreground hover:bg-accent/30"
+              >
+                <input
+                  type="checkbox"
+                  checked={sourceJourneys.includes(j.id)}
+                  onChange={() => toggleJourney(j.id)}
+                  className="h-3.5 w-3.5 accent-[var(--primary)]"
+                />
+                <span className="flex-1">{j.name}</span>
+                <span className="font-mono text-[10px] text-muted-foreground">{j.id}</span>
+              </label>
+            ))}
+          </div>
+          {sourceJourneys.length === 0 && (
+            <p className="mt-1 text-[10px] text-amber-400">Select at least one source journey.</p>
+          )}
+        </div>
+      )}
+
+      <div>
+        <FieldLabel>Source variables</FieldLabel>
+        <div className="rounded-md border border-border bg-muted/20 p-2 text-[11px] text-muted-foreground">
+          <p>These variables will be available to downstream nodes:</p>
+          <ul className="mt-1.5 space-y-0.5">
+            <li>
+              <span className="font-mono text-foreground">source_journey_id</span>
+            </li>
+            <li>
+              <span className="font-mono text-foreground">source_outcome</span>
+            </li>
+            <li className="text-muted-foreground/80">
+              Any forwarded variables from the source journey
+            </li>
+          </ul>
         </div>
       </div>
     </SectionCard>
@@ -764,6 +1089,25 @@ export function NotifyInternalForm({ data, update }: BlockConfigFormProps) {
 /*  ===== CONDITIONS ===== (non-legacy)                               */
 /* ------------------------------------------------------------------ */
 
+// Categorical attribute catalogue — branches are auto-derived from these
+// enum values. Stubbed here for v1; will be replaced by the canonical
+// borrower attribute catalogue once the data layer lands.
+// See Section 7 of the v1 spec for the source of truth on attribute names.
+export const CATEGORICAL_ATTRIBUTES: { id: string; label: string; group: string; values: string[] }[] = [
+  // Risk & Collections
+  { id: "dpd_bucket_label", label: "DPD Bucket", group: "Risk & Collections", values: ["0-30", "31-60", "61-90", "91-180", "180+"] },
+  { id: "risk_segment", label: "Risk Segment", group: "Risk & Collections", values: ["Early", "Mid", "Late", "Legal"] },
+  { id: "engagement_tier", label: "Engagement Tier", group: "Risk & Collections", values: ["Hot", "Warm", "Cold"] },
+  { id: "last_journey_outcome", label: "Last Journey Outcome", group: "Risk & Collections", values: ["Converted", "Exited", "Timed Out", "Errored"] },
+  // Communications / Consent
+  { id: "consent_status", label: "Consent Status", group: "Consent", values: ["Full", "Restricted", "Blocked"] },
+  { id: "preferred_channel", label: "Preferred Channel", group: "Consent", values: ["Voice", "Email", "SMS"] },
+  { id: "contactability_score", label: "Contactability Score", group: "Consent", values: ["High", "Medium", "Low"] },
+  // Borrower Identity
+  { id: "language", label: "Language", group: "Borrower Identity", values: ["English", "Arabic", "Urdu", "Hindi", "Filipino"] },
+  { id: "country", label: "Country", group: "Borrower Identity", values: ["UAE", "KSA", "Other"] },
+];
+
 export function DecisionSplitForm({ data, update }: BlockConfigFormProps) {
   return (
     <SectionCard title="Decision split" helper="Route users based on a boolean check.">
@@ -843,42 +1187,115 @@ export function AudienceSplitForm({ data, update }: BlockConfigFormProps) {
   );
 }
 
-export function ActionPathSplitForm({ data, update }: BlockConfigFormProps) {
+// Branch vocabulary per upstream action type. "No response" is always last
+// and fires after the wait window expires.
+const ACTION_PATH_BRANCHES: Record<Exclude<UpstreamActionType, null>, string[]> = {
+  email: ["Delivered", "Bounced", "Opened", "Clicked", "Replied", "Unsubscribed", "No response"],
+  sms: ["Delivered", "Failed", "Replied", "Opted out", "No response"],
+  whatsapp: ["Delivered", "Read", "Replied", "Failed", "Opted out", "No response"],
+  call: [
+    "PTP captured",
+    "Dispute raised",
+    "Callback requested",
+    "Connected (other)",
+    "Voicemail",
+    "No answer / unreachable",
+    "Technical failure",
+    "No response",
+  ],
+};
+
+const ACTION_PATH_LABEL: Record<Exclude<UpstreamActionType, null>, string> = {
+  email: "Send Email",
+  sms: "Send SMS",
+  whatsapp: "Send WhatsApp",
+  call: "Trigger AI Call",
+};
+
+export function ActionPathSplitForm({ data, update, upstreamActionType }: BlockConfigFormProps) {
+  const hasUpstream = upstreamActionType !== null && upstreamActionType !== undefined;
+  const branches = hasUpstream ? ACTION_PATH_BRANCHES[upstreamActionType] : [];
+
+  // Persist the selected branch set in node data so the canvas / branch labels
+  // can render even without the panel open.
+  React.useEffect(() => {
+    if (hasUpstream && branches.length > 0) {
+      const persisted = data.branchLabels as string[] | undefined;
+      const same = persisted && persisted.length === branches.length && persisted.every((b, i) => b === branches[i]);
+      if (!same) {
+        update("branchLabels", branches);
+        update("branches", branches.length);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [upstreamActionType]);
+
   return (
-    <SectionCard title="Action path split" helper="Route based on which action the user took.">
+    <SectionCard
+      title="Action path split"
+      helper="Branches are driven by the outcome of the upstream action node, with a wait window before falling through to No response."
+    >
       <div>
-        <FieldLabel>Action type</FieldLabel>
-        <NS value={(data.actionCheck as string) ?? "click"} onChange={(v) => update("actionCheck", v)}>
-          <option value="click">Clicked</option>
-          <option value="open">Opened</option>
-          <option value="dismiss">Dismissed</option>
-          <option value="none">No action</option>
-        </NS>
+        <FieldLabel>Upstream action</FieldLabel>
+        {hasUpstream ? (
+          <div className="rounded-md border border-border bg-muted/30 px-2 py-1.5 text-xs text-foreground">
+            {ACTION_PATH_LABEL[upstreamActionType]}
+          </div>
+        ) : (
+          <div className="rounded-md border border-red-500/40 bg-red-500/10 px-2 py-1.5 text-xs text-red-300">
+            Action Path Split must follow an action node.
+          </div>
+        )}
       </div>
+
       <div className="grid grid-cols-2 gap-2">
         <div>
-          <FieldLabel>Window</FieldLabel>
+          <FieldLabel>Wait window</FieldLabel>
           <Input
             type="number"
-            value={(data.actionWindow as number) ?? 24}
-            onChange={(e) => update("actionWindow", Number(e.target.value))}
+            value={(data.actionWindow as number) ?? 1}
+            onChange={(e) => {
+              const v = Math.min(Math.max(Number(e.target.value) || 1, 1), 14);
+              update("actionWindow", v);
+            }}
             className="h-7 text-xs"
             min={1}
+            max={14}
           />
         </div>
         <div>
           <FieldLabel>Unit</FieldLabel>
-          <NS value={(data.actionWindowUnit as string) ?? "hours"} onChange={(v) => update("actionWindowUnit", v)}>
+          <NS value={(data.actionWindowUnit as string) ?? "days"} onChange={(v) => update("actionWindowUnit", v)}>
             <option value="hours">Hours</option>
             <option value="days">Days</option>
           </NS>
         </div>
       </div>
+
+      {hasUpstream && (
+        <div>
+          <FieldLabel>Branches ({branches.length})</FieldLabel>
+          <div className="flex flex-wrap gap-1.5 rounded-md border border-border bg-muted/20 p-2">
+            {branches.map((b) => (
+              <span
+                key={b}
+                className="inline-flex items-center rounded-full border border-border bg-card px-2 py-0.5 text-[10px] font-medium text-foreground"
+              >
+                {b}
+              </span>
+            ))}
+          </div>
+          <p className="mt-1 text-[10px] text-muted-foreground">
+            One outgoing edge per branch. &quot;No response&quot; fires after the wait window expires.
+          </p>
+        </div>
+      )}
     </SectionCard>
   );
 }
 
 export function HasDoneEventForm({ data, update }: BlockConfigFormProps) {
+  const frequencyOp = (data.frequencyOp as string) ?? "at_least";
   return (
     <SectionCard title="Has done event" helper="Check whether a user performed an event recently.">
       <div>
@@ -892,7 +1309,7 @@ export function HasDoneEventForm({ data, update }: BlockConfigFormProps) {
           ))}
         </NS>
       </div>
-      <div className="grid grid-cols-3 gap-2">
+      <div className="grid grid-cols-2 gap-2">
         <div>
           <FieldLabel>Window</FieldLabel>
           <Input
@@ -910,16 +1327,35 @@ export function HasDoneEventForm({ data, update }: BlockConfigFormProps) {
             <option value="days">Days</option>
           </NS>
         </div>
+      </div>
+      <div className="grid grid-cols-[1fr_90px] gap-2">
         <div>
-          <FieldLabel>Min count</FieldLabel>
+          <FieldLabel>Frequency</FieldLabel>
+          <NS value={frequencyOp} onChange={(v) => update("frequencyOp", v)}>
+            <option value="at_least">At least N occurrences</option>
+            <option value="exactly">Exactly N occurrences</option>
+            <option value="at_most">At most N occurrences</option>
+          </NS>
+        </div>
+        <div>
+          <FieldLabel>N</FieldLabel>
           <Input
             type="number"
-            value={(data.minCount as number) ?? 1}
-            onChange={(e) => update("minCount", Number(e.target.value))}
+            value={(data.frequencyN as number) ?? 1}
+            onChange={(e) => update("frequencyN", Number(e.target.value))}
             className="h-7 text-xs"
             min={1}
           />
         </div>
+      </div>
+      <div>
+        <FieldLabel>Payload filter (optional)</FieldLabel>
+        <Input
+          value={(data.payloadFilter as string) ?? ""}
+          onChange={(e) => update("payloadFilter", e.target.value)}
+          className="h-7 text-xs font-mono"
+          placeholder='e.g. amount > 100'
+        />
       </div>
     </SectionCard>
   );
@@ -981,16 +1417,65 @@ export function ReachabilityCheckForm({ data, update }: BlockConfigFormProps) {
 }
 
 export function BestChannelForm({ data, update }: BlockConfigFormProps) {
+  const CHANNEL_OPTIONS = ["Email", "SMS", "WhatsApp", "AI Call"];
+  const eligibleChannels =
+    (data.eligibleChannels as string[]) ?? ["Email", "SMS", "WhatsApp", "AI Call"];
+  const toggleChannel = (ch: string) => {
+    const next = eligibleChannels.includes(ch)
+      ? eligibleChannels.filter((c) => c !== ch)
+      : [...eligibleChannels, ch];
+    update("eligibleChannels", next);
+  };
+
+  const SCORING_INPUTS: { name: string; description: string }[] = [
+    { name: "preferred_channel", description: "primary scoring input" },
+    { name: "contactability_score", description: "secondary scoring input" },
+    { name: "consent_status", description: "hard gate; channel excluded if not Full" },
+    { name: "is_phone_reachable", description: "per-channel reachability gates" },
+    { name: "is_email_reachable", description: "per-channel reachability gates" },
+    { name: "is_sms_reachable", description: "per-channel reachability gates" },
+  ];
+
   return (
-    <SectionCard title="Best channel" helper="Pick the best reachable channel using a sort criterion.">
+    <SectionCard
+      title="Best channel"
+      helper="Pick the best reachable channel using preferred_channel + contactability_score, gated by consent and reachability."
+    >
       <div>
-        <FieldLabel>Sort by</FieldLabel>
-        <NS value={(data.sortBy as string) ?? "open_rate"} onChange={(v) => update("sortBy", v)}>
-          <option value="open_rate">Highest open rate</option>
-          <option value="recent">Recent activity</option>
-          <option value="response">Response rate</option>
-          <option value="conversion">Conversion rate</option>
-        </NS>
+        <FieldLabel>Eligible channels</FieldLabel>
+        <div className="flex flex-wrap gap-1">
+          {CHANNEL_OPTIONS.map((ch) => (
+            <button
+              key={ch}
+              type="button"
+              onClick={() => toggleChannel(ch)}
+              className={`rounded px-2 py-0.5 text-[10px] font-medium transition-colors ${
+                eligibleChannels.includes(ch)
+                  ? "bg-primary/20 text-primary"
+                  : "bg-muted/40 text-muted-foreground"
+              }`}
+            >
+              {ch}
+            </button>
+          ))}
+        </div>
+        <p className="mt-1 text-[10px] text-muted-foreground">
+          One outgoing edge per selected channel, plus a &quot;No reachable channel&quot; fallback.
+        </p>
+        {eligibleChannels.length === 0 && (
+          <p className="mt-1 text-[10px] text-amber-400">Select at least one channel.</p>
+        )}
+      </div>
+      <div>
+        <FieldLabel>Scoring uses these attributes</FieldLabel>
+        <div className="space-y-1 rounded-md border border-border bg-muted/20 p-2">
+          {SCORING_INPUTS.map((s) => (
+            <div key={s.name} className="flex items-baseline gap-2 text-[11px]">
+              <span className="font-mono text-foreground">{s.name}</span>
+              <span className="text-muted-foreground">— {s.description}</span>
+            </div>
+          ))}
+        </div>
       </div>
     </SectionCard>
   );
@@ -1146,35 +1631,56 @@ export function WaitForEventForm({ data, update }: BlockConfigFormProps) {
 }
 
 export function WaitProfileChangeForm({ data, update }: BlockConfigFormProps) {
+  const watchAttribute = (data.watchAttribute as string) ?? "";
+
+  const grouped = React.useMemo(() => {
+    const m = new Map<string, typeof CATEGORICAL_ATTRIBUTES>();
+    CATEGORICAL_ATTRIBUTES.forEach((a) => {
+      if (!m.has(a.group)) m.set(a.group, []);
+      m.get(a.group)!.push(a);
+    });
+    return Array.from(m.entries());
+  }, []);
+
   return (
-    <SectionCard title="Wait for profile change" helper="Block users until a profile attribute changes.">
+    <SectionCard
+      title="Wait for profile change"
+      helper="Two outgoing edges: 'Changed' and 'No change (timeout)'."
+    >
       <div>
         <FieldLabel>Attribute</FieldLabel>
-        <NS value={(data.attribute as string) ?? ""} onChange={(v) => update("attribute", v)}>
-          <option value="">Select attribute...</option>
-          {ATTRIBUTES.map((a) => (
-            <option key={a} value={a}>
-              {a}
-            </option>
+        <NS value={watchAttribute} onChange={(v) => update("watchAttribute", v)}>
+          <option value="">Pick an attribute...</option>
+          {grouped.map(([group, items]) => (
+            <optgroup key={group} label={group}>
+              {items.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.label}
+                </option>
+              ))}
+            </optgroup>
           ))}
         </NS>
+        {!watchAttribute && (
+          <p className="mt-1 text-[10px] text-amber-400">Required.</p>
+        )}
       </div>
       <div className="grid grid-cols-2 gap-2">
         <div>
-          <FieldLabel>Timeout (h)</FieldLabel>
+          <FieldLabel>Timeout</FieldLabel>
           <Input
             type="number"
-            value={(data.timeout as number) ?? 24}
+            value={(data.timeout as number) ?? 7}
             onChange={(e) => update("timeout", Number(e.target.value))}
             className="h-7 text-xs"
             min={1}
           />
         </div>
         <div>
-          <FieldLabel>Fallback</FieldLabel>
-          <NS value={(data.fallback as string) ?? "continue"} onChange={(v) => update("fallback", v)}>
-            <option value="continue">Continue</option>
-            <option value="exit">Exit journey</option>
+          <FieldLabel>Unit</FieldLabel>
+          <NS value={(data.timeoutUnit as string) ?? "days"} onChange={(v) => update("timeoutUnit", v)}>
+            <option value="hours">Hours</option>
+            <option value="days">Days</option>
           </NS>
         </div>
       </div>
@@ -1187,7 +1693,7 @@ export function PauseHoldForm({ data, update }: BlockConfigFormProps) {
     <SectionCard title="Pause / hold" helper="Explicit pause — resume manually or after a duration.">
       <div className="grid grid-cols-2 gap-2">
         <div>
-          <FieldLabel>Duration</FieldLabel>
+          <FieldLabel>Pause duration</FieldLabel>
           <Input
             type="number"
             value={(data.pauseDuration as number) ?? 24}
@@ -1201,17 +1707,24 @@ export function PauseHoldForm({ data, update }: BlockConfigFormProps) {
           <NS value={(data.pauseUnit as string) ?? "hours"} onChange={(v) => update("pauseUnit", v)}>
             <option value="hours">Hours</option>
             <option value="days">Days</option>
+            <option value="weeks">Weeks</option>
           </NS>
         </div>
       </div>
-      <label className="flex items-center justify-between">
-        <span className="text-xs text-foreground">Allow manual resume</span>
-        <Switch
-          checked={(data.allowManualResume as boolean) ?? true}
-          onCheckedChange={(val) => update("allowManualResume", val)}
-          size="sm"
-        />
-      </label>
+      <div>
+        <label className="flex items-center justify-between">
+          <span className="text-xs text-foreground">Allow manual resume</span>
+          <Switch
+            checked={(data.allowManualResume as boolean) ?? true}
+            onCheckedChange={(val) => update("allowManualResume", val)}
+            size="sm"
+          />
+        </label>
+        <p className="mt-1 text-[10px] text-muted-foreground">
+          When on, an agent or admin can release the hold from the journey monitoring view
+          before the timer expires.
+        </p>
+      </div>
     </SectionCard>
   );
 }
@@ -1274,14 +1787,17 @@ export function EndJourneyForm({ data, update }: BlockConfigFormProps) {
   return (
     <SectionCard title="End journey" helper="Tag the outcome when the user exits the journey.">
       <div>
-        <FieldLabel>Outcome tag</FieldLabel>
-        <NS value={(data.outcome as string) ?? "Completed"} onChange={(v) => update("outcome", v)}>
-          <option value="Completed">Completed</option>
+        <FieldLabel>Outcome</FieldLabel>
+        <NS value={(data.outcome as string) ?? "Exited"} onChange={(v) => update("outcome", v)}>
           <option value="Converted">Converted</option>
-          <option value="Exhausted">Exhausted</option>
-          <option value="Unresponsive">Unresponsive</option>
           <option value="Exited">Exited</option>
+          <option value="Timed Out">Timed Out</option>
+          <option value="Errored">Errored</option>
         </NS>
+        <p className="mt-1 text-[10px] text-muted-foreground">
+          Records why this journey exited. Aligns with the{" "}
+          <span className="font-mono text-foreground">last_journey_outcome</span> attribute.
+        </p>
       </div>
     </SectionCard>
   );
@@ -1413,33 +1929,109 @@ export function TagManagementForm({ data, update }: BlockConfigFormProps) {
 }
 
 export function ConsentManagementForm({ data, update }: BlockConfigFormProps) {
+  const CHANNEL_OPTIONS = ["Email", "SMS", "WhatsApp", "AI Call"];
+  const DNC_SOURCE_OPTIONS = ["Lender DNC", "Regulatory DNC", "Internal DNC"];
+  const VIOLATION_ACTIONS: { k: string; label: string }[] = [
+    { k: "exit", label: "Exit journey" },
+    { k: "fallback", label: "Route to fallback branch" },
+    { k: "skip", label: "Skip this step" },
+  ];
+
+  const channelScope =
+    (data.channelScope as string[]) ?? ["Email", "SMS", "WhatsApp", "AI Call"];
+  const dncSources = (data.dncSources as string[]) ?? ["Regulatory DNC"];
+  const violationAction = (data.violationAction as string) ?? "exit";
+
+  const toggleChannel = (ch: string) => {
+    const next = channelScope.includes(ch)
+      ? channelScope.filter((c) => c !== ch)
+      : [...channelScope, ch];
+    update("channelScope", next);
+  };
+  const toggleDnc = (src: string) => {
+    const next = dncSources.includes(src)
+      ? dncSources.filter((c) => c !== src)
+      : [...dncSources, src];
+    update("dncSources", next);
+  };
+
   return (
-    <SectionCard title="Consent / DNC" helper="Manage consent flags per channel.">
+    <SectionCard
+      title="Consent / DNC"
+      helper="Two outgoing edges: 'Allowed' and 'Blocked / Exit'. Choosing 'Route to fallback branch' adds a third edge labelled 'Consent blocked'."
+    >
       <div>
-        <FieldLabel>Channel</FieldLabel>
-        <NS value={(data.consentChannel as string) ?? "email"} onChange={(v) => update("consentChannel", v)}>
-          <option value="email">Email</option>
-          <option value="sms">SMS</option>
-          <option value="whatsapp">WhatsApp</option>
-          <option value="call">Voice</option>
-          <option value="all">All channels</option>
-        </NS>
+        <FieldLabel>Channel scope</FieldLabel>
+        <div className="flex flex-wrap gap-1">
+          {CHANNEL_OPTIONS.map((ch) => (
+            <button
+              key={ch}
+              type="button"
+              onClick={() => toggleChannel(ch)}
+              className={`rounded px-2 py-0.5 text-[10px] font-medium transition-colors ${
+                channelScope.includes(ch)
+                  ? "bg-primary/20 text-primary"
+                  : "bg-muted/40 text-muted-foreground"
+              }`}
+            >
+              {ch}
+            </button>
+          ))}
+        </div>
       </div>
+
       <div>
-        <FieldLabel>State</FieldLabel>
-        <NS value={(data.consentState as string) ?? "granted"} onChange={(v) => update("consentState", v)}>
-          <option value="granted">Granted</option>
-          <option value="revoked">Revoked</option>
+        <FieldLabel>Required consent state</FieldLabel>
+        <NS
+          value={(data.requiredConsent as string) ?? "Full"}
+          onChange={(v) => update("requiredConsent", v)}
+        >
+          <option value="Full">Full</option>
+          <option value="Restricted (must include)">Restricted (must include)</option>
         </NS>
+        <p className="mt-1 text-[10px] text-muted-foreground">
+          Channel passes the gate only if borrower consent is at least this level.
+        </p>
       </div>
+
       <div>
-        <FieldLabel>Reason</FieldLabel>
-        <Input
-          value={(data.consentReason as string) ?? ""}
-          onChange={(e) => update("consentReason", e.target.value)}
-          className="h-7 text-xs"
-          placeholder="User requested"
-        />
+        <FieldLabel>DNC list source</FieldLabel>
+        <div className="flex flex-wrap gap-1">
+          {DNC_SOURCE_OPTIONS.map((src) => (
+            <button
+              key={src}
+              type="button"
+              onClick={() => toggleDnc(src)}
+              className={`rounded px-2 py-0.5 text-[10px] font-medium transition-colors ${
+                dncSources.includes(src)
+                  ? "bg-primary/20 text-primary"
+                  : "bg-muted/40 text-muted-foreground"
+              }`}
+            >
+              {src}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div>
+        <FieldLabel>Action on violation</FieldLabel>
+        <div className="flex flex-wrap gap-1">
+          {VIOLATION_ACTIONS.map((a) => (
+            <button
+              key={a.k}
+              type="button"
+              onClick={() => update("violationAction", a.k)}
+              className={`rounded px-2 py-0.5 text-[10px] font-medium transition-colors ${
+                violationAction === a.k
+                  ? "bg-primary/20 text-primary"
+                  : "bg-muted/40 text-muted-foreground"
+              }`}
+            >
+              {a.label}
+            </button>
+          ))}
+        </div>
       </div>
     </SectionCard>
   );
@@ -1938,6 +2530,7 @@ export function getBlockConfigForm(
     inbound_message_trigger: InboundMessageTriggerForm,
     incoming_call_trigger: IncomingCallTriggerForm,
     external_source_trigger: ExternalSourceTriggerForm,
+    journey_handoff_entry: JourneyHandoffEntryForm,
 
     // channels (not covered by rich legacy forms)
     send_push: MobilePushForm,

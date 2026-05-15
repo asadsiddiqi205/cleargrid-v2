@@ -386,26 +386,66 @@ export default function JourneyCanvas({ journeyId }: JourneyCanvasProps) {
   );
 
   /* ---------- click-to-add from palette ---------- */
+  // Drops the new node next to the currently selected node (or at canvas
+  // center if nothing is selected) and auto-connects an edge from the
+  // selected node into the new one. The new node is then auto-selected so
+  // the user can continue chaining.
   const onPaletteAdd = useCallback(
     (block: BlockType) => {
-      // Position next to last node, or center
-      const baseX = 320;
-      const baseY = 160 + nodes.length * 140;
+      const NODE_GAP_X = 260;
+      const NODE_GAP_Y = 160;
+
+      let position: { x: number; y: number };
+      if (selectedNode) {
+        position = {
+          x: selectedNode.position.x + NODE_GAP_X,
+          y: selectedNode.position.y,
+        };
+      } else if (nodes.length > 0) {
+        // Place below the last placed node when nothing is selected
+        const last = nodes[nodes.length - 1];
+        position = { x: last.position.x, y: last.position.y + NODE_GAP_Y };
+      } else {
+        // Empty canvas — center-ish starting point
+        position = { x: 320, y: 200 };
+      }
+
       const newNode: Node = {
         id: `node-${++nodeIdCounter}`,
         type: block.nodeKind,
-        position: { x: baseX, y: baseY },
+        position,
         data: { ...block.defaultData, blockType: block.type, executionLevel },
       };
+
       setNodes((nds) => {
         const next = [...nds, newNode];
-        pushHistory(next, edges);
+        // Don't push history yet — we may also add an edge below
         return next;
       });
+
+      // Auto-connect from selected node, if any
+      let nextEdges = edges;
+      if (selectedNode) {
+        nextEdges = addEdge(
+          {
+            id: `e-${selectedNode.id}-${newNode.id}`,
+            source: selectedNode.id,
+            target: newNode.id,
+            type: "smoothstep",
+            animated: true,
+            style: { stroke: "var(--primary)", strokeWidth: 2 },
+            markerEnd: { type: MarkerType.ArrowClosed, color: "var(--primary)" },
+          } as Edge,
+          edges
+        );
+        setEdges(nextEdges);
+      }
+
+      pushHistory([...nodes, newNode], nextEdges);
       setSelectedNode(newNode);
       toast.success(`Added "${block.label}"`);
     },
-    [nodes.length, setNodes, edges, pushHistory, executionLevel]
+    [nodes, selectedNode, setNodes, setEdges, edges, pushHistory, executionLevel]
   );
 
   /* ---------- config panel update ---------- */
@@ -1251,6 +1291,8 @@ export default function JourneyCanvas({ journeyId }: JourneyCanvasProps) {
             onClose={() => setSelectedNode(null)}
             onUpdate={onNodeDataUpdate}
             onDeleteNode={deleteSelectedNode}
+            nodes={nodes}
+            edges={edges}
           />
         )}
       </div>

@@ -207,11 +207,6 @@ function StrategyCard({
               <Building2 className="h-3 w-3" />
               {isGeneral ? "General" : strategy.lenderName}
             </Badge>
-            {strategy.status !== "active" && (
-              <Badge variant="secondary" className="text-[10px] capitalize">
-                {strategy.status}
-              </Badge>
-            )}
           </div>
         </div>
 
@@ -285,9 +280,6 @@ function StrategyCard({
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
               <DropdownMenuItem onClick={onDuplicate}>Duplicate</DropdownMenuItem>
-              <DropdownMenuItem onClick={onArchive}>
-                {strategy.status === "archived" ? "Unarchive" : "Archive"}
-              </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem variant="destructive" onClick={onDelete}>
                 Delete
@@ -565,24 +557,6 @@ function StrategyEditorDialog({
                 </Select>
               </div>
 
-              <div className="space-y-2 sm:col-span-2">
-                <Label>Status</Label>
-                <Select
-                  value={state.status}
-                  onValueChange={(v) =>
-                    update("status", (v ?? "draft") as EditorState["status"])
-                  }
-                >
-                  <SelectTrigger className="w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="active">Active</SelectItem>
-                    <SelectItem value="draft">Draft</SelectItem>
-                    <SelectItem value="archived">Archived</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
             </div>
           </TabsContent>
 
@@ -807,7 +781,6 @@ function UseStrategyDialog({
 // Main grid
 // ---------------------------------------------------------------------------
 const PURPOSE_FILTER_ALL = "__all__"
-const STATUS_FILTER_ALL = "__all__"
 
 export function StrategiesGrid() {
   const { selectedLenderId } = useLender()
@@ -819,7 +792,6 @@ export function StrategiesGrid() {
   const [lenderFilter, setLenderFilter] = React.useState<string>(selectedLenderId)
   const [purposeFilter, setPurposeFilter] =
     React.useState<string>(PURPOSE_FILTER_ALL)
-  const [statusFilter, setStatusFilter] = React.useState<string>("active")
   const [search, setSearch] = React.useState("")
 
   // Keep local lender filter in sync when global lender changes
@@ -845,8 +817,6 @@ export function StrategiesGrid() {
       }
       if (purposeFilter !== PURPOSE_FILTER_ALL && s.purpose !== purposeFilter)
         return false
-      if (statusFilter !== STATUS_FILTER_ALL && s.status !== statusFilter)
-        return false
       if (search.trim()) {
         const q = search.trim().toLowerCase()
         if (
@@ -857,7 +827,7 @@ export function StrategiesGrid() {
       }
       return true
     })
-  }, [allStrategies, lenderFilter, purposeFilter, statusFilter, search])
+  }, [allStrategies, lenderFilter, purposeFilter, search])
 
   // ---- Action handlers ----
   const openCreate = () => {
@@ -1014,26 +984,6 @@ export function StrategiesGrid() {
                       {meta.label}
                     </SelectItem>
                   ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-1.5">
-              <Label className="text-[11px] uppercase tracking-wider text-muted-foreground">
-                Status
-              </Label>
-              <Select
-                value={statusFilter}
-                onValueChange={(v) => setStatusFilter(v ?? "active")}
-              >
-                <SelectTrigger className="h-9 w-[140px]">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={STATUS_FILTER_ALL}>All</SelectItem>
-                  <SelectItem value="active">Active</SelectItem>
-                  <SelectItem value="draft">Draft</SelectItem>
-                  <SelectItem value="archived">Archived</SelectItem>
                 </SelectContent>
               </Select>
             </div>

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useReactFlow, MarkerType } from "@xyflow/react";
+import { useReactFlow, MarkerType, type Edge } from "@xyflow/react";
 import { Plus } from "lucide-react";
 import {
   Popover,
@@ -23,7 +23,7 @@ interface QuickAddButtonProps {
 
 export function QuickAddButton({ sourceId, sourceHandle, label }: QuickAddButtonProps) {
   const [open, setOpen] = useState(false);
-  const { addNodes, addEdges, getNode } = useReactFlow();
+  const { addNodes, addEdges, getNode, getEdges, setEdges } = useReactFlow();
 
   function addBlock(block: BlockType) {
     const sourceNode = getNode(sourceId);
@@ -43,18 +43,50 @@ export function QuickAddButton({ sourceId, sourceHandle, label }: QuickAddButton
       },
     ]);
 
-    addEdges([
-      {
-        id: `e-${sourceId}${sourceHandle ? `-${sourceHandle}` : ""}-${newId}`,
-        source: sourceId,
-        target: newId,
-        ...(sourceHandle ? { sourceHandle } : {}),
-        type: "smoothstep",
-        animated: true,
-        style: { stroke: "var(--primary)", strokeWidth: 2 },
-        markerEnd: { type: MarkerType.ArrowClosed, color: "var(--primary)" },
-      },
-    ]);
+    // Splice behaviour: if there's already an edge leaving this source from
+    // the same handle, rewire it through the new node — source → new → existing target.
+    const existingOutgoing = getEdges().find(
+      (e: Edge) =>
+        e.source === sourceId &&
+        (sourceHandle ? e.sourceHandle === sourceHandle : !e.sourceHandle)
+    );
+
+    const edgeStyle = {
+      type: "smoothstep" as const,
+      animated: true,
+      style: { stroke: "var(--primary)", strokeWidth: 2 },
+      markerEnd: { type: MarkerType.ArrowClosed, color: "var(--primary)" },
+    };
+
+    if (existingOutgoing) {
+      // Splice: keep the existing edge's downstream target, but route through `newId`.
+      setEdges((prev) =>
+        prev.map((e) =>
+          e.id === existingOutgoing.id
+            ? { ...e, id: `e-${newId}-${existingOutgoing.target}`, source: newId, sourceHandle: undefined }
+            : e
+        )
+      );
+      addEdges([
+        {
+          id: `e-${sourceId}${sourceHandle ? `-${sourceHandle}` : ""}-${newId}`,
+          source: sourceId,
+          target: newId,
+          ...(sourceHandle ? { sourceHandle } : {}),
+          ...edgeStyle,
+        },
+      ]);
+    } else {
+      addEdges([
+        {
+          id: `e-${sourceId}${sourceHandle ? `-${sourceHandle}` : ""}-${newId}`,
+          source: sourceId,
+          target: newId,
+          ...(sourceHandle ? { sourceHandle } : {}),
+          ...edgeStyle,
+        },
+      ]);
+    }
 
     setOpen(false);
   }
