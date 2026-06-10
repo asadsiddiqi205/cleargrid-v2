@@ -41,8 +41,11 @@ import {
   getJourneyFlow,
   getJourneyById,
   liveNodeCounts,
+  DEFAULT_EXIT_TRIGGERS,
   type BlockType,
+  type ExitTrigger,
 } from "@/data/journeys";
+import { ExitTriggerPanel, ExitTriggerRow, exitTriggersEqual } from "@/components/journeys/exit-trigger-panel";
 
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -80,6 +83,9 @@ import {
   GitBranch,
   Info,
   Maximize2,
+  Plus,
+  LogOut,
+  AlertTriangle,
 } from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
@@ -207,7 +213,6 @@ export default function JourneyCanvas({ journeyId }: JourneyCanvasProps) {
     segment: "",
     entryRule: "once",
     reEntry: false,
-    exitTrigger: "",
     conversionEvent: "",
     conversionWindow: "7",
     controlGroupPct: "0",
@@ -217,6 +222,15 @@ export default function JourneyCanvas({ journeyId }: JourneyCanvasProps) {
     parallelChildren: false,
     preventDuplicateInstances: true,
   });
+
+  // Journey-level Exit Triggers (separate from canvas Exit Journey nodes)
+  const [exitTriggers, setExitTriggers] = useState<ExitTrigger[]>(DEFAULT_EXIT_TRIGGERS);
+  const [exitTriggerEditor, setExitTriggerEditor] = useState<{ open: boolean; initial: ExitTrigger | null }>({
+    open: false,
+    initial: null,
+  });
+  const [duplicateWarning, setDuplicateWarning] = useState<string | null>(null);
+  const exitTriggersSectionRef = useRef<HTMLDivElement>(null);
 
   // History stack for undo/redo
   const [history, setHistory] = useState<{ nodes: Node[]; edges: Edge[] }[]>([
@@ -1074,6 +1088,80 @@ export default function JourneyCanvas({ journeyId }: JourneyCanvasProps) {
               />
             </SettingsSection>
 
+            {/* ====== Exit Triggers (journey-level) ====== */}
+            <div ref={exitTriggersSectionRef} className="space-y-3 rounded-xl border border-border/60 bg-muted/10 p-4">
+              <div>
+                <div className="flex items-center gap-2">
+                  <LogOut className="h-3.5 w-3.5 text-muted-foreground" />
+                  <h4 className="text-xs font-semibold uppercase tracking-wider text-foreground">
+                    Exit Triggers
+                  </h4>
+                </div>
+                <p className="mt-1 text-[10px] leading-snug text-muted-foreground">
+                  Borrowers exit the journey as soon as any of these conditions become true, regardless of where they are in the flow.
+                </p>
+              </div>
+
+              {duplicateWarning && (
+                <div className="flex items-start gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 p-2.5">
+                  <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-500" />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[11px] text-amber-200">{duplicateWarning}</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setDuplicateWarning(null)}
+                    className="text-amber-400 hover:text-amber-200"
+                  >
+                    <span className="text-xs leading-none">✕</span>
+                  </button>
+                </div>
+              )}
+
+              {exitTriggers.length === 0 ? (
+                <div className="rounded-lg border border-dashed border-border bg-card/40 px-3 py-4 text-center">
+                  <p className="text-[11px] leading-snug text-muted-foreground">
+                    No Exit Triggers configured. Borrowers will only exit when they reach an Exit Journey node on the canvas.
+                  </p>
+                </div>
+              ) : (
+                <>
+                  {exitTriggers.length > 5 && (
+                    <p className="text-[10px] leading-snug text-muted-foreground/80">
+                      Tip: keep Exit Triggers focused on critical exits — too many can make journey behavior hard to predict.
+                    </p>
+                  )}
+                  <div
+                    className={cn(
+                      "space-y-2",
+                      exitTriggers.length > 5 && "max-h-[400px] overflow-y-auto pr-1"
+                    )}
+                  >
+                    {exitTriggers.map((t) => (
+                      <ExitTriggerRow
+                        key={t.id}
+                        trigger={t}
+                        onEdit={() => setExitTriggerEditor({ open: true, initial: t })}
+                        onRemove={() => {
+                          setExitTriggers((prev) => prev.filter((x) => x.id !== t.id));
+                          setDuplicateWarning(null);
+                        }}
+                      />
+                    ))}
+                  </div>
+                </>
+              )}
+
+              <Button
+                size="sm"
+                variant="outline"
+                className="w-full"
+                onClick={() => setExitTriggerEditor({ open: true, initial: null })}
+              >
+                <Plus className="h-3.5 w-3.5" /> Add Exit Trigger
+              </Button>
+            </div>
+
           </div>
 
           <SheetFooter className="border-t border-border px-5 py-3">
@@ -1090,6 +1178,24 @@ export default function JourneyCanvas({ journeyId }: JourneyCanvasProps) {
           </SheetFooter>
         </SheetContent>
       </Sheet>
+
+      {/* ====== Exit Trigger editor (slide-in over settings) ====== */}
+      <ExitTriggerPanel
+        open={exitTriggerEditor.open}
+        initial={exitTriggerEditor.initial}
+        onCancel={() => setExitTriggerEditor({ open: false, initial: null })}
+        onSave={(trigger) => {
+          setExitTriggers((prev) => {
+            const idx = prev.findIndex((t) => t.id === trigger.id);
+            const next = idx >= 0 ? prev.map((t) => (t.id === trigger.id ? trigger : t)) : [...prev, trigger];
+            const dupe = next.filter((t) => exitTriggersEqual(t, trigger)).length > 1;
+            setDuplicateWarning(dupe ? "This Exit Trigger duplicates an existing one." : null);
+            return next;
+          });
+          setExitTriggerEditor({ open: false, initial: null });
+          toast.success(exitTriggerEditor.initial ? "Exit Trigger updated" : "Exit Trigger added");
+        }}
+      />
 
       {/* ====== Pre-launch validation dialog ====== */}
       <AlertDialog open={validationDialogOpen} onOpenChange={(open) => { if (!open) setValidationDialogOpen(false); }}>
@@ -1262,6 +1368,26 @@ export default function JourneyCanvas({ journeyId }: JourneyCanvasProps) {
               color="var(--border)"
             />
             <Controls className="!border-border !bg-card [&>button]:!border-border [&>button]:!bg-card [&>button]:!text-muted-foreground [&>button:hover]:!bg-muted [&>button:hover]:!text-foreground" />
+            {exitTriggers.length > 0 && (
+              <Panel position="top-left" className="!m-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowSettings(true);
+                    requestAnimationFrame(() => {
+                      requestAnimationFrame(() => {
+                        exitTriggersSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+                      });
+                    });
+                  }}
+                  className="flex items-center gap-1.5 rounded-md border border-border bg-muted/40 px-2.5 py-1 text-[10px] font-medium text-foreground transition-colors hover:bg-muted backdrop-blur-sm"
+                  title="View Exit Triggers in Journey Settings"
+                >
+                  <LogOut className="h-3 w-3" />
+                  {exitTriggers.length} Exit Trigger{exitTriggers.length === 1 ? "" : "s"}
+                </button>
+              </Panel>
+            )}
             <Panel position="bottom-left" className="mb-[52px] ml-[2px]">
               <button
                 onClick={() => rfInstance.current?.fitView({ padding: 0.2, duration: 300 })}

@@ -14,6 +14,7 @@ import {
   Bell,
   Layers,
   Globe,
+  PhoneIncoming,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { QuickAddButton } from "@/components/journeys/quick-add-button";
@@ -50,6 +51,12 @@ export function ActionNode({ id, data, selected }: NodeProps) {
   const template = data.template as string | undefined;
   const simCount = data._simCount as number | undefined;
   const liveCount = data._liveCount as number | undefined;
+
+  // Callback Handling badge — only on AI Call nodes with `callbackEnabled` on
+  // (defaults to true per spec). Shows "Callbacks N" where N is the per-borrower cap.
+  const callbackEnabled =
+    actionType === "call" && (data.callbackEnabled === undefined || data.callbackEnabled === true);
+  const callbackMax = (data.callbackMaxPerBorrower as number) ?? 3;
 
   return (
     <div
@@ -91,6 +98,17 @@ export function ActionNode({ id, data, selected }: NodeProps) {
           </div>
         )}
       </div>
+
+      {/* Callback Handling badge (top-right) */}
+      {callbackEnabled && typeof simCount !== "number" && (
+        <div
+          className="absolute -right-2 -top-2 z-10 flex items-center gap-1 rounded-full border border-zinc-700 bg-zinc-800 px-1.5 py-0.5 text-[9px] font-medium text-zinc-300 shadow"
+          title={`Callbacks enabled. Max ${callbackMax} per borrower. Holds on DND, contact window, 7-in-7. Cancels on DNC, opt-out, consent revoked.`}
+        >
+          <PhoneIncoming className="h-2.5 w-2.5" />
+          <span>Callbacks {callbackMax}</span>
+        </div>
+      )}
 
       {typeof simCount === "number" && (
         <div className="absolute -right-2 -top-2 z-10 rounded-full bg-cyan-500 px-2 py-0.5 text-[10px] font-semibold text-cyan-950 shadow-lg">

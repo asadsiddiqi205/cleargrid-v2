@@ -58,6 +58,10 @@ export interface ComposerState {
   previewText: string
   body: string
 
+  // Rich template (v1 canvas)
+  richTemplateId: string | null
+  richSlotValues: Record<string, unknown>
+
   // SMS
   smsBody: string
 
@@ -74,12 +78,15 @@ const DEFAULT_STATE: ComposerState = {
   strategyId: "",
   compliance: "standard",
   channel: "email",
-  emailMode: "inline",
+  // Default to template mode for rich email
+  emailMode: "template",
   useBlocks: false,
   emailBlocks: [],
   subject: "",
   previewText: "",
   body: "",
+  richTemplateId: null,
+  richSlotValues: {},
   smsBody: "",
   whatsappTemplateId: whatsappTemplates[0].id,
   previewBorrowerId: borrowers[0].id,

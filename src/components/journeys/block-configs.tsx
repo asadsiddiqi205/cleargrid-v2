@@ -1094,6 +1094,11 @@ export function NotifyInternalForm({ data, update }: BlockConfigFormProps) {
 // borrower attribute catalogue once the data layer lands.
 // See Section 7 of the v1 spec for the source of truth on attribute names.
 export const CATEGORICAL_ATTRIBUTES: { id: string; label: string; group: string; values: string[] }[] = [
+  // AI Callback (deal-level)
+  // Stub — registered by slice 1 in production
+  { id: "callback_requested", label: "Callback requested", group: "AI Callback", values: ["true", "false"] },
+  { id: "callback_date", label: "Callback date", group: "AI Callback", values: [] },
+  { id: "callback_time", label: "Callback time", group: "AI Callback", values: [] },
   // Risk & Collections
   { id: "dpd_bucket_label", label: "DPD Bucket", group: "Risk & Collections", values: ["0-30", "31-60", "61-90", "91-180", "180+"] },
   { id: "risk_segment", label: "Risk Segment", group: "Risk & Collections", values: ["Early", "Mid", "Late", "Legal"] },

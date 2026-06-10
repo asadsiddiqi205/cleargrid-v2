@@ -51,6 +51,7 @@ import {
   FileText,
   Sparkles,
   Wand2,
+  Tag,
 } from "lucide-react";
 
 import {
@@ -66,6 +67,10 @@ import {
   getLenderIdsWithTemplates,
 } from "@/data/templates";
 import { lenders, ALL_LENDERS } from "@/data/lenders";
+import {
+  richEmailTemplates,
+  type RichEmailTemplate,
+} from "@/data/rich-email-templates";
 import { useLender } from "@/contexts/lender-context";
 
 /* ─────────────────────────────────────────────────────────────────────────
@@ -1121,6 +1126,10 @@ export function TemplatesView() {
   // Create dialog
   const [showCreate, setShowCreate] = React.useState(false);
 
+  // Rich-template preview
+  const [previewRichTemplate, setPreviewRichTemplate] =
+    React.useState<RichEmailTemplate | null>(null);
+
   // Sync to global lender — when global changes from outside, expand & select.
   // We compare against the current selection to avoid overriding a more specific
   // purpose selection just because we just bumped the global lender.
@@ -1382,6 +1391,11 @@ export function TemplatesView() {
             />
           ) : (
             <div className="flex flex-1 flex-col overflow-y-auto p-6">
+              {/* Rich HTML email templates — designer-authored, locked-slot */}
+              <DesignedTemplatesSection
+                onPreview={(t) => setPreviewRichTemplate(t)}
+              />
+
               {/* Breadcrumb header */}
               <div className="mb-4 flex items-center justify-between">
                 <div>
@@ -1421,6 +1435,203 @@ export function TemplatesView() {
               : "general"
         }
       />
+
+      {/* Rich template preview dialog */}
+      <RichTemplatePreviewDialog
+        template={previewRichTemplate}
+        onClose={() => setPreviewRichTemplate(null)}
+      />
     </div>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────────────────
+ * Designed email templates section — rendered thumbnails of every rich
+ * HTML template, with a preview dialog and a "Use in Composer" CTA.
+ * ──────────────────────────────────────────────────────────────────── */
+
+function DesignedTemplatesSection({
+  onPreview,
+}: {
+  onPreview: (t: RichEmailTemplate) => void;
+}) {
+  return (
+    <div className="mb-8">
+      <div className="mb-3 flex items-end justify-between gap-3">
+        <div>
+          <h2 className="font-heading text-lg font-semibold text-foreground">
+            Designed email templates
+          </h2>
+          <p className="text-xs text-muted-foreground">
+            Pre-built HTML templates with locked layouts and editable slots. Click any card to preview.
+          </p>
+        </div>
+        <span className="hidden text-[11px] text-muted-foreground sm:inline-flex">
+          {richEmailTemplates.length} available
+        </span>
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+        {richEmailTemplates.map((t) => (
+          <button
+            key={t.id}
+            type="button"
+            onClick={() => onPreview(t)}
+            className="group flex flex-col gap-3 rounded-xl border border-border bg-card p-3 text-left transition-all hover:border-primary/50 hover:shadow-lg"
+          >
+            {/* Rendered mini-preview */}
+            <div className="relative h-[180px] overflow-hidden rounded-lg border border-border bg-zinc-900">
+              <div
+                style={{
+                  transform: "scale(0.32)",
+                  transformOrigin: "top left",
+                  width: "calc(100% / 0.32)",
+                  height: "calc(100% / 0.32)",
+                  pointerEvents: "none",
+                }}
+              >
+                {t.render({ slots: t.defaultSlots, interactive: false })}
+              </div>
+              <div
+                className="pointer-events-none absolute inset-x-0 bottom-0 h-12"
+                style={{ background: "linear-gradient(to top, rgba(24,24,27,0.95), rgba(24,24,27,0))" }}
+              />
+            </div>
+
+            {/* Title + meta */}
+            <div className="space-y-1.5">
+              <div className="flex items-start justify-between gap-2">
+                <h4 className="line-clamp-1 text-sm font-semibold text-foreground">{t.name}</h4>
+                <span
+                  className={cn(
+                    "shrink-0 rounded-md px-1.5 py-0.5 text-[9px] font-medium",
+                    t.status === "active" && "bg-emerald-500/15 text-emerald-400",
+                    t.status === "draft" && "bg-zinc-500/15 text-zinc-400",
+                    t.status === "archived" && "bg-red-500/15 text-red-400",
+                  )}
+                >
+                  {t.status}
+                </span>
+              </div>
+              <p className="line-clamp-2 text-[11px] text-muted-foreground">{t.description}</p>
+            </div>
+
+            {/* Pills */}
+            <div className="mt-auto flex flex-wrap items-center gap-1 pt-1">
+              <Badge className="bg-muted/80 text-[9px] text-muted-foreground">
+                <Mail className="h-2.5 w-2.5" />
+                Email
+              </Badge>
+              <Badge className="bg-primary/10 text-[9px] text-primary ring-1 ring-primary/30">
+                {(PURPOSE_LABELS as Record<string, string>)[t.purpose] ?? t.purpose}
+              </Badge>
+              <Badge className="bg-muted/80 text-[9px] text-muted-foreground">
+                <Tag className="h-2.5 w-2.5" />
+                {t.lenderName}
+              </Badge>
+            </div>
+          </button>
+        ))}
+      </div>
+
+      <hr className="my-6 border-border" />
+    </div>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────────────────
+ * Rich-template preview dialog
+ * ──────────────────────────────────────────────────────────────────── */
+
+function RichTemplatePreviewDialog({
+  template,
+  onClose,
+}: {
+  template: RichEmailTemplate | null;
+  onClose: () => void;
+}) {
+  return (
+    <Dialog open={!!template} onOpenChange={(v) => { if (!v) onClose(); }}>
+      <DialogContent className="!max-w-[920px] sm:!max-w-[920px] p-0">
+        {template && (
+          <>
+            <DialogHeader className="flex flex-row items-start justify-between gap-3 border-b border-border p-4">
+              <div className="min-w-0">
+                <DialogTitle className="truncate">{template.name}</DialogTitle>
+                <DialogDescription className="mt-0.5 line-clamp-2">
+                  {template.description}
+                </DialogDescription>
+                <div className="mt-2 flex flex-wrap items-center gap-1">
+                  <Badge className="bg-muted/80 text-[9px] text-muted-foreground">
+                    <Mail className="h-2.5 w-2.5" />
+                    Email
+                  </Badge>
+                  <Badge className="bg-primary/10 text-[9px] text-primary ring-1 ring-primary/30">
+                    {(PURPOSE_LABELS as Record<string, string>)[template.purpose] ?? template.purpose}
+                  </Badge>
+                  <Badge className="bg-muted/80 text-[9px] text-muted-foreground">
+                    <Tag className="h-2.5 w-2.5" />
+                    {template.lenderName}
+                  </Badge>
+                  <Badge className="bg-muted/80 text-[9px] text-muted-foreground">
+                    {template.slotDefs.length} editable slot{template.slotDefs.length === 1 ? "" : "s"}
+                  </Badge>
+                </div>
+              </div>
+            </DialogHeader>
+
+            {/* Body: render the email + the slot manifest */}
+            <div className="grid max-h-[70vh] grid-cols-[1fr_240px] gap-0 overflow-hidden">
+              {/* Rendered template */}
+              <div className="overflow-y-auto bg-zinc-900/50 p-6">
+                <div style={{ maxWidth: 600, margin: "0 auto" }}>
+                  {template.render({ slots: template.defaultSlots, interactive: false })}
+                </div>
+              </div>
+
+              {/* Slot manifest */}
+              <div className="flex flex-col overflow-y-auto border-l border-border bg-card/40 p-3">
+                <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  Editable slots
+                </p>
+                <div className="space-y-1">
+                  {template.slotDefs.map((s) => (
+                    <div
+                      key={s.id}
+                      className="rounded-md border border-border bg-background/40 p-2"
+                    >
+                      <p className="text-xs font-medium text-foreground">{s.label}</p>
+                      <p className="mt-0.5 text-[10px] text-muted-foreground">
+                        <span className="rounded bg-muted/60 px-1 py-0 font-mono">{s.type}</span>
+                        {" · "}
+                        <span className="font-mono">{s.id}</span>
+                      </p>
+                    </div>
+                  ))}
+                </div>
+
+                <p className="mt-4 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  Subject
+                </p>
+                <p className="mt-1 break-words rounded-md border border-border bg-background/40 px-2 py-1.5 text-[11px] text-foreground">
+                  {template.subject}
+                </p>
+              </div>
+            </div>
+
+            <DialogFooter className="gap-2 border-t border-border p-4">
+              <DialogClose render={<Button variant="outline" />}>Close</DialogClose>
+              <Link
+                href={`/email-generator/new?template=${template.id}`}
+                className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+              >
+                <Wand2 className="h-3.5 w-3.5" />
+                Use in Composer
+              </Link>
+            </DialogFooter>
+          </>
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }

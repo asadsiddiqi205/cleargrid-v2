@@ -71,6 +71,14 @@ import {
 } from "@/components/composer/ai-command-menu"
 import { SelectionToolbar } from "@/components/composer/selection-toolbar"
 import { EmailTemplateMode } from "@/components/composer/email-template-mode"
+import { TemplateCanvas } from "@/components/composer/template-canvas"
+import { SlotInspector } from "@/components/composer/slot-inspector"
+import { RichTemplatePicker } from "@/components/composer/rich-template-picker"
+import {
+  getRichTemplate,
+  type SlotValues,
+  type SlotValue,
+} from "@/data/rich-email-templates"
 import { EmailAiGenerateMode } from "@/components/composer/email-ai-generate-mode"
 import { EmailBlockBuilder } from "@/components/composer/email-block-builder"
 import { AiAssistPanel, AI_ASSIST_ACTIONS } from "@/components/composer/ai-assist-panel"
@@ -501,9 +509,9 @@ export function EditorPanel({ state, update }: EditorPanelProps) {
                 onChange={(m) => update("emailMode", m)}
               />
 
-              {/* ---- Template Mode ---- */}
+              {/* ---- Template Mode (rich, locked-template canvas) ---- */}
               {state.emailMode === "template" && (
-                <EmailTemplateMode onSelectTemplate={handleSelectEmailTemplate} />
+                <RichTemplateMode state={state} update={update} />
               )}
 
               {/* ---- AI-Generated Mode ---- */}
@@ -1000,6 +1008,83 @@ export function TokenizedPreview({ text }: { text: string }) {
         }
         return <span key={i}>{part}</span>
       })}
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Rich Template Mode — locked-template canvas + slot inspector
+// ─────────────────────────────────────────────────────────────────────
+
+interface RichTemplateModeProps {
+  state: ComposerState
+  update: <K extends keyof ComposerState>(key: K, value: ComposerState[K]) => void
+}
+
+function RichTemplateMode({ state, update }: RichTemplateModeProps) {
+  const [showPicker, setShowPicker] = React.useState(state.richTemplateId === null)
+  const [activeSlotId, setActiveSlotId] = React.useState<string | null>(null)
+  const template = state.richTemplateId ? getRichTemplate(state.richTemplateId) ?? null : null
+  const slots = state.richSlotValues as SlotValues
+
+  const handleSelectTemplate = React.useCallback(
+    (t: ReturnType<typeof getRichTemplate>) => {
+      if (!t) return
+      update("richTemplateId", t.id)
+      update("richSlotValues", t.defaultSlots as unknown as ComposerState["richSlotValues"])
+      update("subject", t.subject)
+      setShowPicker(false)
+      setActiveSlotId(null)
+      toast.success(`Loaded "${t.name}"`)
+    },
+    [update],
+  )
+
+  const handleSlotChange = React.useCallback(
+    (slotId: string, value: SlotValue) => {
+      const next = { ...slots, [slotId]: value }
+      update("richSlotValues", next as unknown as ComposerState["richSlotValues"])
+    },
+    [slots, update],
+  )
+
+  // Picker view
+  if (showPicker || !template) {
+    return (
+      <div className="-mx-6 -my-6">
+        <div className="px-6 py-6">
+          <RichTemplatePicker onSelect={handleSelectTemplate} />
+        </div>
+      </div>
+    )
+  }
+
+  // Canvas + (optional) inspector
+  return (
+    <div className="-mx-6 -my-6 flex h-[calc(100vh-3.5rem-58px)] min-h-[600px]">
+      {/* Canvas */}
+      <div className={cn("min-w-0 flex-1", activeSlotId && "w-[60%] flex-none")}>
+        <TemplateCanvas
+          template={template}
+          slots={slots}
+          activeSlotId={activeSlotId}
+          onSlotClick={(id) => setActiveSlotId(id)}
+          onChooseTemplate={() => setShowPicker(true)}
+        />
+      </div>
+
+      {/* Slot inspector — shown only when a slot is selected */}
+      {activeSlotId && (
+        <div className="w-[360px] shrink-0">
+          <SlotInspector
+            template={template}
+            slotId={activeSlotId}
+            value={slots[activeSlotId] ?? ""}
+            onChange={(v) => handleSlotChange(activeSlotId, v)}
+            onClose={() => setActiveSlotId(null)}
+          />
+        </div>
+      )}
     </div>
   )
 }

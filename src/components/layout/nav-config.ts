@@ -89,7 +89,7 @@ export const navGroups: NavGroup[] = [
     collapsible: true,
     defaultOpen: false,
     items: [
-      { title: "Compose", href: "/email-generator", icon: Wand2 },
+      { title: "Messages", href: "/email-generator", icon: Wand2 },
       { title: "Templates", href: "/templates", icon: FileText },
       { title: "Playbooks", href: "/strategies", icon: Target },
     ],

@@ -28,6 +28,7 @@ import {
 import { getBlockType, getBlockCategory } from "@/data/journeys";
 import { cn } from "@/lib/utils";
 import { getBlockConfigForm } from "@/components/journeys/block-configs";
+import { CallbackHandlingSection } from "@/components/journeys/callback-handling";
 
 /* ------------------------------------------------------------------ */
 /*  Mock data for dropdowns                                           */
@@ -1208,6 +1209,12 @@ export function NodeConfigPanel({ node, onClose, onUpdate, onDeleteNode, nodes =
                     })}
                   </div>
                 </Section>
+
+                {/* Callback Handling (collapsible) */}
+                <CallbackHandlingSection
+                  data={d}
+                  update={update}
+                />
               </div>
             )}
 

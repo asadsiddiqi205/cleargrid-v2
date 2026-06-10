@@ -236,6 +236,93 @@ export function getBlockCategory(id: BlockCategoryId): BlockCategory | undefined
 
 export type JourneyStatus = "running" | "scheduled" | "draft" | "completed" | "paused";
 
+/* ------------------------------------------------------------------ */
+/*  Journey-level Exit Triggers                                        */
+/*  Global early-exit rules evaluated for every borrower in the journey */
+/*  (distinct from canvas Exit Journey nodes which are path-specific)  */
+/* ------------------------------------------------------------------ */
+
+export type ExitTriggerOutcome = "converted" | "exited" | "timed_out" | "errored";
+
+export type ExitTriggerConditionGroup = {
+  joinOperator: "AND" | "OR";
+  conditions: Array<{
+    id: string;
+    fieldId: string;
+    operator: string;
+    value: string;
+    value2?: string;
+  }>;
+};
+
+export type ExitTrigger = {
+  id: string;
+  type: "event" | "segment" | "attribute";
+  outcome: ExitTriggerOutcome;
+  config:
+    | { event_id: string; event_filters?: ExitTriggerConditionGroup; borrower_filters?: ExitTriggerConditionGroup }
+    | { direction: "enters" | "exits"; segment_id: string }
+    | { attribute_id: string; condition?: { operator: string; value: string } };
+};
+
+export const EXIT_TRIGGER_EVENT_CATALOG = [
+  { id: "pay_in_full_success", label: "pay_in_full_success" },
+  { id: "partial_payment_received", label: "partial_payment_received" },
+  { id: "ptp_created", label: "ptp_created" },
+  { id: "ptp_broken", label: "ptp_broken" },
+  { id: "dispute_filed", label: "dispute_filed" },
+  { id: "hardship_declared", label: "hardship_declared" },
+  { id: "callback_requested", label: "callback_requested" },
+  { id: "settlement_accepted", label: "settlement_accepted" },
+  { id: "account_closed", label: "account_closed" },
+];
+
+export const EXIT_TRIGGER_ATTRIBUTE_CATALOG = [
+  // Borrower
+  { id: "consent_status", label: "consent_status", group: "Borrower", type: "enum", options: ["Granted", "Pending", "Blocked", "Revoked"] },
+  { id: "risk_segment", label: "risk_segment", group: "Borrower", type: "enum", options: ["Low", "Medium", "High", "Very High"] },
+  { id: "language", label: "language", group: "Borrower", type: "enum", options: ["English", "Arabic", "Hindi", "Urdu"] },
+  // Financial
+  { id: "outstanding_balance", label: "outstanding_balance", group: "Financial", type: "number" },
+  { id: "days_past_due", label: "days_past_due", group: "Financial", type: "number" },
+  { id: "deal_stage", label: "deal_stage", group: "Financial", type: "enum", options: ["Current", "Early", "Collections", "Legal", "Settled", "Write-Off"] },
+  // Reachability
+  { id: "do_not_contact", label: "do_not_contact", group: "Reachability", type: "boolean" },
+  { id: "phone_valid", label: "phone_valid", group: "Reachability", type: "boolean" },
+  { id: "email_valid", label: "email_valid", group: "Reachability", type: "boolean" },
+  // Communications
+  { id: "last_message_status", label: "last_message_status", group: "Communications", type: "enum", options: ["Delivered", "Failed", "Bounced", "Opened", "Clicked"] },
+  { id: "channel_preference", label: "channel_preference", group: "Communications", type: "enum", options: ["Email", "SMS", "WhatsApp", "Call"] },
+];
+
+export const EXIT_TRIGGER_OUTCOME_META: Record<ExitTriggerOutcome, { label: string; color: string }> = {
+  converted: { label: "Converted", color: "var(--chart-2)" },
+  exited: { label: "Exited", color: "var(--muted-foreground)" },
+  timed_out: { label: "Timed Out", color: "var(--chart-3)" },
+  errored: { label: "Errored", color: "var(--destructive)" },
+};
+
+export const DEFAULT_EXIT_TRIGGERS: ExitTrigger[] = [
+  {
+    id: "et-1",
+    type: "attribute",
+    outcome: "exited",
+    config: { attribute_id: "consent_status", condition: { operator: "equals", value: "Blocked" } },
+  },
+  {
+    id: "et-2",
+    type: "event",
+    outcome: "converted",
+    config: { event_id: "pay_in_full_success" },
+  },
+  {
+    id: "et-3",
+    type: "segment",
+    outcome: "exited",
+    config: { direction: "enters", segment_id: "seg-003" },
+  },
+];
+
 export interface JourneyListItem {
   id: string;
   name: string;
