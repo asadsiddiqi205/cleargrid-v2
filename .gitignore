@@ -28,6 +28,10 @@
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+
+# playwright verification screenshots — prototype-only, not source
+/screenshots/
+/.playwright-mcp/
 .pnpm-debug.log*
 
 # env files (can opt-in for committing if needed)
