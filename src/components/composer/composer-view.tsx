@@ -41,14 +41,126 @@ export interface EmailBlock {
   settings: Record<string, string>
 }
 
+/** Audience builder for segment-mode sends. `selectedSegmentId` (single-segment
+ *  path) is preserved for URL hydration + backward-compat; the new fields
+ *  below extend the segment mode into a multi-segment include/exclude builder. */
+export interface AudienceRule {
+  /** Segment ids the recipient must match (per the combiner). */
+  includeSegmentIds: string[]
+  /** "any" = OR (default), "all" = AND. */
+  includeCombiner: "any" | "all"
+  /** Segment ids to exclude the recipient from (always OR — any match excludes). */
+  excludeSegmentIds: string[]
+  /** Dedupe users who appear in multiple included segments. Default on. */
+  removeDuplicates: boolean
+}
+
+/** Metric used to pick a winner between A/B/n variations. Defaults to
+ *  payment-conversion so the split follows the payment funnel goal — same
+ *  metric the message analytics funnel uses. */
+export type WinnerMetric = "payment_conversion" | "click"
+
+/**
+ * Send scheduling. Three modes:
+ *   - "now"        → immediate send
+ *   - "once"       → single scheduled send at (date, time, tz)
+ *   - "recurring"  → Google-Calendar-style repeat pattern
+ */
+export type SendMode = "now" | "once" | "recurring"
+
+export type RecurrenceFreq = "daily" | "custom"
+export type RecurrenceEnd = { kind: "never" } | { kind: "count"; count: number } | { kind: "date"; date: string }
+
+export interface SendSchedule {
+  mode: SendMode
+  /** Applies to "once" and "recurring". */
+  date: string
+  time: string
+  timezone: string
+  /** Only used when mode === "recurring". */
+  recurrence: {
+    freq: RecurrenceFreq
+    /** Days of the week (0=Sun … 6=Sat) — used for "custom". */
+    daysOfWeek: number[]
+    /** For "custom": send every N days (used when no specific weekdays picked). */
+    everyN: number
+    /** End condition. */
+    end: RecurrenceEnd
+  }
+}
+
+export interface CampaignVariation {
+  /** Stable id for React keys + per-variation analytics tie-in. */
+  id: string
+  /** Label — usually "A", "B", "C", but editable. */
+  label: string
+  /** % of the tested audience that gets this variation. All variation splits
+   *  sum to 100 (excluding the holdout, which is applied first). */
+  splitPct: number
+  subject: string
+  preheader: string
+  body: string
+  /** Per-variation email authoring mode — template / inline / ai_generated. */
+  emailMode?: EmailMode
+  /** Rich template selection (id + slot fills) for this variation. */
+  richTemplateId?: string | null
+  richSlotValues?: Record<string, unknown>
+  /** Block-based builder state for this variation. */
+  useBlocks?: boolean
+  emailBlocks?: EmailBlock[]
+  /** Per-variation sender override. If null/undefined the composer-level
+   *  senderProfileId is used. Governed sender profiles first; free-form
+   *  "custom" identity below is the escape hatch. */
+  senderProfileId?: string | null
+  /** Free-form sender identity for this variation. When any of these are set,
+   *  they override the resolved governed profile's fields. */
+  senderFromName?: string
+  senderFromEmail?: string
+  senderReplyTo?: string
+}
+
 export interface ComposerState {
   mode: ComposerMode
   selectedBorrowerId: string
   selectedSegmentId: string
+  /** Multi-segment audience builder (segment mode only). */
+  audience: AudienceRule
   strategyId: string
   compliance: CompliancePosture
 
   channel: Channel
+
+  /** Campaign name — required for send. Not a fallback for anything else. */
+  campaignName: string
+
+  /** Governed sender identity — required for send. Admin-managed at
+   *  `/lender-config/sender-profiles`. */
+  senderProfileId: string | null
+
+  /** Composer-level free-form override on the governed profile's From
+   *  identity. Empty string = fall back to profile's fields. */
+  customFromName: string
+  customFromEmail: string
+  customReplyTo: string
+
+  /** A/B/n variations. Always ≥1 (the visible subject/body are variation 0's).
+   *  When length > 1, the composer body switches to the tabbed variation
+   *  editor. */
+  variations: CampaignVariation[]
+  /** Which variation is currently being edited in the composer. */
+  activeVariationId: string
+  /** % of the audience that receives *nothing* — measures lift.
+   *  Applied before variation splits. 0 = no holdout. */
+  holdoutPct: number
+  /** Metric used to declare a winner. Defaults to payment_conversion. */
+  winnerMetric: WinnerMetric
+  /** When true, after the test window elapses the remaining audience is
+   *  sent the winning variation automatically. */
+  autoWinner: boolean
+  /** Length of the test window (hours). Configurable — deliberately not
+   *  hard-coded (needs the same back-testing as the payment-attribution
+   *  model). */
+  testWindowHours: number
 
   // Email
   emailMode: EmailMode
@@ -69,15 +181,41 @@ export interface ComposerState {
   whatsappTemplateId: string
 
   previewBorrowerId: string
+
+  /** When + how to send. Defaults to "now" for a single one-off; authors
+   *  switch to "once" for a scheduled send or "recurring" for repeated
+   *  campaigns (Mon/Wed/Fri reminders, daily digests, etc.). */
+  schedule: SendSchedule
 }
+
+const DEFAULT_VARIATION_ID = "var-a"
 
 const DEFAULT_STATE: ComposerState = {
   mode: "single",
   selectedBorrowerId: borrowers[0].id,
   selectedSegmentId: segments[0].id,
+  audience: {
+    includeSegmentIds: [segments[0].id],
+    includeCombiner: "any",
+    excludeSegmentIds: [],
+    removeDuplicates: true,
+  },
   strategyId: "",
   compliance: "standard",
   channel: "email",
+  campaignName: "",
+  senderProfileId: null,
+  customFromName: "",
+  customFromEmail: "",
+  customReplyTo: "",
+  variations: [
+    { id: DEFAULT_VARIATION_ID, label: "A", splitPct: 100, subject: "", preheader: "", body: "" },
+  ],
+  activeVariationId: DEFAULT_VARIATION_ID,
+  holdoutPct: 0,
+  winnerMetric: "payment_conversion",
+  autoWinner: false,
+  testWindowHours: 24,
   // Default to template mode for rich email
   emailMode: "template",
   useBlocks: false,
@@ -90,6 +228,18 @@ const DEFAULT_STATE: ComposerState = {
   smsBody: "",
   whatsappTemplateId: whatsappTemplates[0].id,
   previewBorrowerId: borrowers[0].id,
+  schedule: {
+    mode: "now",
+    date: "",
+    time: "09:00",
+    timezone: "Asia/Dubai",
+    recurrence: {
+      freq: "daily",
+      daysOfWeek: [1], // Mondays — used only when freq === "custom"
+      everyN: 1,
+      end: { kind: "never" },
+    },
+  },
 }
 
 export function ComposerView() {
@@ -149,6 +299,10 @@ export function ComposerView() {
       // Segment
       if (segmentId && segments.some((s) => s.id === segmentId)) {
         next.selectedSegmentId = segmentId
+        next.audience = {
+          ...next.audience,
+          includeSegmentIds: [segmentId],
+        }
         if (!mode) next.mode = "segment"
       }
 

@@ -11,6 +11,7 @@ import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
+import { toast } from "sonner";
 import {
   X,
   ShieldCheck,
@@ -24,11 +25,39 @@ import {
   Plus,
   Trash2,
   ExternalLink,
+  RefreshCcw,
+  ChevronDown,
+  ChevronRight,
+  AlertTriangle,
+  Lock,
 } from "lucide-react";
 import { getBlockType, getBlockCategory } from "@/data/journeys";
 import { cn } from "@/lib/utils";
 import { getBlockConfigForm } from "@/components/journeys/block-configs";
 import { CallbackHandlingSection } from "@/components/journeys/callback-handling";
+/* Part 4 — real Composer registry, replacing the old hardcoded EMAIL_TEMPLATES / SMS_TEMPLATES arrays */
+import {
+  getComposerTemplatesForChannel,
+  getComposerPlaybooks,
+  encodeTemplatePrefill,
+  type ComposerTemplateEntry,
+} from "@/data/composer-registry-adapter";
+/* Part 5 — Human Campaign node references real seeded campaigns */
+import {
+  getCampaignsForLender,
+  SKILL_GROUP_LABEL,
+  type HumanCampaign,
+} from "@/data/campaigns-seed";
+/* Part 6.4 — event trigger tooltip metadata + component */
+import { EVENT_TRIGGER_CATALOG } from "@/data/event-trigger-catalog";
+import { EventTriggerInfoIcon } from "@/components/journeys/workshop-panels";
+/* Part 6.5 — filter registry with role scaffolding */
+import {
+  FILTER_REGISTRY,
+  getVisibleFilters,
+  CURRENT_ROLE,
+  type FilterDefinition,
+} from "@/data/filter-registry";
 
 /* ------------------------------------------------------------------ */
 /*  Mock data for dropdowns                                           */
@@ -162,7 +191,7 @@ function NativeSelect({
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div className="space-y-2">
-      <h4 className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+      <h4 className="truncate text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
         {title}
       </h4>
       {children}
@@ -183,13 +212,39 @@ interface NodeConfigPanelProps {
    *  nodes like Action Path Split that adapt to their predecessor. */
   nodes?: Node[];
   edges?: Edge[];
+  /**
+   * Part 1.5 — Fix-button target. When present, scrolls the offending field
+   * into view and pulses its border red for 3 seconds. `ts` is used to
+   * re-trigger the animation even if `field` hasn't changed.
+   */
+  focusField?: { field?: string; ts: number };
+  /**
+   * Master-editor context (Part 5.3). When present, the panel is running
+   * inside `/components/[id]/edit` — enables per-field lock toggles.
+   */
+  masterContext?: {
+    lockedProperties: Array<{ nodeId: string; propertyPath: string; reason?: string }>;
+    onToggleLock: (propertyPath: string, locked: boolean, reason?: string) => void;
+  };
+  /**
+   * Instance-editor context (Parts 4.3 + 7). When present, the panel is
+   * editing a node inside an expanded component instance. Field edits become
+   * overrides on the instance.
+   */
+  instanceContext?: {
+    componentName: string;
+    componentId: string;
+    lockedProperties: Array<{ nodeId: string; propertyPath: string; reason?: string }>;
+    overriddenPaths: string[];
+    onResetOverride: (propertyPath: string) => void;
+  };
 }
 
 /* ------------------------------------------------------------------ */
 /*  Component                                                          */
 /* ------------------------------------------------------------------ */
 
-export function NodeConfigPanel({ node, onClose, onUpdate, onDeleteNode, nodes = [], edges = [] }: NodeConfigPanelProps) {
+export function NodeConfigPanel({ node, onClose, onUpdate, onDeleteNode, nodes = [], edges = [], focusField, masterContext, instanceContext }: NodeConfigPanelProps) {
   const d = (node?.data ?? {}) as Record<string, unknown>;
 
   // Walk the graph backward from the selected node to find the nearest
@@ -342,8 +397,36 @@ export function NodeConfigPanel({ node, onClose, onUpdate, onDeleteNode, nodes =
   const isBranchNode = (block?.maxOutputs ?? 1) > 1 || node.type === "condition" || node.type === "split";
   const isActionNode = node.type === "action" || block?.category === "channels";
 
+  // Part 1.5 — react to Fix button focus token: scroll + pulse the field.
+  const panelRef = React.useRef<HTMLDivElement | null>(null);
+  React.useEffect(() => {
+    if (!focusField) return;
+    const timeout = setTimeout(() => {
+      const container = panelRef.current;
+      if (!container) return;
+      const target: HTMLElement | null = focusField.field
+        ? container.querySelector(`[data-focus-field="${focusField.field}"]`)
+        : container;
+      if (!target) return;
+      try {
+        target.scrollIntoView({ block: "center", behavior: "smooth" });
+      } catch {
+        target.scrollIntoView();
+      }
+      target.classList.add("journey-focus-pulse");
+      const cleanup = window.setTimeout(() => {
+        target.classList.remove("journey-focus-pulse");
+      }, 3000);
+      return () => window.clearTimeout(cleanup);
+    }, 80);
+    return () => clearTimeout(timeout);
+  }, [focusField]);
+
   return (
-    <div className="flex h-full w-[360px] shrink-0 flex-col border-l border-border bg-card/80 backdrop-blur-sm">
+    <div
+      ref={panelRef}
+      className="flex h-full w-[360px] shrink-0 flex-col border-l border-border bg-card/80 backdrop-blur-sm"
+    >
       {/* Header */}
       <div className="flex items-center justify-between border-b border-border px-4 py-3">
         <div className="flex min-w-0 items-center gap-2">
@@ -351,7 +434,7 @@ export function NodeConfigPanel({ node, onClose, onUpdate, onDeleteNode, nodes =
           {blockCategory && (
             <span
               className={cn(
-                "rounded-full px-1.5 py-0.5 text-[9px] font-medium",
+                "shrink-0 whitespace-nowrap rounded-full px-1.5 py-0.5 text-[9px] font-medium",
                 blockCategory.bgColor,
                 blockCategory.color
               )}
@@ -364,6 +447,42 @@ export function NodeConfigPanel({ node, onClose, onUpdate, onDeleteNode, nodes =
           <X className="h-3.5 w-3.5" />
         </Button>
       </div>
+
+      {/* Part 4.3 — Instance-of-component banner. Amber-warning tone,
+          explains that edits become overrides. */}
+      {instanceContext && (
+        <div className="flex items-start gap-2 border-b border-warning-500/40 bg-warning-500/10 px-3 py-2 text-[11px] text-warning-100">
+          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-warning-300" />
+          <div className="flex-1">
+            <p className="font-medium">
+              You're editing an instance of "{instanceContext.componentName}".
+            </p>
+            <p className="mt-0.5 text-warning-200/80">
+              Changes apply to this journey only.{" "}
+              <Link
+                href={`/components/${instanceContext.componentId}/edit`}
+                className="underline underline-offset-2 hover:text-warning-100"
+              >
+                Open master
+              </Link>{" "}
+              to change every journey using this component.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Part 5.3 — Master editor hint */}
+      {masterContext && (
+        <div className="flex items-start gap-2 border-b border-violet-500/40 bg-violet-500/10 px-3 py-2 text-[11px] text-violet-100">
+          <Lock className="mt-0.5 h-3.5 w-3.5 shrink-0 text-violet-300" />
+          <div className="flex-1">
+            <p className="font-medium">Master editor — changes flow to every instance.</p>
+            <p className="mt-0.5 text-violet-200/80">
+              Use the 🔒 icon on any field to prevent instance overrides.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Tabs */}
       <Tabs
@@ -669,15 +788,22 @@ export function NodeConfigPanel({ node, onClose, onUpdate, onDeleteNode, nodes =
             {/* Occurrence of Event */}
             {(d.triggerType as string) === "event" && (
               <Section title="Event">
-                <NativeSelect
-                  value={(d.event as string) ?? ""}
-                  onChange={(v) => update("event", v)}
-                >
-                  <option value="">Select event...</option>
-                  {EVENTS.map((ev) => (
-                    <option key={ev} value={ev}>{ev}</option>
-                  ))}
-                </NativeSelect>
+                <div className="flex items-center gap-1.5">
+                  <div className="flex-1">
+                    <NativeSelect
+                      value={(d.event as string) ?? ""}
+                      onChange={(v) => update("event", v)}
+                    >
+                      <option value="">Select event...</option>
+                      {EVENT_TRIGGER_CATALOG.map((ev) => (
+                        <option key={ev.id} value={ev.id}>{ev.label}</option>
+                      ))}
+                    </NativeSelect>
+                  </div>
+                  {(d.event as string) && (
+                    <EventTriggerInfoIcon eventId={d.event as string} />
+                  )}
+                </div>
               </Section>
             )}
 
@@ -724,16 +850,10 @@ export function NodeConfigPanel({ node, onClose, onUpdate, onDeleteNode, nodes =
             {(d.conditionType as string) === "check_attribute" && (
               <>
                 <Section title="Field">
-                  <NativeSelect
+                  <RoleScopedFilterPicker
                     value={(d.field as string) ?? ""}
                     onChange={(v) => update("field", v)}
-                  >
-                    <option value="">Select field...</option>
-                    <option value="dpd">Days Past Due (DPD)</option>
-                    <option value="outstanding_amount">Outstanding Amount</option>
-                    <option value="payment_status">Payment Status</option>
-                    <option value="risk_segment">Risk Segment</option>
-                  </NativeSelect>
+                  />
                 </Section>
                 <Section title="Operator">
                   <NativeSelect
@@ -803,15 +923,22 @@ export function NodeConfigPanel({ node, onClose, onUpdate, onDeleteNode, nodes =
             {(d.conditionType as string) === "has_done_event" && (
               <>
                 <Section title="Event">
-                  <NativeSelect
-                    value={(d.event as string) ?? ""}
-                    onChange={(v) => update("event", v)}
-                  >
-                    <option value="">Select event...</option>
-                    {EVENTS.map((ev) => (
-                      <option key={ev} value={ev}>{ev}</option>
-                    ))}
-                  </NativeSelect>
+                  <div className="flex items-center gap-1.5">
+                    <div className="flex-1">
+                      <NativeSelect
+                        value={(d.event as string) ?? ""}
+                        onChange={(v) => update("event", v)}
+                      >
+                        <option value="">Select event...</option>
+                        {EVENT_TRIGGER_CATALOG.map((ev) => (
+                          <option key={ev.id} value={ev.id}>{ev.label}</option>
+                        ))}
+                      </NativeSelect>
+                    </div>
+                    {(d.event as string) && (
+                      <EventTriggerInfoIcon eventId={d.event as string} />
+                    )}
+                  </div>
                 </Section>
                 <Section title="Time Window">
                   <div className="flex gap-2">
@@ -868,12 +995,12 @@ export function NodeConfigPanel({ node, onClose, onUpdate, onDeleteNode, nodes =
             {/* Output path labels */}
             <div className="flex items-center gap-3 rounded-lg border border-border bg-muted/30 px-3 py-2">
               <div className="flex items-center gap-1.5">
-                <div className="h-2.5 w-2.5 rounded-full bg-emerald-400" />
-                <span className="text-xs text-emerald-400">Yes path</span>
+                <div className="h-2.5 w-2.5 rounded-full bg-primary-400" />
+                <span className="text-xs text-primary-400">Yes path</span>
               </div>
               <div className="flex items-center gap-1.5">
-                <div className="h-2.5 w-2.5 rounded-full bg-red-400" />
-                <span className="text-xs text-red-400">No path</span>
+                <div className="h-2.5 w-2.5 rounded-full bg-error-400" />
+                <span className="text-xs text-error-400">No path</span>
               </div>
             </div>
           </>
@@ -902,43 +1029,13 @@ export function NodeConfigPanel({ node, onClose, onUpdate, onDeleteNode, nodes =
                 />
 
                 {((d.composeMode as string) ?? "template") === "template" ? (
-                  <>
-                    <Section title="Email Template">
-                      <NativeSelect
-                        value={(d.template as string) ?? ""}
-                        onChange={(v) => update("template", v)}
-                      >
-                        <option value="">Select template...</option>
-                        {EMAIL_TEMPLATES.map((t) => (
-                          <option key={t} value={t}>{t}</option>
-                        ))}
-                      </NativeSelect>
-                    </Section>
-                    {(d.template as string) && (
-                      <div className="rounded-lg border border-border bg-muted/20 p-3 space-y-2">
-                        <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-                          Locked fields (sourced from template)
-                        </p>
-                        {EMAIL_PREVIEWS[d.template as string] && (
-                          <p className="text-xs leading-relaxed text-muted-foreground/80">
-                            {EMAIL_PREVIEWS[d.template as string]}
-                          </p>
-                        )}
-                        <div className="pt-1 border-t border-border/50">
-                          <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">
-                            Mustache variables in this template
-                          </p>
-                          <div className="flex flex-wrap gap-1">
-                            {["{{borrower.first_name}}", "{{borrower.outstanding}}", "{{borrower.due_date}}"].map((v) => (
-                              <span key={v} className="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] text-foreground">
-                                {v}
-                              </span>
-                            ))}
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </>
+                  <ComposerTemplatePicker
+                    channel="email"
+                    value={(d.template as string) ?? ""}
+                    onChange={(v) => update("template", v)}
+                    playbookId={(d.playbookId as string) ?? ""}
+                    onChangePlaybook={(v) => update("playbookId", v)}
+                  />
                 ) : (
                   <>
                     <Section title="Subject">
@@ -1019,43 +1116,13 @@ export function NodeConfigPanel({ node, onClose, onUpdate, onDeleteNode, nodes =
                 />
 
                 {((d.composeMode as string) ?? "template") === "template" ? (
-                  <>
-                    <Section title="SMS Template">
-                      <NativeSelect
-                        value={(d.template as string) ?? ""}
-                        onChange={(v) => update("template", v)}
-                      >
-                        <option value="">Select template...</option>
-                        {SMS_TEMPLATES.map((t) => (
-                          <option key={t} value={t}>{t}</option>
-                        ))}
-                      </NativeSelect>
-                    </Section>
-                    {(d.template as string) && SMS_CHAR_COUNTS[d.template as string] && (
-                      <div className="flex items-center justify-between rounded-lg border border-border bg-muted/20 px-3 py-2">
-                        <span className="text-xs text-muted-foreground">Character count</span>
-                        <span className={`text-xs font-medium ${
-                          SMS_CHAR_COUNTS[d.template as string] > 160 ? "text-amber-400" : "text-emerald-400"
-                        }`}>
-                          {SMS_CHAR_COUNTS[d.template as string]}/160
-                        </span>
-                      </div>
-                    )}
-                    {(d.template as string) && (
-                      <div className="rounded-lg border border-border bg-muted/20 p-3">
-                        <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">
-                          Mustache variables in this template
-                        </p>
-                        <div className="flex flex-wrap gap-1">
-                          {["{{borrower.first_name}}", "{{borrower.outstanding}}"].map((v) => (
-                            <span key={v} className="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] text-foreground">
-                              {v}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </>
+                  <ComposerTemplatePicker
+                    channel="sms"
+                    value={(d.template as string) ?? ""}
+                    onChange={(v) => update("template", v)}
+                    playbookId={(d.playbookId as string) ?? ""}
+                    onChangePlaybook={(v) => update("playbookId", v)}
+                  />
                 ) : (
                   <Section title="SMS body">
                     <textarea
@@ -1066,7 +1133,7 @@ export function NodeConfigPanel({ node, onClose, onUpdate, onDeleteNode, nodes =
                     />
                     <div className="mt-1 flex justify-end">
                       <span className={`text-[10px] ${
-                        (((d.manualBodyText as string) ?? "").length > 160) ? "text-amber-400" : "text-muted-foreground"
+                        (((d.manualBodyText as string) ?? "").length > 160) ? "text-warning-400" : "text-muted-foreground"
                       }`}>
                         {((d.manualBodyText as string) ?? "").length}/160
                       </span>
@@ -1155,7 +1222,7 @@ export function NodeConfigPanel({ node, onClose, onUpdate, onDeleteNode, nodes =
             {(d.actionType as string) === "call" && (
               <div className="space-y-3">
                 <Section title="Select a ClearVoice Project">
-                  <div className="space-y-2">
+                  <div className="space-y-2" data-focus-field="clearvoiceProjectId">
                     {CLEARVOICE_PROJECTS.map((proj) => {
                       const selected = (d.clearvoiceProjectId as string) === proj.id;
                       return (
@@ -1187,8 +1254,8 @@ export function NodeConfigPanel({ node, onClose, onUpdate, onDeleteNode, nodes =
                               className={cn(
                                 "ml-2 shrink-0 rounded-md px-2 py-0.5 text-[10px] font-semibold",
                                 proj.status === "live"
-                                  ? "bg-emerald-500/20 text-emerald-400"
-                                  : "bg-zinc-500/20 text-zinc-400"
+                                  ? "bg-primary-500/20 text-primary-400"
+                                  : "bg-neutral-500/20 text-neutral-400"
                               )}
                             >
                               {proj.status === "live" ? "Live" : "Draft"}
@@ -1215,7 +1282,15 @@ export function NodeConfigPanel({ node, onClose, onUpdate, onDeleteNode, nodes =
                   data={d}
                   update={update}
                 />
+
+                {/* Part 2 — Redial policy (collapsible) */}
+                <RedialPolicySection data={d} update={update} />
               </div>
+            )}
+
+            {/* ---- Part 5: Trigger Human Campaign ---- */}
+            {(d.actionType as string) === "human_campaign" && (
+              <HumanCampaignConfig d={d} update={update} />
             )}
 
             {/* ---- Assign Agent ---- */}
@@ -1249,6 +1324,7 @@ export function NodeConfigPanel({ node, onClose, onUpdate, onDeleteNode, nodes =
             {(d.actionType as string) === "attribute" && (
               <>
                 <Section title="Field">
+                  <div data-focus-field="field">
                   <NativeSelect
                     value={(d.field as string) ?? ""}
                     onChange={(v) => update("field", v)}
@@ -1258,8 +1334,9 @@ export function NodeConfigPanel({ node, onClose, onUpdate, onDeleteNode, nodes =
                       <option key={f} value={f}>{f}</option>
                     ))}
                   </NativeSelect>
+                  </div>
                 </Section>
-                <div className="space-y-1.5">
+                <div className="space-y-1.5" data-focus-field="newValue">
                   <Label className="text-xs text-muted-foreground">New Value</Label>
                   <Input
                     value={(d.newValue as string) ?? ""}
@@ -1433,7 +1510,7 @@ export function NodeConfigPanel({ node, onClose, onUpdate, onDeleteNode, nodes =
                 {((d.variantCount as number) ?? 2) >= 3 && (
                   <div className="flex gap-2">
                     <div className="flex-1 space-y-1.5">
-                      <Label className="text-xs text-amber-400">Variant C (%)</Label>
+                      <Label className="text-xs text-warning-400">Variant C (%)</Label>
                       <Input
                         type="number"
                         value={(d.splitC as number) ?? 0}
@@ -1467,7 +1544,7 @@ export function NodeConfigPanel({ node, onClose, onUpdate, onDeleteNode, nodes =
                     + (vc >= 4 ? ((d.splitD as number) ?? 0) : 0);
                   return (
                     <div className={`rounded-lg px-3 py-1.5 text-xs font-medium ${
-                      sum === 100 ? "bg-emerald-500/10 text-emerald-400" : "bg-red-500/10 text-red-400"
+                      sum === 100 ? "bg-primary-500/10 text-primary-400" : "bg-error-500/10 text-error-400"
                     }`}>
                       Total: {sum}%{sum !== 100 && " (must equal 100%)"}
                     </div>
@@ -1639,3 +1716,1162 @@ function ModeToggle({
     </div>
   );
 }
+
+/* ══════════════════════════════════════════════════════════════════════════
+ * Part 4 — Composer template picker.
+ *
+ * Replaces the hardcoded EMAIL_TEMPLATES / SMS_TEMPLATES arrays with a
+ * registry-backed picker that pulls from Composer's rich HTML + plain
+ * templates + playbooks. When the user picks "Create new template" the
+ * link pushes to /email-generator/builder/new with a base64 prefill blob.
+ * ══════════════════════════════════════════════════════════════════════════ */
+
+function ComposerTemplatePicker({
+  channel,
+  value,
+  onChange,
+  playbookId,
+  onChangePlaybook,
+}: {
+  channel: "email" | "sms" | "whatsapp";
+  value: string;
+  onChange: (v: string) => void;
+  playbookId: string;
+  onChangePlaybook: (v: string) => void;
+}) {
+  const templates = getComposerTemplatesForChannel(channel);
+  const playbooks = getComposerPlaybooks();
+  const active = templates.find((t) => t.id === value);
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+
+  const prefillUrl =
+    "/email-generator/builder/new?" +
+    new URLSearchParams({
+      channel,
+      from: "journey",
+      prefill: encodeTemplatePrefill({
+        name: `Journey · ${channel} draft`,
+        body: "",
+        channel,
+      }),
+    }).toString();
+
+  return (
+    <>
+      <Section title="Composer template">
+        <div data-focus-field="template">
+        <NativeSelect value={value} onChange={onChange}>
+          <option value="">Select template…</option>
+          {templates.map((t) => (
+            <option key={t.id} value={t.id}>
+              {t.name} · {t.lenderName}
+              {t.source === "rich" ? " · rich HTML" : ""}
+            </option>
+          ))}
+        </NativeSelect>
+        <p className="mt-1 text-[10px] text-muted-foreground">
+          Pulls from Composer&apos;s template registry. Every send is tagged{" "}
+          <code className="font-mono">source: journey_[id]</code> for
+          reconciliation.
+        </p>
+        </div>
+      </Section>
+
+      {active && <ComposerTemplatePreview template={active} />}
+
+      <Section title="Playbook (optional)">
+        <NativeSelect value={playbookId} onChange={onChangePlaybook}>
+          <option value="">None</option>
+          {playbooks.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.name} · {p.tone}
+            </option>
+          ))}
+        </NativeSelect>
+        <p className="mt-1 text-[10px] text-muted-foreground">
+          Playbook compliance rules run at journey publish time.
+        </p>
+      </Section>
+
+      {/* Variable overrides — advanced */}
+      <div>
+        <button
+          type="button"
+          onClick={() => setAdvancedOpen((o) => !o)}
+          className="flex w-full items-center gap-1 rounded-md border border-border/60 bg-muted/10 px-2.5 py-1.5 text-[11px] font-medium text-muted-foreground hover:text-foreground"
+        >
+          {advancedOpen ? "▾" : "▸"} Variable overrides (journey-scoped)
+        </button>
+        {advancedOpen && (
+          <div className="mt-2 rounded-md border border-border bg-muted/10 p-3 text-[11px] text-muted-foreground">
+            <p>
+              Journey-scoped merge-tag overrides. Set key/value pairs here to
+              override the template&apos;s defaults just for this journey&apos;s
+              sends — the underlying template is untouched.
+            </p>
+            <p className="mt-1 text-[10px] text-muted-foreground/70">
+              Overrides UI wired in a follow-up. For now, edit the template
+              directly if you need to change copy.
+            </p>
+          </div>
+        )}
+      </div>
+
+      <Link
+        href={prefillUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="inline-flex w-full items-center justify-center gap-1 rounded-lg border border-primary/30 bg-primary/10 px-2.5 py-1.5 text-xs font-medium text-primary hover:bg-primary/20 transition-colors"
+      >
+        <Wand2 className="h-3 w-3" />
+        Author full template in Composer
+        <ExternalLink className="h-3 w-3" />
+      </Link>
+    </>
+  );
+}
+
+function ComposerTemplatePreview({ template }: { template: ComposerTemplateEntry }) {
+  return (
+    <div className="rounded-lg border border-border bg-muted/20 p-3">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+          Preview
+        </p>
+        <div className="flex items-center gap-1">
+          <span className="rounded bg-neutral-800 px-1.5 py-0.5 text-[9px] font-medium text-neutral-300">
+            {template.lenderName}
+          </span>
+          {template.source === "rich" && (
+            <span className="rounded bg-primary-500/15 px-1.5 py-0.5 text-[9px] font-medium text-primary-300">
+              Rich HTML
+            </span>
+          )}
+        </div>
+      </div>
+      {template.subject && (
+        <p className="mt-1.5 text-xs font-semibold text-foreground">
+          Subject: {template.subject}
+        </p>
+      )}
+      <p className="mt-1 text-xs leading-relaxed text-muted-foreground/80 line-clamp-3">
+        {template.preview}
+      </p>
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+ * Part 5 — Human Campaign config panel.
+ *
+ * Hybrid mode: Use existing campaign / Create new campaign. Enrollment
+ * fires a console.log stub (real Campaigns API is out of scope). Journey
+ * continues either Immediately or Wait-for-outcome.
+ * ══════════════════════════════════════════════════════════════════════════ */
+
+const DIALERS = [
+  { id: "isdn7", label: "ISDN 7", gateway: "isdn7" },
+  { id: "isdn3", label: "ISDN 3", gateway: "isdn3" },
+  { id: "sip_asterisk", label: "SIP · Asterisk", gateway: "sip-asterisk-01" },
+  { id: "sip_freeswitch", label: "SIP · FreeSWITCH", gateway: "sip-fs-01" },
+] as const;
+
+const AGENT_GROUP_OPTIONS = [
+  "Collections · UAE · English",
+  "Collections · UAE · Arabic",
+  "Collections · KSA · Arabic",
+  "Hardship Care",
+  "Settlement Negotiators",
+  "Final Notice Specialists",
+] as const;
+
+const DEFAULT_STAGES = ["PTP", "Broken Promise", "RPC", "Attempted", "Allocated"];
+
+/**
+ * Human Campaign config panel — mirrors Command's Create-human-campaign dialog
+ * (Basics / Audience / Schedule / Messages tabs). Audience defaults to
+ * "inherited from journey step" since journeys own the audience upstream.
+ */
+function HumanCampaignConfig({
+  d,
+  update,
+}: {
+  d: Record<string, unknown>;
+  update: (key: string, value: unknown) => void;
+}) {
+  const composeMode = ((d.composeMode as string) ?? "existing") as "existing" | "create";
+  const campaigns = getCampaignsForLender((d.lenderId as string) ?? "general");
+  const activeCampaign: HumanCampaign | undefined = campaigns.find(
+    (c) => c.id === (d.campaignId as string),
+  );
+  const [tab, setTab] = useState<"basics" | "audience" | "schedule" | "messages">("basics");
+
+  return (
+    <div className="space-y-3">
+      {/* Header: existing vs create mode + pause-by-default */}
+      <div className="rounded-lg border border-border bg-muted/10 p-1">
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={() => update("composeMode", "existing")}
+            className={cn(
+              "flex-1 rounded-md px-2 py-1 text-xs font-medium transition-colors",
+              composeMode === "existing"
+                ? "bg-primary text-primary-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground",
+            )}
+          >
+            Use existing
+          </button>
+          <button
+            type="button"
+            onClick={() => update("composeMode", "create")}
+            className={cn(
+              "flex-1 rounded-md px-2 py-1 text-xs font-medium transition-colors",
+              composeMode === "create"
+                ? "bg-primary text-primary-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground",
+            )}
+          >
+            Create new
+          </button>
+        </div>
+      </div>
+
+      {composeMode === "existing" ? (
+        <>
+          <Section title="Campaign">
+            <div data-focus-field="campaignId">
+              <NativeSelect
+                value={(d.campaignId as string) ?? ""}
+                onChange={(v) => {
+                  update("campaignId", v);
+                  const c = campaigns.find((cc) => cc.id === v);
+                  if (c) update("campaignName", c.name);
+                }}
+              >
+                <option value="">Select campaign…</option>
+                {campaigns.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name} · {SKILL_GROUP_LABEL[c.skillGroup]} · queue {c.queueDepth}
+                  </option>
+                ))}
+              </NativeSelect>
+            </div>
+          </Section>
+
+          {activeCampaign && (
+            <div className="rounded-lg border border-border bg-muted/20 p-3 space-y-1.5 text-[11px]">
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">Skill group</span>
+                <span className="font-medium text-foreground">
+                  {SKILL_GROUP_LABEL[activeCampaign.skillGroup]}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">Priority tier</span>
+                <span className="font-medium text-foreground capitalize">
+                  {activeCampaign.priorityTier}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">Queue depth</span>
+                <span className="tabular-nums text-foreground">
+                  {activeCampaign.queueDepth.toLocaleString()}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">Status</span>
+                <span
+                  className={cn(
+                    "rounded px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wider",
+                    activeCampaign.status === "active"
+                      ? "bg-primary-500/20 text-primary-300"
+                      : "bg-warning-500/20 text-warning-300",
+                  )}
+                >
+                  {activeCampaign.status}
+                </span>
+              </div>
+            </div>
+          )}
+
+          <Section title="Enrollment overrides (optional)">
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                  Priority tier
+                </Label>
+                <NativeSelect
+                  value={(d.priorityOverride as string) ?? ""}
+                  onChange={(v) => update("priorityOverride", v)}
+                >
+                  <option value="">Use campaign default</option>
+                  <option value="high">High</option>
+                  <option value="medium">Medium</option>
+                  <option value="low">Low</option>
+                </NativeSelect>
+              </div>
+              <div>
+                <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                  Urgency
+                </Label>
+                <NativeSelect
+                  value={(d.urgencyOverride as string) ?? ""}
+                  onChange={(v) => update("urgencyOverride", v)}
+                >
+                  <option value="">Use campaign default</option>
+                  <option value="urgent">Urgent</option>
+                  <option value="normal">Normal</option>
+                </NativeSelect>
+              </div>
+            </div>
+          </Section>
+
+          <HumanCampaignJourneyExit d={d} update={update} />
+        </>
+      ) : (
+        <HumanCampaignCreateTabs
+          d={d}
+          update={update}
+          tab={tab}
+          setTab={setTab}
+        />
+      )}
+
+      <div className="rounded-md border border-primary-500/30 bg-primary-500/5 p-2.5 text-[10px] text-primary-300/80">
+        Audience is inherited from the upstream journey step. Enrollment tagged{" "}
+        <code className="rounded bg-black/30 px-1 py-px font-mono">source: journey_[id]</code>{" "}
+        · <code className="rounded bg-black/30 px-1 py-px font-mono">source_node: node_[id]</code>.
+        Campaigns owns the script + agent-facing config.
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Tabbed "Create new campaign" panel — mirrors Command's Create-human-campaign
+ * dialog (Basics / Audience / Schedule / Messages).
+ */
+function HumanCampaignCreateTabs({
+  d,
+  update,
+  tab,
+  setTab,
+}: {
+  d: Record<string, unknown>;
+  update: (key: string, value: unknown) => void;
+  tab: "basics" | "audience" | "schedule" | "messages";
+  setTab: (v: "basics" | "audience" | "schedule" | "messages") => void;
+}) {
+  return (
+    <>
+      {/* Pause by default toggle (top-right of the create card in Command) */}
+      <label className="flex cursor-pointer items-center justify-between rounded-md border border-border bg-muted/10 px-2.5 py-1.5 text-[11px]">
+        <span className="text-foreground">Pause by default</span>
+        <Switch
+          checked={(d.pauseByDefault as boolean) ?? false}
+          onCheckedChange={(v) => update("pauseByDefault", v)}
+          size="sm"
+        />
+      </label>
+
+      {/* Tab strip */}
+      <div className="flex items-center gap-1 border-b border-border">
+        {(
+          [
+            { id: "basics", label: "Basics", optional: false },
+            { id: "audience", label: "Audience", optional: false },
+            { id: "schedule", label: "Schedule", optional: false },
+            { id: "messages", label: "Messages", optional: true },
+          ] as const
+        ).map((t) => (
+          <button
+            key={t.id}
+            type="button"
+            onClick={() => setTab(t.id)}
+            className={cn(
+              "-mb-px flex items-center gap-1 border-b-2 px-2 py-1.5 text-[11px] font-medium transition-colors",
+              tab === t.id
+                ? "border-primary text-primary"
+                : "border-transparent text-muted-foreground hover:text-foreground",
+            )}
+          >
+            {t.label}
+            {t.optional && (
+              <span className="rounded bg-muted px-1 py-px text-[9px] uppercase text-muted-foreground">
+                Optional
+              </span>
+            )}
+          </button>
+        ))}
+      </div>
+
+      {tab === "basics" && <HumanCampaignBasicsTab d={d} update={update} />}
+      {tab === "audience" && <HumanCampaignAudienceTab d={d} update={update} />}
+      {tab === "schedule" && <HumanCampaignScheduleTab d={d} update={update} />}
+      {tab === "messages" && <HumanCampaignMessagesTab d={d} update={update} />}
+
+      <Link
+        href="/campaigns?draft=1"
+        target="_blank"
+        rel="noopener noreferrer"
+        className="inline-flex w-full items-center justify-center gap-1 rounded-lg border border-primary/30 bg-primary/10 px-2.5 py-1.5 text-xs font-medium text-primary hover:bg-primary/20 transition-colors"
+      >
+        <Wand2 className="h-3 w-3" />
+        Open full editor in Campaigns
+        <ExternalLink className="h-3 w-3" />
+      </Link>
+      <HumanCampaignJourneyExit d={d} update={update} />
+    </>
+  );
+}
+
+function HumanCampaignBasicsTab({
+  d,
+  update,
+}: {
+  d: Record<string, unknown>;
+  update: (key: string, value: unknown) => void;
+}) {
+  const dialerId = (d.newDialer as string) ?? "isdn7";
+  const dialer = DIALERS.find((x) => x.id === dialerId) ?? DIALERS[0];
+  return (
+    <div className="space-y-3">
+      <Section title="Campaign name *">
+        <Input
+          data-focus-field="newCampaignName"
+          value={(d.newCampaignName as string) ?? ""}
+          onChange={(e) => update("newCampaignName", e.target.value)}
+          placeholder="Enter campaign name"
+          className="h-8 text-xs"
+        />
+      </Section>
+      <Section title="Dialer *">
+        <NativeSelect
+          value={dialerId}
+          onChange={(v) => {
+            update("newDialer", v);
+            const found = DIALERS.find((x) => x.id === v);
+            if (found) update("newGateway", found.gateway);
+          }}
+        >
+          {DIALERS.map((x) => (
+            <option key={x.id} value={x.id}>{x.label}</option>
+          ))}
+        </NativeSelect>
+      </Section>
+      <Section title="Gateway">
+        <Input
+          value={(d.newGateway as string) ?? dialer.gateway}
+          disabled
+          className="h-8 text-xs font-mono opacity-70"
+        />
+      </Section>
+      <div className="flex items-center justify-between">
+        <Label className="text-[11px] text-muted-foreground">Agent Group *</Label>
+        <button
+          type="button"
+          onClick={() =>
+            toast.info("User groups", {
+              description: "Opens the Agents · Groups management page. Stub in the prototype.",
+            })
+          }
+          className="text-[10px] font-medium text-primary hover:underline"
+        >
+          Manage user groups
+        </button>
+      </div>
+      <NativeSelect
+        value={(d.newAgentGroup as string) ?? ""}
+        onChange={(v) => update("newAgentGroup", v)}
+      >
+        <option value="">Select an agent group</option>
+        {AGENT_GROUP_OPTIONS.map((g) => (
+          <option key={g} value={g}>{g}</option>
+        ))}
+      </NativeSelect>
+      <Section title="Secondary group">
+        <NativeSelect
+          value={(d.newSecondaryGroup as string) ?? ""}
+          onChange={(v) => update("newSecondaryGroup", v)}
+        >
+          <option value="">Optional — used when the primary group is busy</option>
+          {AGENT_GROUP_OPTIONS.map((g) => (
+            <option key={g} value={g}>{g}</option>
+          ))}
+        </NativeSelect>
+      </Section>
+      <Section title="Dial Speed *">
+        <div className="flex items-center gap-2">
+          <Input
+            type="number"
+            min={1}
+            max={10}
+            value={(d.newDialSpeed as number) ?? 3}
+            onChange={(e) =>
+              update(
+                "newDialSpeed",
+                Math.max(1, Math.min(10, Number(e.target.value) || 3)),
+              )
+            }
+            className="h-8 w-20 text-center text-xs tabular-nums"
+          />
+          <span className="text-[10px] text-muted-foreground">
+            Concurrent lines per agent (1 = manual, 10 = aggressive predictive).
+          </span>
+        </div>
+      </Section>
+    </div>
+  );
+}
+
+function HumanCampaignAudienceTab({
+  d,
+  update,
+}: {
+  d: Record<string, unknown>;
+  update: (key: string, value: unknown) => void;
+}) {
+  const stages = ((d.newCallingPriority as string[]) ?? DEFAULT_STAGES);
+  return (
+    <div className="space-y-3">
+      <div className="rounded-md border border-primary-500/30 bg-primary-500/5 p-2.5 text-[10px] text-primary-300/80">
+        <strong className="text-primary-200">Audience is inherited from the journey.</strong>{" "}
+        Every borrower that reaches this node is enrolled — the campaign never re-queries a
+        segment or view. Priority order below decides which enrolled deals get dialled first.
+      </div>
+
+      <Section title="Calling priority">
+        <p className="text-[10px] text-muted-foreground">
+          Decides which deals get dialled first. Drag to reorder — top = highest priority.
+        </p>
+        <div className="mt-2 space-y-1">
+          {stages.map((stage, i) => (
+            <div
+              key={stage}
+              className="flex items-center gap-2 rounded-md border border-border bg-muted/20 px-2 py-1.5 text-[11px]"
+            >
+              <span className="flex h-5 w-5 items-center justify-center rounded-full bg-primary/15 text-[10px] font-semibold text-primary">
+                {i + 1}
+              </span>
+              <span className="flex-1 text-foreground">{stage}</span>
+              <div className="flex items-center gap-0.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (i === 0) return;
+                    const next = [...stages];
+                    [next[i - 1], next[i]] = [next[i], next[i - 1]];
+                    update("newCallingPriority", next);
+                  }}
+                  disabled={i === 0}
+                  className="rounded p-0.5 text-muted-foreground hover:text-foreground disabled:opacity-30"
+                  aria-label="Move up"
+                >
+                  ▲
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (i === stages.length - 1) return;
+                    const next = [...stages];
+                    [next[i], next[i + 1]] = [next[i + 1], next[i]];
+                    update("newCallingPriority", next);
+                  }}
+                  disabled={i === stages.length - 1}
+                  className="rounded p-0.5 text-muted-foreground hover:text-foreground disabled:opacity-30"
+                  aria-label="Move down"
+                >
+                  ▼
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </Section>
+    </div>
+  );
+}
+
+function HumanCampaignScheduleTab({
+  d,
+  update,
+}: {
+  d: Record<string, unknown>;
+  update: (key: string, value: unknown) => void;
+}) {
+  const whenToRun = ((d.newWhenToRun as string) ?? "on_enroll") as
+    | "on_enroll"
+    | "immediate"
+    | "scheduled";
+  const redialEnabled = (d.newRedialEnabled as boolean) ?? false;
+  return (
+    <div className="space-y-3">
+      <Section title="When to run">
+        <div className="space-y-1.5">
+          <label className="flex cursor-pointer items-start gap-2 rounded-md border border-border bg-muted/10 p-2.5 text-[11px]">
+            <input
+              type="radio"
+              name="when-to-run"
+              checked={whenToRun === "on_enroll"}
+              onChange={() => update("newWhenToRun", "on_enroll")}
+              className="mt-0.5 accent-primary"
+            />
+            <div>
+              <p className="font-medium text-foreground">Enroll as journey fires</p>
+              <p className="mt-0.5 text-[10px] text-muted-foreground">
+                Recommended. Borrowers are queued to the campaign as soon as this node runs.
+              </p>
+            </div>
+          </label>
+          <label className="flex cursor-pointer items-start gap-2 rounded-md border border-border bg-muted/10 p-2.5 text-[11px]">
+            <input
+              type="radio"
+              name="when-to-run"
+              checked={whenToRun === "scheduled"}
+              onChange={() => update("newWhenToRun", "scheduled")}
+              className="mt-0.5 accent-primary"
+            />
+            <div>
+              <p className="font-medium text-foreground">Schedule for later</p>
+              <p className="mt-0.5 text-[10px] text-muted-foreground">
+                Batch enrolled borrowers until the campaign window opens (day/time below).
+              </p>
+            </div>
+          </label>
+        </div>
+      </Section>
+
+      {whenToRun === "scheduled" && (
+        <div className="grid grid-cols-2 gap-2 text-[11px]">
+          <div>
+            <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">
+              Start
+            </Label>
+            <Input
+              type="date"
+              value={(d.newScheduleStart as string) ?? ""}
+              onChange={(e) => update("newScheduleStart", e.target.value)}
+              className="mt-1 h-8 text-xs"
+            />
+          </div>
+          <div>
+            <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">
+              Daily window
+            </Label>
+            <Input
+              type="time"
+              value={(d.newScheduleTime as string) ?? "09:00"}
+              onChange={(e) => update("newScheduleTime", e.target.value)}
+              className="mt-1 h-8 text-xs"
+            />
+          </div>
+        </div>
+      )}
+
+      <Section title="Redial settings">
+        <p className="text-[10px] text-muted-foreground">
+          Configure how the dialer handles unanswered and failed calls.
+        </p>
+        <label className="mt-2 flex cursor-pointer items-center justify-between rounded-md border border-border bg-muted/10 px-3 py-2 text-[11px]">
+          <div>
+            <p className="font-medium text-foreground">Enable redial / multiple attempts</p>
+            <p className="mt-0.5 text-[10px] text-muted-foreground">
+              After an unanswered call, retry using the rules below.
+            </p>
+          </div>
+          <Switch
+            checked={redialEnabled}
+            onCheckedChange={(v) => update("newRedialEnabled", v)}
+            size="sm"
+          />
+        </label>
+        {redialEnabled && (
+          <div className="mt-2 grid grid-cols-2 gap-2 text-[11px]">
+            <div>
+              <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                Max attempts
+              </Label>
+              <Input
+                type="number"
+                min={1}
+                max={5}
+                value={(d.newRedialMaxAttempts as number) ?? 3}
+                onChange={(e) =>
+                  update(
+                    "newRedialMaxAttempts",
+                    Math.max(1, Math.min(5, Number(e.target.value) || 3)),
+                  )
+                }
+                className="mt-1 h-8 text-center text-xs tabular-nums"
+              />
+            </div>
+            <div>
+              <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                Interval (minutes)
+              </Label>
+              <Input
+                type="number"
+                min={5}
+                value={(d.newRedialInterval as number) ?? 60}
+                onChange={(e) =>
+                  update("newRedialInterval", Math.max(5, Number(e.target.value) || 60))
+                }
+                className="mt-1 h-8 text-center text-xs tabular-nums"
+              />
+            </div>
+          </div>
+        )}
+      </Section>
+    </div>
+  );
+}
+
+function HumanCampaignMessagesTab({
+  d,
+  update,
+}: {
+  d: Record<string, unknown>;
+  update: (key: string, value: unknown) => void;
+}) {
+  return (
+    <div className="space-y-3">
+      <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Call Messages</p>
+      <div className="space-y-1.5">
+        <Label className="text-[11px] text-muted-foreground">Welcome Message</Label>
+        <Textarea
+          value={(d.newWelcomeMessage as string) ?? ""}
+          onChange={(e) => update("newWelcomeMessage", e.target.value)}
+          placeholder="This is an important call regarding your account. Please stay on the line."
+          className="min-h-[64px] text-[11px]"
+        />
+      </div>
+      <div className="space-y-1.5">
+        <Label className="text-[11px] text-muted-foreground">Loop Message</Label>
+        <Textarea
+          value={(d.newLoopMessage as string) ?? ""}
+          onChange={(e) => update("newLoopMessage", e.target.value)}
+          placeholder="Please wait while we connect your call to one of our agents"
+          className="min-h-[64px] text-[11px]"
+        />
+      </div>
+      <div className="space-y-1.5">
+        <Label className="text-[11px] text-muted-foreground">Busy Message</Label>
+        <Textarea
+          value={(d.newBusyMessage as string) ?? ""}
+          onChange={(e) => update("newBusyMessage", e.target.value)}
+          placeholder="We're sorry, all of our agents are currently unavailable. We will make sure to call you back as soon as possible. Thank you for your patience."
+          className="min-h-[80px] text-[11px]"
+        />
+      </div>
+    </div>
+  );
+}
+
+function HumanCampaignJourneyExit({
+  d,
+  update,
+}: {
+  d: Record<string, unknown>;
+  update: (key: string, value: unknown) => void;
+}) {
+  const continueMode = ((d.continueMode as string) ?? "immediate") as "immediate" | "wait_for_outcome";
+  return (
+    <>
+      {/* Exit conditions */}
+      <Section title="Journey exit conditions">
+        <div className="space-y-1.5">
+          {[
+            { id: "on_ptp_captured", label: "PTP captured" },
+            { id: "on_dispute", label: "Dispute raised" },
+            { id: "on_callback", label: "Callback requested" },
+            { id: "on_not_reachable", label: "Not reachable" },
+          ].map((x) => {
+            const set = ((d.exitOn as string[]) ?? ["on_ptp_captured", "on_dispute"]).includes(x.id);
+            return (
+              <label key={x.id} className="flex cursor-pointer items-center gap-2 text-[11px]">
+                <input
+                  type="checkbox"
+                  checked={set}
+                  onChange={(e) => {
+                    const cur = (d.exitOn as string[]) ?? ["on_ptp_captured", "on_dispute"];
+                    const next = e.target.checked ? [...cur, x.id] : cur.filter((id) => id !== x.id);
+                    update("exitOn", next);
+                  }}
+                  className="h-3 w-3 accent-primary"
+                />
+                <span className="text-foreground">{x.label}</span>
+              </label>
+            );
+          })}
+          <div className="flex items-center gap-2 pt-1 text-[11px]">
+            <span className="text-muted-foreground">Timeout after</span>
+            <Input
+              type="number"
+              value={(d.timeoutDays as number) ?? 7}
+              onChange={(e) => update("timeoutDays", Number(e.target.value) || 7)}
+              className="h-7 w-16 text-center text-xs tabular-nums"
+            />
+            <span className="text-muted-foreground">days if not called</span>
+          </div>
+        </div>
+      </Section>
+
+      <Section title="Journey continues after">
+        <div className="grid grid-cols-2 gap-1.5">
+          <button
+            type="button"
+            onClick={() => update("continueMode", "immediate")}
+            className={cn(
+              "rounded-md border px-2 py-1.5 text-left text-[11px] transition-colors",
+              continueMode === "immediate"
+                ? "border-primary/60 bg-primary/10 text-primary"
+                : "border-border bg-muted/10 text-foreground hover:border-neutral-700",
+            )}
+          >
+            <div className="font-medium">Immediate</div>
+            <div className="mt-0.5 text-[9px] text-muted-foreground">
+              Continue downstream in parallel with the campaign.
+            </div>
+          </button>
+          <button
+            type="button"
+            onClick={() => update("continueMode", "wait_for_outcome")}
+            className={cn(
+              "rounded-md border px-2 py-1.5 text-left text-[11px] transition-colors",
+              continueMode === "wait_for_outcome"
+                ? "border-primary/60 bg-primary/10 text-primary"
+                : "border-border bg-muted/10 text-foreground hover:border-neutral-700",
+            )}
+          >
+            <div className="font-medium">Wait for outcome</div>
+            <div className="mt-0.5 text-[9px] text-muted-foreground">
+              Pause until campaign resolves; branch on outcome.
+            </div>
+          </button>
+        </div>
+      </Section>
+    </>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+ * Part 2 — Redial policy expansion on Trigger AI Call.
+ *
+ * Collapsible panel that sits under Callback Handling. Controls:
+ *   1. Max attempts (1-5)
+ *   2. Retry on outcomes (multi-select)
+ *   3. Interval mode: fixed / escalating / custom
+ *   4. Interval schedule (varies by mode)
+ *   5. Exit conditions (multi-select)
+ *
+ * Defaults mirror the journey-wide default retry policy from Journey Settings.
+ * ══════════════════════════════════════════════════════════════════════════ */
+
+const REDIAL_OUTCOMES: Array<{ id: string; label: string }> = [
+  { id: "no_answer", label: "No answer" },
+  { id: "busy", label: "Busy signal" },
+  { id: "voicemail", label: "Voicemail" },
+  { id: "dropped_by_ai", label: "Dropped by AI" },
+  { id: "call_failed_technical", label: "Technical failure" },
+];
+
+const REDIAL_EXITS: Array<{ id: string; label: string }> = [
+  { id: "on_ptp_captured", label: "PTP captured" },
+  { id: "on_dispute", label: "Dispute raised" },
+  { id: "on_callback", label: "Callback captured" },
+  { id: "on_dnc_added", label: "Added to DNC" },
+  { id: "on_settlement", label: "Settlement reached" },
+];
+
+function RedialPolicySection({
+  data,
+  update,
+}: {
+  data: Record<string, unknown>;
+  update: (key: string, value: unknown) => void;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const enabled = (data.redialEnabled as boolean) ?? true;
+  const maxAttempts = (data.redialMaxAttempts as number) ?? 3;
+  const retryOn = (data.redialRetryOn as string[]) ?? ["no_answer", "busy", "voicemail"];
+  const intervalMode = ((data.redialIntervalMode as string) ?? "escalating") as
+    | "fixed"
+    | "escalating"
+    | "custom";
+  const fixedMinutes = (data.redialFixedMinutes as number) ?? 120;
+  const escalatingPreset = ((data.redialEscalatingPreset as string) ?? "gentle") as
+    | "gentle"
+    | "aggressive";
+  const customSchedule = (data.redialCustomSchedule as string) ?? "30m, 2h, 24h";
+  const exitOn = (data.redialExitOn as string[]) ?? ["on_ptp_captured", "on_dispute", "on_dnc_added"];
+
+  const summary = enabled
+    ? `${maxAttempts} attempt${maxAttempts === 1 ? "" : "s"} · ${intervalMode}`
+    : "Off";
+
+  return (
+    <div className="rounded-lg border border-border bg-card/40">
+      <button
+        type="button"
+        onClick={() => setExpanded((s) => !s)}
+        className="flex w-full items-center gap-2 px-3 py-2.5 text-left"
+        aria-expanded={expanded}
+      >
+        <RefreshCcw className="h-3.5 w-3.5 text-primary-400" />
+        <span className="flex-1 text-xs font-semibold text-foreground">Redial Policy</span>
+        <span
+          className={cn(
+            "rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider",
+            enabled
+              ? "bg-primary-500/15 text-primary-400"
+              : "bg-neutral-500/15 text-neutral-400",
+          )}
+        >
+          {summary}
+        </span>
+        {expanded ? (
+          <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+        ) : (
+          <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
+        )}
+      </button>
+
+      {expanded && (
+        <div className="space-y-4 border-t border-border p-3">
+          {/* Enable */}
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-xs font-medium text-foreground">Retry failed calls</p>
+              <p className="mt-0.5 text-[10px] text-muted-foreground">
+                Attempts the call again if the outcome is a retriable one below.
+              </p>
+            </div>
+            <Switch
+              checked={enabled}
+              onCheckedChange={(v) => update("redialEnabled", v)}
+              size="sm"
+            />
+          </div>
+
+          {enabled && (
+            <>
+              {/* Max attempts */}
+              <div data-focus-field="redialMaxAttempts">
+                <Label className="text-[11px] text-muted-foreground">
+                  Max attempts (including first call)
+                </Label>
+                <div className="mt-1 flex items-center gap-2">
+                  <Input
+                    type="number"
+                    min={1}
+                    max={5}
+                    value={maxAttempts}
+                    onChange={(e) => {
+                      const n = Math.min(5, Math.max(1, Number(e.target.value) || 1));
+                      update("redialMaxAttempts", n);
+                    }}
+                    className="h-7 w-16 text-center text-xs tabular-nums"
+                  />
+                  <span className="text-[10px] text-muted-foreground">
+                    Hard cap 5 to protect against runaway loops.
+                  </span>
+                </div>
+              </div>
+
+              {/* Retry outcomes */}
+              <div>
+                <Label className="text-[11px] text-muted-foreground">Retry on outcomes</Label>
+                <div className="mt-1.5 space-y-1">
+                  {REDIAL_OUTCOMES.map((o) => {
+                    const on = retryOn.includes(o.id);
+                    return (
+                      <label
+                        key={o.id}
+                        className="flex cursor-pointer items-center gap-2 text-[11px]"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={on}
+                          onChange={(e) => {
+                            const next = e.target.checked
+                              ? [...retryOn, o.id]
+                              : retryOn.filter((id) => id !== o.id);
+                            update("redialRetryOn", next);
+                          }}
+                          className="h-3 w-3 accent-primary"
+                        />
+                        <span className="text-foreground">{o.label}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Interval mode */}
+              <div>
+                <Label className="text-[11px] text-muted-foreground">Interval strategy</Label>
+                <div className="mt-1.5 grid grid-cols-3 gap-1.5">
+                  {(["fixed", "escalating", "custom"] as const).map((m) => (
+                    <button
+                      key={m}
+                      type="button"
+                      onClick={() => update("redialIntervalMode", m)}
+                      className={cn(
+                        "rounded-md border px-2 py-1.5 text-[10px] capitalize transition-colors",
+                        intervalMode === m
+                          ? "border-primary/60 bg-primary/10 text-primary"
+                          : "border-border bg-muted/10 text-foreground hover:border-neutral-700",
+                      )}
+                    >
+                      {m}
+                    </button>
+                  ))}
+                </div>
+
+                {intervalMode === "fixed" && (
+                  <div className="mt-2 flex items-center gap-2 text-[11px]">
+                    <span className="text-muted-foreground">Retry every</span>
+                    <Input
+                      type="number"
+                      min={5}
+                      value={fixedMinutes}
+                      onChange={(e) =>
+                        update("redialFixedMinutes", Math.max(5, Number(e.target.value) || 60))
+                      }
+                      className="h-7 w-20 text-center text-xs tabular-nums"
+                    />
+                    <span className="text-muted-foreground">minutes</span>
+                  </div>
+                )}
+
+                {intervalMode === "escalating" && (
+                  <div className="mt-2 space-y-1.5">
+                    {(["gentle", "aggressive"] as const).map((preset) => {
+                      const active = escalatingPreset === preset;
+                      const schedule =
+                        preset === "gentle" ? "30m → 2h → 24h" : "10m → 30m → 2h → 8h";
+                      return (
+                        <button
+                          key={preset}
+                          type="button"
+                          onClick={() => update("redialEscalatingPreset", preset)}
+                          className={cn(
+                            "flex w-full items-center justify-between rounded-md border px-2.5 py-1.5 text-[11px] transition-colors",
+                            active
+                              ? "border-primary/60 bg-primary/10 text-primary"
+                              : "border-border bg-muted/10 text-foreground hover:border-neutral-700",
+                          )}
+                        >
+                          <span className="capitalize font-medium">{preset}</span>
+                          <span className="font-mono text-[10px] text-muted-foreground">
+                            {schedule}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {intervalMode === "custom" && (
+                  <div className="mt-2">
+                    <Input
+                      value={customSchedule}
+                      onChange={(e) => update("redialCustomSchedule", e.target.value)}
+                      placeholder="e.g. 30m, 2h, 24h"
+                      className="h-7 text-xs font-mono"
+                    />
+                    <p className="mt-1 text-[10px] text-muted-foreground">
+                      Comma-separated delays: m = minutes, h = hours, d = days. One entry per
+                      retry gap; extras are ignored beyond max attempts.
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {/* Exit conditions */}
+              <div>
+                <Label className="text-[11px] text-muted-foreground">
+                  Exit redial early on
+                </Label>
+                <div className="mt-1.5 space-y-1">
+                  {REDIAL_EXITS.map((x) => {
+                    const on = exitOn.includes(x.id);
+                    return (
+                      <label
+                        key={x.id}
+                        className="flex cursor-pointer items-center gap-2 text-[11px]"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={on}
+                          onChange={(e) => {
+                            const next = e.target.checked
+                              ? [...exitOn, x.id]
+                              : exitOn.filter((id) => id !== x.id);
+                            update("redialExitOn", next);
+                          }}
+                          className="h-3 w-3 accent-primary"
+                        />
+                        <span className="text-foreground">{x.label}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+                <p className="mt-1.5 text-[10px] text-muted-foreground">
+                  If any exit condition fires between attempts, remaining redials are cancelled and
+                  the journey proceeds down the corresponding branch.
+                </p>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+ * Part 6.5 — Role-scoped filter picker.
+ *
+ * Reads from the filter registry, which annotates each filter with a
+ * `requiredRole`. Filters the current CURRENT_ROLE can't see are hidden
+ * (with a footer count of how many are gated). Locked filters that would
+ * appear but require elevation are shown greyed with a lock icon.
+ * ══════════════════════════════════════════════════════════════════════════ */
+
+function RoleScopedFilterPicker({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  const visible = getVisibleFilters(CURRENT_ROLE);
+  const visibleIds = new Set(visible.map((f: FilterDefinition) => f.id));
+  const gatedCount = FILTER_REGISTRY.length - visible.length;
+  return (
+    <>
+      <NativeSelect value={value} onChange={onChange}>
+        <option value="">Select field…</option>
+        {FILTER_REGISTRY.map((f) => {
+          const isVisible = visibleIds.has(f.id);
+          return (
+            <option key={f.id} value={f.id} disabled={!isVisible}>
+              {f.label}
+              {!isVisible ? " · restricted" : ""}
+            </option>
+          );
+        })}
+      </NativeSelect>
+      {gatedCount > 0 && (
+        <p className="mt-1 text-[10px] text-muted-foreground">
+          {gatedCount} filter{gatedCount === 1 ? "" : "s"} require elevated role
+          (viewing as <span className="font-mono">{CURRENT_ROLE}</span>).
+        </p>
+      )}
+    </>
+  );
+}
+

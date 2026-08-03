@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import Link from "next/link"
 import {
   Users,
   User,
@@ -13,7 +14,9 @@ import {
   ChevronLeft,
   ChevronRight,
   Sparkles,
-  AlertTriangle,
+  Plus,
+  X,
+  MinusCircle,
 } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
@@ -44,8 +47,9 @@ import { formatAED } from "@/lib/formatters"
 import { cn } from "@/lib/utils"
 import { borrowers, type Borrower } from "@/data/borrowers"
 import { segments, type Segment } from "@/data/segments"
+import { resolveAudience } from "@/lib/resolve-audience"
 
-import type { ComposerState } from "@/components/composer/composer-view"
+import type { ComposerState, AudienceRule } from "@/components/composer/composer-view"
 
 interface AudiencePanelProps {
   state: ComposerState
@@ -96,8 +100,6 @@ export function AudiencePanel({
   }, [search])
 
   const sampleBorrower = borrowers[sampleIdx % borrowers.length]
-
-  const overlap = selectedSegment.id === "seg-001" // mock overlap warning on first segment
 
   return (
     <TooltipProvider>
@@ -185,89 +187,51 @@ export function AudiencePanel({
 
       {/* ---- Segment mode ---- */}
       {state.mode === "segment" && (
-        <div className="space-y-3">
-          <Select
-            value={state.selectedSegmentId}
-            onValueChange={(v) => update("selectedSegmentId", v ?? "")}
-          >
-            <SelectTrigger className="w-full">
-              <SelectValue placeholder="Select segment" />
-            </SelectTrigger>
-            <SelectContent>
-              {segments.map((s) => (
-                <SelectItem key={s.id} value={s.id}>
-                  {s.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+        <div className="space-y-4">
+          <AudienceBuilder
+            audience={state.audience}
+            onChange={(next) => {
+              update("audience", next)
+              // Keep the legacy single-segment field pointed at the first include
+              // so URL hydration + existing consumers still work.
+              if (next.includeSegmentIds[0]) {
+                update("selectedSegmentId", next.includeSegmentIds[0])
+              }
+            }}
+          />
 
-          <div className="space-y-3 rounded-lg border border-border bg-muted/20 p-3">
-            <div className="flex items-start justify-between gap-2">
-              <div className="min-w-0 flex-1">
-                <div className="truncate font-heading text-sm font-semibold text-foreground">
-                  {selectedSegment.name}
-                </div>
-                <div className="mt-0.5 text-[11px] text-muted-foreground">
-                  {selectedSegment.description}
-                </div>
-              </div>
-              <Badge
-                variant={selectedSegment.type === "Dynamic" ? "default" : "secondary"}
-                className="shrink-0"
-              >
-                {selectedSegment.type}
-              </Badge>
+          <div className="space-y-1.5 rounded-lg border border-border bg-muted/20 p-3">
+            <div className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+              How many we can reach
             </div>
-
-            <div className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
-              <Users className="h-3.5 w-3.5 text-primary" />
-              {selectedSegment.borrowers.toLocaleString()} borrowers
-            </div>
-
-            <div className="space-y-1.5">
-              <div className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-                How many we can reach
-              </div>
-              <p className="text-[10px] leading-relaxed text-muted-foreground/80">
-                % of borrowers in this group with valid contact info per channel
-              </p>
-              <ReachBar icon={<Mail className="h-3 w-3" />} label="Email" pct={REACH.email} />
-              <ReachBar
-                icon={<MessageSquare className="h-3 w-3" />}
-                label="SMS"
-                pct={REACH.sms}
-              />
-              <ReachBar
-                icon={<MessageCircle className="h-3 w-3" />}
-                label="WhatsApp"
-                pct={REACH.whatsapp}
-              />
-            </div>
+            <p className="text-[10px] leading-relaxed text-muted-foreground/80">
+              % of borrowers with valid contact info per channel
+            </p>
+            <ReachBar icon={<Mail className="h-3 w-3" />} label="Email" pct={REACH.email} />
+            <ReachBar
+              icon={<MessageSquare className="h-3 w-3" />}
+              label="SMS"
+              pct={REACH.sms}
+            />
+            <ReachBar
+              icon={<MessageCircle className="h-3 w-3" />}
+              label="WhatsApp"
+              pct={REACH.whatsapp}
+            />
 
             <Tooltip>
               <TooltipTrigger
                 render={
-                  <div className="flex cursor-help items-center gap-1.5 text-[11px] text-destructive" />
+                  <div className="mt-1 flex cursor-help items-center gap-1.5 text-[11px] text-destructive" />
                 }
               >
                 <Shield className="h-3 w-3" />
-                <span>39 excluded (Do Not Contact list)</span>
+                <span>Do Not Contact list is excluded automatically</span>
               </TooltipTrigger>
               <TooltipContent>
                 Borrowers who opted out of contact will be skipped automatically.
               </TooltipContent>
             </Tooltip>
-
-            {overlap && (
-              <div className="flex items-start gap-1.5 rounded border border-amber-500/30 bg-amber-500/10 p-2 text-[11px] text-amber-400">
-                <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
-                <span>
-                  Overlaps with <span className="font-medium">PTP Broken Promise</span>{" "}
-                  campaign (17 borrowers)
-                </span>
-              </div>
-            )}
           </div>
 
           <div className="space-y-2 rounded-lg border border-dashed border-border bg-muted/10 p-3">
@@ -405,6 +369,257 @@ function ReachBar({
           style={{ width: `${pct}%` }}
         />
       </div>
+    </div>
+  )
+}
+
+/* ─────────────────── Audience builder — include / exclude ─────────────────── */
+
+function AudienceBuilder({
+  audience,
+  onChange,
+}: {
+  audience: AudienceRule
+  onChange: (next: AudienceRule) => void
+}) {
+  const resolved = React.useMemo(() => resolveAudience(audience, segments), [audience])
+
+  const toggleInclude = (id: string) => {
+    const has = audience.includeSegmentIds.includes(id)
+    onChange({
+      ...audience,
+      includeSegmentIds: has
+        ? audience.includeSegmentIds.filter((s) => s !== id)
+        : [...audience.includeSegmentIds, id],
+    })
+  }
+  const toggleExclude = (id: string) => {
+    const has = audience.excludeSegmentIds.includes(id)
+    onChange({
+      ...audience,
+      excludeSegmentIds: has
+        ? audience.excludeSegmentIds.filter((s) => s !== id)
+        : [...audience.excludeSegmentIds, id],
+    })
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Live resolved count — the money shot at the top */}
+      <div className="rounded-lg border border-primary/30 bg-primary/5 p-3">
+        <div className="flex items-baseline justify-between gap-3">
+          <div>
+            <div className="text-[10px] font-medium uppercase tracking-wider text-primary/80">
+              Will receive this
+            </div>
+            <div className="mt-0.5 flex items-baseline gap-1.5">
+              <span className="font-heading text-2xl font-bold tabular-nums text-primary">
+                {resolved.final.toLocaleString()}
+              </span>
+              <span className="text-[11px] text-primary/80">
+                borrower{resolved.final === 1 ? "" : "s"}
+              </span>
+            </div>
+          </div>
+          <Users className="h-5 w-5 text-primary/60" />
+        </div>
+        {(resolved.removedByDedupe > 0 || resolved.removedByExclude > 0) && (
+          <div className="mt-2 space-y-0.5 border-t border-primary/20 pt-2 text-[10px] text-muted-foreground">
+            {resolved.removedByDedupe > 0 && (
+              <div className="flex justify-between">
+                <span>Deduped</span>
+                <span className="tabular-nums">−{resolved.removedByDedupe.toLocaleString()}</span>
+              </div>
+            )}
+            {resolved.removedByExclude > 0 && (
+              <div className="flex justify-between">
+                <span>Excluded</span>
+                <span className="tabular-nums">−{resolved.removedByExclude.toLocaleString()}</span>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Include */}
+      <SegmentList
+        label="Include"
+        helper={
+          audience.includeSegmentIds.length > 1
+            ? "Combine multiple segments"
+            : "Pick one or more segments"
+        }
+        selectedIds={audience.includeSegmentIds}
+        onToggle={toggleInclude}
+        accent="emerald"
+        combiner={
+          audience.includeSegmentIds.length > 1 ? (
+            <Select
+              value={audience.includeCombiner}
+              onValueChange={(v) =>
+                onChange({
+                  ...audience,
+                  includeCombiner: (v as "any" | "all") ?? "any",
+                })
+              }
+            >
+              <SelectTrigger className="h-7 w-auto text-[11px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="any">Users in ANY of these segments</SelectItem>
+                <SelectItem value="all">Users in ALL of these segments</SelectItem>
+              </SelectContent>
+            </Select>
+          ) : null
+        }
+      />
+
+      {/* Exclude */}
+      <SegmentList
+        label="Exclude"
+        helper="Users in ANY of these segments will be dropped"
+        selectedIds={audience.excludeSegmentIds}
+        onToggle={toggleExclude}
+        accent="red"
+        combiner={null}
+      />
+
+      {/* Remove duplicates toggle */}
+      <label className="flex cursor-pointer items-center justify-between gap-3 rounded-md border border-border bg-muted/20 px-3 py-2">
+        <div className="min-w-0">
+          <div className="text-[12px] font-medium text-foreground">Remove duplicates</div>
+          <div className="mt-0.5 text-[10px] leading-relaxed text-muted-foreground">
+            Send once even if a borrower is in more than one included segment.
+          </div>
+        </div>
+        <input
+          type="checkbox"
+          checked={audience.removeDuplicates}
+          onChange={(e) => onChange({ ...audience, removeDuplicates: e.target.checked })}
+          className="h-4 w-4 shrink-0 accent-emerald-500"
+        />
+      </label>
+    </div>
+  )
+}
+
+function SegmentList({
+  label,
+  helper,
+  selectedIds,
+  onToggle,
+  accent,
+  combiner,
+}: {
+  label: string
+  helper: string
+  selectedIds: string[]
+  onToggle: (id: string) => void
+  accent: "emerald" | "red"
+  combiner: React.ReactNode
+}) {
+  const [pickerOpen, setPickerOpen] = React.useState(false)
+  const selected = selectedIds
+    .map((id) => segments.find((s) => s.id === id))
+    .filter(Boolean) as Segment[]
+  const remaining = segments.filter((s) => !selectedIds.includes(s.id))
+
+  const chipCls =
+    accent === "emerald"
+      ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-300"
+      : "border-red-500/40 bg-red-500/10 text-red-300"
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-baseline justify-between gap-2">
+        <div>
+          <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+            {label}
+          </div>
+          <div className="text-[10px] text-muted-foreground/80">{helper}</div>
+        </div>
+        {combiner}
+      </div>
+
+      <div className="space-y-1.5">
+        {selected.map((seg) => (
+          <div
+            key={seg.id}
+            className={cn(
+              "flex items-center justify-between gap-2 rounded-md border px-2.5 py-1.5",
+              chipCls,
+            )}
+          >
+            <div className="min-w-0 flex-1">
+              <div className="truncate text-[12px] font-medium">{seg.name}</div>
+              <div className="text-[10px] opacity-70">
+                {seg.borrowers.toLocaleString()} borrowers · {seg.type}
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => onToggle(seg.id)}
+              className="rounded p-0.5 hover:bg-black/20"
+              aria-label={`Remove ${seg.name}`}
+            >
+              <X className="h-3 w-3" />
+            </button>
+          </div>
+        ))}
+      </div>
+
+      <Popover open={pickerOpen} onOpenChange={setPickerOpen}>
+        <PopoverTrigger
+          render={
+            <Button variant="outline" size="sm" className="h-7 w-full text-[11px]" />
+          }
+        >
+          {accent === "red" ? (
+            <MinusCircle className="h-3 w-3" />
+          ) : (
+            <Plus className="h-3 w-3" />
+          )}
+          Add segment
+        </PopoverTrigger>
+        <PopoverContent align="start" className="w-[280px] p-1">
+          <div className="max-h-64 space-y-0.5 overflow-y-auto">
+            {remaining.length === 0 ? (
+              <p className="px-2.5 py-2 text-[11px] text-muted-foreground">
+                No more segments to add.
+              </p>
+            ) : (
+              remaining.map((seg) => (
+                <button
+                  key={seg.id}
+                  type="button"
+                  onClick={() => {
+                    onToggle(seg.id)
+                    setPickerOpen(false)
+                  }}
+                  className="flex w-full flex-col items-start gap-0.5 rounded px-2 py-1.5 text-left hover:bg-muted"
+                >
+                  <span className="text-[12px] font-medium text-foreground">
+                    {seg.name}
+                  </span>
+                  <span className="text-[10px] text-muted-foreground">
+                    {seg.borrowers.toLocaleString()} borrowers · {seg.description}
+                  </span>
+                </button>
+              ))
+            )}
+          </div>
+          <div className="mt-1 border-t border-border pt-1">
+            <Link
+              href="/segments/create"
+              className="flex items-center gap-1.5 rounded px-2 py-1.5 text-[11px] font-medium text-emerald-300 hover:bg-muted"
+            >
+              <Plus className="h-3 w-3" />
+              Create new segment
+            </Link>
+          </div>
+        </PopoverContent>
+      </Popover>
     </div>
   )
 }

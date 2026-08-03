@@ -139,7 +139,7 @@ function CallbackRow({ cb }: { cb: ScheduledCallback }) {
         <div className="mt-0.5 text-[9px] text-muted-foreground/70">UTC {fireDate.toISOString().replace("T", " ").slice(0, 16)}</div>
       </td>
       <td className="px-4 py-2.5">
-        <span className={cn("text-[11px]", isCancelled ? "text-zinc-500" : "text-muted-foreground")}>
+        <span className={cn("text-[11px]", isCancelled ? "text-neutral-500" : "text-muted-foreground")}>
           {detailText}
         </span>
       </td>
@@ -183,10 +183,10 @@ function StatusIndicator({ cb }: { cb: ScheduledCallback }) {
       title={tooltipLines.join("\n")}
       className={cn(
         "inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[10px] font-medium",
-        tone === "emerald" && "border-emerald-500/30 bg-emerald-500/10 text-emerald-400",
-        tone === "amber" && "border-amber-500/30 bg-amber-500/10 text-amber-400",
-        tone === "red" && "border-red-500/30 bg-red-500/10 text-red-400",
-        tone === "zinc" && "border-zinc-700 bg-zinc-800/40 text-zinc-400",
+        tone === "emerald" && "border-primary-500/30 bg-primary-500/10 text-primary-400",
+        tone === "amber" && "border-warning-500/30 bg-warning-500/10 text-warning-400",
+        tone === "red" && "border-error-500/30 bg-error-500/10 text-error-400",
+        tone === "zinc" && "border-neutral-700 bg-neutral-800/40 text-neutral-400",
       )}
     >
       <PhoneIncoming className={cn("h-2.5 w-2.5", cb.status === "cancelled" && "line-through")} />
@@ -213,10 +213,10 @@ function Kpi({
         <Icon
           className={cn(
             "h-3.5 w-3.5",
-            tone === "emerald" && "text-emerald-400",
-            tone === "amber" && "text-amber-400",
-            tone === "red" && "text-red-400",
-            tone === "zinc" && "text-zinc-500",
+            tone === "emerald" && "text-primary-400",
+            tone === "amber" && "text-warning-400",
+            tone === "red" && "text-error-400",
+            tone === "zinc" && "text-neutral-500",
           )}
         />
       </div>

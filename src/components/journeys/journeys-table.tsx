@@ -37,15 +37,15 @@ import { lenders } from "@/data/lenders";
 
 const journeyStatusConfig: Record<JourneyStatus, { className: string; label: string }> = {
   running: {
-    className: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
+    className: "bg-primary-500/10 text-primary-400 border-primary-500/20",
     label: "Running",
   },
   scheduled: {
-    className: "bg-amber-500/10 text-amber-400 border-amber-500/20",
+    className: "bg-warning-500/10 text-warning-400 border-warning-500/20",
     label: "Scheduled",
   },
   draft: {
-    className: "bg-zinc-500/10 text-zinc-400 border-zinc-500/20",
+    className: "bg-neutral-500/10 text-neutral-400 border-neutral-500/20",
     label: "Draft",
   },
   completed: {
@@ -53,7 +53,7 @@ const journeyStatusConfig: Record<JourneyStatus, { className: string; label: str
     label: "Completed",
   },
   paused: {
-    className: "bg-red-500/10 text-red-400 border-red-500/20",
+    className: "bg-error-500/10 text-error-400 border-error-500/20",
     label: "Paused",
   },
 };

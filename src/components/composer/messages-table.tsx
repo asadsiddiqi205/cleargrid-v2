@@ -29,6 +29,7 @@ import {
   Mail,
   MessageSquare,
   MessageCircle,
+  Repeat,
 } from "lucide-react";
 import {
   messagesList,
@@ -38,6 +39,39 @@ import {
 } from "@/data/messages";
 import { lenders } from "@/data/lenders";
 import { MessageStatusPills } from "@/components/composer/message-funnel";
+import { cn } from "@/lib/utils";
+
+/**
+ * Send-type classification for the Type filter.
+ *   - recurring — parent series OR occurrence copies (anything with recurring meta)
+ *   - scheduled — one-off messages queued for a future time
+ *   - immediate — one-off messages sent right away (or drafts/failed)
+ */
+type MessageType = "recurring" | "scheduled" | "immediate";
+
+function classifyType(m: MessageListItem): MessageType {
+  if (m.recurring) return "recurring";
+  if (m.status === "scheduled") return "scheduled";
+  return "immediate";
+}
+
+const TYPE_CONFIG: Record<MessageType, { label: string; className: string; description: string }> = {
+  recurring: {
+    label: "Recurring",
+    className: "bg-primary/10 text-primary border-primary/30",
+    description: "Parent series and their occurrence copies",
+  },
+  scheduled: {
+    label: "Scheduled",
+    className: "bg-amber-500/10 text-amber-300 border-amber-500/30",
+    description: "One-off messages queued for a specific future time",
+  },
+  immediate: {
+    label: "Immediate",
+    className: "bg-zinc-500/15 text-zinc-300 border-zinc-500/30",
+    description: "One-off messages sent right away (or drafts/failed)",
+  },
+};
 
 const STATUS_CONFIG: Record<MessageStatus, { className: string; label: string }> = {
   draft: {
@@ -93,6 +127,7 @@ export function MessagesTable() {
   const [search, setSearch] = useState("");
   const [channelFilter, setChannelFilter] = useState(ALL);
   const [statusFilter, setStatusFilter] = useState(ALL);
+  const [typeFilter, setTypeFilter] = useState<string>(ALL);
   const [lenderFilter, setLenderFilter] = useState(ALL);
   const [createdByFilter, setCreatedByFilter] = useState(ALL);
   const [createdDateFrom, setCreatedDateFrom] = useState("");
@@ -100,9 +135,14 @@ export function MessagesTable() {
 
   const filtered = useMemo(() => {
     return items.filter((m) => {
-      if (search && !m.subject.toLowerCase().includes(search.toLowerCase())) return false;
+      if (
+        search &&
+        !`${m.campaignName} ${m.subject}`.toLowerCase().includes(search.toLowerCase())
+      )
+        return false;
       if (channelFilter !== ALL && m.channel !== channelFilter) return false;
       if (statusFilter !== ALL && m.status !== statusFilter) return false;
+      if (typeFilter !== ALL && classifyType(m) !== typeFilter) return false;
       if (lenderFilter !== ALL && m.lenderId !== lenderFilter) return false;
       if (createdByFilter !== ALL && m.createdBy !== createdByFilter) return false;
       if (createdDateFrom && m.createdAt.slice(0, 10) < createdDateFrom) return false;
@@ -114,6 +154,7 @@ export function MessagesTable() {
     search,
     channelFilter,
     statusFilter,
+    typeFilter,
     lenderFilter,
     createdByFilter,
     createdDateFrom,
@@ -123,6 +164,7 @@ export function MessagesTable() {
   const hasFilters =
     channelFilter !== ALL ||
     statusFilter !== ALL ||
+    typeFilter !== ALL ||
     lenderFilter !== ALL ||
     createdByFilter !== ALL ||
     createdDateFrom ||
@@ -132,6 +174,7 @@ export function MessagesTable() {
   function clearFilters() {
     setChannelFilter(ALL);
     setStatusFilter(ALL);
+    setTypeFilter(ALL);
     setLenderFilter(ALL);
     setCreatedByFilter(ALL);
     setCreatedDateFrom("");
@@ -173,7 +216,7 @@ export function MessagesTable() {
             <Input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search by subject..."
+              placeholder="Search by campaign or subject..."
               className="h-9 w-[220px] pl-8 text-xs"
             />
           </div>
@@ -190,6 +233,21 @@ export function MessagesTable() {
               <SelectItem value="email">Email</SelectItem>
               <SelectItem value="sms">SMS</SelectItem>
               <SelectItem value="whatsapp">WhatsApp</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="space-y-1.5">
+          <Label className="text-[11px] uppercase tracking-wider text-muted-foreground">Type</Label>
+          <Select value={typeFilter} onValueChange={(v) => setTypeFilter(v ?? ALL)}>
+            <SelectTrigger className="h-9 w-[150px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={ALL}>All types</SelectItem>
+              <SelectItem value="recurring">Recurring</SelectItem>
+              <SelectItem value="scheduled">Scheduled</SelectItem>
+              <SelectItem value="immediate">Immediate</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -283,7 +341,7 @@ export function MessagesTable() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Subject</TableHead>
+              <TableHead>Campaign</TableHead>
               <TableHead>Channel</TableHead>
               <TableHead>Audience</TableHead>
               <TableHead>Lender</TableHead>
@@ -307,10 +365,59 @@ export function MessagesTable() {
                       href={`/email-generator/${m.id}`}
                       className="line-clamp-1 text-sm font-medium text-primary hover:underline underline-offset-4"
                     >
-                      {m.subject}
+                      {m.campaignName}
                     </Link>
+                    <span className="mt-0.5 block truncate text-[11px] text-muted-foreground">
+                      {m.subject}
+                    </span>
+                    <div className="mt-1 flex flex-wrap items-center gap-1">
+                      {/* Send-type chip: Recurring / Scheduled / Immediate */}
+                      {(() => {
+                        const t = classifyType(m);
+                        const cfg = TYPE_CONFIG[t];
+                        return (
+                          <span
+                            className={cn(
+                              "inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wider",
+                              cfg.className,
+                            )}
+                          >
+                            {t === "recurring" && <Repeat className="h-2.5 w-2.5" />}
+                            {cfg.label}
+                          </span>
+                        );
+                      })()}
+                      {/* Recurring detail — parent shows series status + count;
+                          occurrence shows its wave number. */}
+                      {m.recurring?.isParent && (
+                        <span
+                          className={cn(
+                            "inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[9px] font-medium",
+                            m.recurring.status === "paused" &&
+                              "border-amber-500/40 bg-amber-500/10 text-amber-300",
+                            m.recurring.status === "ended" &&
+                              "border-zinc-500/40 bg-zinc-500/10 text-zinc-300",
+                            m.recurring.status === "active" &&
+                              "border-primary/40 bg-primary/10 text-primary",
+                          )}
+                        >
+                          Series · {m.recurring.status} · {m.recurring.totalOccurrences}{" "}
+                          occurrence{m.recurring.totalOccurrences === 1 ? "" : "s"}
+                        </span>
+                      )}
+                      {m.recurring && !m.recurring.isParent && (
+                        <span className="inline-flex items-center gap-1 rounded-md border border-primary/30 bg-primary/[0.06] px-1.5 py-0.5 text-[9px] font-medium text-primary">
+                          Wave {m.recurring.occurrenceIndex} of {m.recurring.totalOccurrences}
+                        </span>
+                      )}
+                      {m.variations && m.variations.length > 1 && (
+                        <span className="inline-flex items-center gap-1 rounded-md border border-primary/30 bg-primary/[0.06] px-1.5 py-0.5 text-[9px] font-medium text-primary">
+                          A/B · {m.variations.length} variations
+                        </span>
+                      )}
+                    </div>
                     {m.playbookName && (
-                      <span className="mt-0.5 block text-[10px] text-muted-foreground">
+                      <span className="mt-0.5 block text-[10px] text-muted-foreground/70">
                         Playbook: {m.playbookName}
                       </span>
                     )}

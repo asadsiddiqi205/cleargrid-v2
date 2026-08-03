@@ -761,7 +761,7 @@ export function JourneyHandoffEntryForm({ data, update }: BlockConfigFormProps) 
             ))}
           </div>
           {sourceJourneys.length === 0 && (
-            <p className="mt-1 text-[10px] text-amber-400">Select at least one source journey.</p>
+            <p className="mt-1 text-[10px] text-warning-400">Select at least one source journey.</p>
           )}
         </div>
       )}
@@ -1247,7 +1247,7 @@ export function ActionPathSplitForm({ data, update, upstreamActionType }: BlockC
             {ACTION_PATH_LABEL[upstreamActionType]}
           </div>
         ) : (
-          <div className="rounded-md border border-red-500/40 bg-red-500/10 px-2 py-1.5 text-xs text-red-300">
+          <div className="rounded-md border border-error-500/40 bg-error-500/10 px-2 py-1.5 text-xs text-error-300">
             Action Path Split must follow an action node.
           </div>
         )}
@@ -1468,7 +1468,7 @@ export function BestChannelForm({ data, update }: BlockConfigFormProps) {
           One outgoing edge per selected channel, plus a &quot;No reachable channel&quot; fallback.
         </p>
         {eligibleChannels.length === 0 && (
-          <p className="mt-1 text-[10px] text-amber-400">Select at least one channel.</p>
+          <p className="mt-1 text-[10px] text-warning-400">Select at least one channel.</p>
         )}
       </div>
       <div>
@@ -1667,7 +1667,7 @@ export function WaitProfileChangeForm({ data, update }: BlockConfigFormProps) {
           ))}
         </NS>
         {!watchAttribute && (
-          <p className="mt-1 text-[10px] text-amber-400">Required.</p>
+          <p className="mt-1 text-[10px] text-warning-400">Required.</p>
         )}
       </div>
       <div className="grid grid-cols-2 gap-2">
@@ -1779,7 +1779,7 @@ export function TrafficSplitForm({ data, update }: BlockConfigFormProps) {
       ))}
       <div
         className={`rounded px-2 py-1 text-center text-[10px] font-medium ${
-          sum === 100 ? "bg-emerald-500/10 text-emerald-400" : "bg-red-500/10 text-red-400"
+          sum === 100 ? "bg-primary-500/10 text-primary-400" : "bg-error-500/10 text-error-400"
         }`}
       >
         Total: {sum}%{sum !== 100 && " (must equal 100%)"}
@@ -2547,6 +2547,8 @@ export function getBlockConfigForm(
 
     // conditions
     decision_split: DecisionSplitForm,
+    // Conditional Switch (Command block) — reuses Profile-Check-style multi-branch form
+    conditional_switch: ProfileCheckForm,
     audience_split: AudienceSplitForm,
     action_path: ActionPathSplitForm,
     has_done_event: HasDoneEventForm,
@@ -2561,6 +2563,8 @@ export function getBlockConfigForm(
     wait_for_event: WaitForEventForm,
     wait_profile_change: WaitProfileChangeForm,
     pause: PauseHoldForm,
+    // Command's Pause / Hold (renamed from the descoped `pause` type)
+    pause_hold: PauseHoldForm,
     traffic_split: TrafficSplitForm,
     end_journey: EndJourneyForm,
 
@@ -2570,6 +2574,9 @@ export function getBlockConfigForm(
     update_profile: UpdateProfileForm,
     tag_management: TagManagementForm,
     consent_management: ConsentManagementForm,
+    // Command splits Consent/DNC into two: DNC Gate (a condition) + Add to DNC (a mutation).
+    dnc_gate: ReachabilityCheckForm,
+    add_to_dnc: ConsentManagementForm,
     catalog_lookup: CatalogLookupForm,
 
     // integrations

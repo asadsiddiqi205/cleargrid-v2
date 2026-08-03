@@ -1,6 +1,8 @@
 "use client"
 
 import * as React from "react"
+import Link from "next/link"
+import { useRouter } from "next/navigation"
 import {
   Sparkles,
   Mail,
@@ -80,8 +82,10 @@ import {
   type SlotValue,
 } from "@/data/rich-email-templates"
 import { EmailAiGenerateMode } from "@/components/composer/email-ai-generate-mode"
-import { EmailBlockBuilder } from "@/components/composer/email-block-builder"
 import { AiAssistPanel, AI_ASSIST_ACTIONS } from "@/components/composer/ai-assist-panel"
+import { SenderProfilePicker } from "@/components/composer/sender-profile-picker"
+import { VariationsPanel } from "@/components/composer/variations-panel"
+import { richEmailTemplates } from "@/data/rich-email-templates"
 import { playbooks, type Playbook } from "@/data/playbooks"
 
 interface EditorPanelProps {
@@ -499,15 +503,28 @@ export function EditorPanel({ state, update }: EditorPanelProps) {
 
       {/* ---- Body ---- */}
       <div className="flex-1 min-h-0 overflow-y-auto">
-        <div className="mx-auto max-w-3xl px-6 py-6">
-          {/* ---- EMAIL ---- */}
+        <div className="mx-auto max-w-3xl px-6 py-6 space-y-4">
+          {/* Campaign name — required across all channels. Send is blocked until this is filled. */}
+          <CampaignNameField
+            value={state.campaignName}
+            onChange={(v) => update("campaignName", v)}
+          />
+
+          {/* ---- EMAIL — the tab strip and all per-variation editor
+                 content (sender, mode, template, subject, body) live
+                 inside a single VariationsPanel container so the tabs
+                 visually own the content below and the accent color
+                 flows continuously down the left edge. ---- */}
           {state.channel === "email" && (
-            <div className="space-y-4">
+            <VariationsPanel state={state} update={update}>
+              <ActiveVariationSenderPicker state={state} update={update} />
+              <div className="space-y-4">
               {/* Three-mode selector */}
               <EmailModeSelector
                 mode={state.emailMode}
                 onChange={(m) => update("emailMode", m)}
               />
+
 
               {/* ---- Template Mode (rich, locked-template canvas) ---- */}
               {state.emailMode === "template" && (
@@ -536,16 +553,16 @@ export function EditorPanel({ state, update }: EditorPanelProps) {
                       className="w-full border-b border-border/60 bg-transparent pb-2 text-xs text-muted-foreground outline-none placeholder:text-muted-foreground/70"
                     />
 
-                    {/* Use blocks toggle */}
-                    <div className="flex items-center justify-between">
-                      <Button
-                        variant={state.useBlocks ? "default" : "outline"}
-                        size="sm"
-                        onClick={() => update("useBlocks", !state.useBlocks)}
+                    {/* Toolbar: AI Assist + Open in v3 builder */}
+                    <div className="flex items-center justify-end gap-2">
+                      <a
+                        href="/email-generator/builder/new"
+                        className="inline-flex h-7 items-center gap-1.5 rounded-md border border-emerald-500/30 bg-emerald-500/5 px-2.5 text-[11px] font-medium text-emerald-300 transition-colors hover:bg-emerald-500/15"
                       >
-                        <Blocks className="h-3.5 w-3.5" />
-                        {state.useBlocks ? "Using blocks" : "Use blocks"}
-                      </Button>
+                        <Blocks className="h-3 w-3" />
+                        Open v3 builder
+                      </a>
+                      <CreateJourneyDropdown channel="email" templateName={state.subject || "Composer Draft"} />
                       <Button
                         variant={aiAssistOpen ? "default" : "outline"}
                         size="sm"
@@ -559,54 +576,44 @@ export function EditorPanel({ state, update }: EditorPanelProps) {
                       </Button>
                     </div>
 
-                    {/* Block builder OR plain textarea */}
-                    {state.useBlocks ? (
-                      <EmailBlockBuilder
-                        blocks={state.emailBlocks}
-                        onChange={(blocks) => update("emailBlocks", blocks)}
-                      />
-                    ) : (
-                      <>
-                        <div className="relative">
-                          <Textarea
-                            ref={bodyRef}
-                            value={state.body}
-                            onChange={(e) => update("body", e.target.value)}
-                            onSelect={handleSelect("body")}
-                            onBlur={() => window.setTimeout(selectionLost, 150)}
-                            placeholder="Write your message here..."
-                            className={cn(
-                              "min-h-[320px] resize-none border-none bg-transparent p-0 text-base leading-relaxed shadow-none transition-opacity duration-300 focus-visible:ring-0",
-                              animating && "opacity-30"
-                            )}
-                          />
-                          {animating && (
-                            <div className="pointer-events-none absolute inset-0 -m-2 animate-pulse rounded-lg border border-primary/40 bg-primary/5" />
-                          )}
-                        </div>
-
-                        {/* Token highlight preview */}
-                        {state.body && (
-                          <div className="mt-4 rounded-lg border border-dashed border-border bg-muted/10 p-3">
-                            <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                              Tokens in draft
-                            </div>
-                            <TokenizedPreview text={state.body} />
-                          </div>
+                    {/* Plain textarea — for rows/columns/blocks, use the v3 builder. */}
+                    <div className="relative">
+                      <Textarea
+                        ref={bodyRef}
+                        value={state.body}
+                        onChange={(e) => update("body", e.target.value)}
+                        onSelect={handleSelect("body")}
+                        onBlur={() => window.setTimeout(selectionLost, 150)}
+                        placeholder="Write your message here..."
+                        className={cn(
+                          "min-h-[320px] resize-none border-none bg-transparent p-0 text-base leading-relaxed shadow-none transition-opacity duration-300 focus-visible:ring-0",
+                          animating && "opacity-30"
                         )}
+                      />
+                      {animating && (
+                        <div className="pointer-events-none absolute inset-0 -m-2 animate-pulse rounded-lg border border-primary/40 bg-primary/5" />
+                      )}
+                    </div>
 
-                        <EditorToolbar
-                          onInsertToken={insertToken}
-                          aiButtonRef={aiButtonRef}
-                          aiOpen={aiMenuOpen}
-                          setAiOpen={setAiMenuOpen}
-                          onAiAction={runAIAction}
-                          charCount={state.body.length}
-                          executionLevel={executionLevel}
-                          channel="email"
-                        />
-                      </>
+                    {state.body && (
+                      <div className="mt-4 rounded-lg border border-dashed border-border bg-muted/10 p-3">
+                        <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                          Tokens in draft
+                        </div>
+                        <TokenizedPreview text={state.body} />
+                      </div>
                     )}
+
+                    <EditorToolbar
+                      onInsertToken={insertToken}
+                      aiButtonRef={aiButtonRef}
+                      aiOpen={aiMenuOpen}
+                      setAiOpen={setAiMenuOpen}
+                      onAiAction={runAIAction}
+                      charCount={state.body.length}
+                      executionLevel={executionLevel}
+                      channel="email"
+                    />
                   </div>
 
                   {/* AI Assist sidebar */}
@@ -617,12 +624,16 @@ export function EditorPanel({ state, update }: EditorPanelProps) {
                   />
                 </div>
               )}
-            </div>
+              </div>
+            </VariationsPanel>
           )}
 
           {/* ---- SMS ---- */}
           {state.channel === "sms" && (
             <div className="space-y-3">
+              <div className="flex items-center justify-end">
+                <CreateJourneyDropdown channel="sms" templateName="Composer SMS Draft" />
+              </div>
               <div className="relative">
                 <Textarea
                   ref={smsRef}
@@ -670,11 +681,12 @@ export function EditorPanel({ state, update }: EditorPanelProps) {
           {/* ---- WHATSAPP ---- */}
           {state.channel === "whatsapp" && (
             <div className="space-y-4">
-              <div className="flex items-center gap-2">
+              <div className="flex items-center justify-between gap-2">
                 <Badge className="bg-primary/15 text-primary ring-1 ring-primary/30">
                   <BadgeCheck className="h-3 w-3" />
                   Approved Templates Only
                 </Badge>
+                <CreateJourneyDropdown channel="whatsapp" templateName="Composer WhatsApp Draft" />
               </div>
 
               <div className="space-y-2">
@@ -739,6 +751,118 @@ interface EmailModeSelectorProps {
   onChange: (mode: EmailMode) => void
 }
 
+/* ─────────────── Active-variation sender picker ─────────────── */
+
+/**
+ * Sender picker that reads/writes the ACTIVE variation's per-variation
+ * sender fields (senderProfileId + free-form From identity). Falls back to
+ * the campaign-level defaults when the variation hasn't overridden.
+ */
+function ActiveVariationSenderPicker({
+  state,
+  update,
+}: {
+  state: ComposerState
+  update: <K extends keyof ComposerState>(key: K, value: ComposerState[K]) => void
+}) {
+  const active = state.variations.find((v) => v.id === state.activeVariationId)
+  if (!active) return null
+
+  const effectiveId = active.senderProfileId ?? state.senderProfileId
+  const effectiveFromName = active.senderFromName ?? state.customFromName
+  const effectiveFromEmail = active.senderFromEmail ?? state.customFromEmail
+  const effectiveReplyTo = active.senderReplyTo ?? state.customReplyTo
+
+  const patchActive = (patch: Partial<typeof active>) => {
+    update(
+      "variations",
+      state.variations.map((v) =>
+        v.id === state.activeVariationId ? { ...v, ...patch } : v,
+      ),
+    )
+  }
+
+  return (
+    <SenderProfilePicker
+      lenderId={
+        state.richTemplateId
+          ? richEmailTemplates.find((t) => t.id === state.richTemplateId)?.lenderId ?? null
+          : null
+      }
+      value={effectiveId}
+      onChange={(id) => {
+        // First variation with no per-var setting → write to campaign default
+        // for backwards compat; otherwise store on the active variation.
+        if (state.variations.length === 1 && !active.senderProfileId) {
+          update("senderProfileId", id)
+        } else {
+          patchActive({ senderProfileId: id })
+        }
+      }}
+      customFromName={effectiveFromName}
+      customFromEmail={effectiveFromEmail}
+      customReplyTo={effectiveReplyTo}
+      onCustomChange={(patch) => {
+        if (state.variations.length === 1 && !active.senderFromName && !active.senderFromEmail && !active.senderReplyTo) {
+          if (patch.customFromName !== undefined) update("customFromName", patch.customFromName)
+          if (patch.customFromEmail !== undefined) update("customFromEmail", patch.customFromEmail)
+          if (patch.customReplyTo !== undefined) update("customReplyTo", patch.customReplyTo)
+        } else {
+          patchActive({
+            senderFromName: patch.customFromName !== undefined ? patch.customFromName : active.senderFromName,
+            senderFromEmail: patch.customFromEmail !== undefined ? patch.customFromEmail : active.senderFromEmail,
+            senderReplyTo: patch.customReplyTo !== undefined ? patch.customReplyTo : active.senderReplyTo,
+          })
+        }
+      }}
+    />
+  )
+}
+
+/* ─────────────────── Campaign name (required) ─────────────────── */
+
+function CampaignNameField({
+  value,
+  onChange,
+}: {
+  value: string
+  onChange: (v: string) => void
+}) {
+  const [touched, setTouched] = React.useState(false)
+  const missing = !value.trim()
+  const showError = touched && missing
+  return (
+    <div className="rounded-lg border bg-muted/10 px-3 py-2.5 transition-colors"
+      style={{
+        borderColor: showError ? "rgba(239,68,68,0.4)" : undefined,
+      }}
+    >
+      <label className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+        Campaign name <span className="text-red-400">*</span>
+      </label>
+      <input
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        onBlur={() => setTouched(true)}
+        placeholder="e.g. Mashreq · June Payment Reminder · Wave 2"
+        className={cn(
+          "mt-1 w-full bg-transparent text-sm font-medium text-foreground outline-none placeholder:text-muted-foreground/60",
+        )}
+      />
+      <p
+        className={cn(
+          "mt-1 text-[10px] leading-relaxed",
+          showError ? "text-red-400" : "text-muted-foreground/70",
+        )}
+      >
+        {showError
+          ? "Required — this is the label used in the message listing + analytics."
+          : "Shown as the primary title in the message listing. The subject line is separate."}
+      </p>
+    </div>
+  )
+}
+
 function EmailModeSelector({ mode, onChange }: EmailModeSelectorProps) {
   const modes: { id: EmailMode; label: string; icon: React.ComponentType<{ className?: string }>; desc: string }[] = [
     { id: "template", label: "Template", icon: Layout, desc: "Pick a starting point" },
@@ -768,6 +892,89 @@ function EmailModeSelector({ mode, onChange }: EmailModeSelectorProps) {
           </button>
         )
       })}
+    </div>
+  )
+}
+
+// ---------- Create journey dropdown ----------
+
+function CreateJourneyDropdown({
+  channel,
+  templateName,
+}: {
+  channel: "email" | "sms" | "whatsapp"
+  templateName: string
+}) {
+  const router = useRouter()
+  const [open, setOpen] = React.useState(false)
+  const wrapperRef = React.useRef<HTMLDivElement | null>(null)
+
+  // Close when clicking outside.
+  React.useEffect(() => {
+    if (!open) return
+    function onDocClick(e: MouseEvent) {
+      if (!wrapperRef.current) return
+      if (!wrapperRef.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener("mousedown", onDocClick)
+    return () => document.removeEventListener("mousedown", onDocClick)
+  }, [open])
+
+  const blueprints: Array<{
+    id: "none" | "reminder_3step" | "ptp_recovery" | "settlement_push"
+    label: string
+    description: string
+  }> = [
+    { id: "none", label: "Single Send node", description: "Just the message — wire trigger + exit yourself." },
+    { id: "reminder_3step", label: "3-step reminder cadence", description: "Send · wait 3d · SMS · wait 2d · Final" },
+    { id: "ptp_recovery", label: "PTP recovery branch", description: "Send · wait · Decision split on PTP status" },
+    { id: "settlement_push", label: "Settlement push", description: "Send · wait · Send · wait · AI Call" },
+  ]
+
+  function pick(blueprint: typeof blueprints[number]["id"]) {
+    const params = new URLSearchParams({
+      from: "composer",
+      blueprint,
+      channel,
+      templateName,
+      audience: "Composer audience",
+    })
+    setOpen(false)
+    router.push(`/journeys/new?${params.toString()}`)
+  }
+
+  return (
+    <div ref={wrapperRef} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="inline-flex h-7 items-center gap-1.5 rounded-md border border-zinc-700 bg-zinc-900 px-2.5 text-[11px] font-medium text-foreground transition-colors hover:bg-zinc-800"
+      >
+        <Wand2 className="h-3 w-3" />
+        Create journey
+        <ChevronDown className="h-3 w-3 opacity-60" />
+      </button>
+      {open && (
+        <div className="absolute right-0 top-full z-50 mt-1.5 w-72 rounded-lg border border-zinc-700 bg-zinc-900 p-1 shadow-xl">
+          <p className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+            Pre-populate journey builder
+          </p>
+          <div className="h-px bg-zinc-800" />
+          {blueprints.map((bp) => (
+            <button
+              key={bp.id}
+              type="button"
+              onClick={() => pick(bp.id)}
+              className="block w-full rounded-md px-3 py-2 text-left transition-colors hover:bg-zinc-800"
+            >
+              <p className="text-[12px] font-medium text-foreground">{bp.label}</p>
+              <p className="mt-0.5 text-[10px] leading-tight text-muted-foreground">
+                {bp.description}
+              </p>
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   )
 }

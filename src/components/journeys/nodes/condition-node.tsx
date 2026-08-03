@@ -5,6 +5,7 @@ import { Handle, Position, NodeToolbar, type NodeProps } from "@xyflow/react";
 import { GitBranch, Users, Zap, Wifi } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { QuickAddButton } from "@/components/journeys/quick-add-button";
+import { NodeErrorBadge } from "@/components/journeys/nodes/node-error-badge";
 
 const conditionIcons: Record<string, typeof GitBranch> = {
   check_attribute: GitBranch,
@@ -72,6 +73,11 @@ export function ConditionNode({ id, data, selected }: NodeProps) {
       onMouseLeave={onMouseLeave}
     >
       <div className="h-1 w-full bg-violet-500" />
+      <NodeErrorBadge
+        message={data._error as string | undefined}
+        severity={((data._errorSeverity as string) === "warning" ? "warning" : "blocker") as "blocker" | "warning"}
+        side="left"
+      />
       <Handle type="target" position={Position.Top} className={HANDLE_CLS} />
 
       <div className="flex items-center gap-2.5 bg-violet-500/10 px-3 py-2.5">
@@ -100,22 +106,22 @@ export function ConditionNode({ id, data, selected }: NodeProps) {
 
       <div className="flex items-center justify-between border-t border-border/40 px-4 py-1.5">
         <div className="flex items-center gap-1">
-          <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-          <span className="text-[10px] font-medium text-emerald-400">Yes</span>
+          <span className="h-1.5 w-1.5 rounded-full bg-primary-400" />
+          <span className="text-[10px] font-medium text-primary-400">Yes</span>
           {typeof simYes === "number" && (
-            <span className="rounded bg-emerald-500/20 px-1 text-[9px] font-semibold text-emerald-400">
+            <span className="rounded bg-primary-500/20 px-1 text-[9px] font-semibold text-primary-400">
               {simYes.toLocaleString()}
             </span>
           )}
         </div>
         <div className="flex items-center gap-1">
           {typeof simNo === "number" && (
-            <span className="rounded bg-red-500/20 px-1 text-[9px] font-semibold text-red-400">
+            <span className="rounded bg-error-500/20 px-1 text-[9px] font-semibold text-error-400">
               {simNo.toLocaleString()}
             </span>
           )}
-          <span className="text-[10px] font-medium text-red-400">No</span>
-          <span className="h-1.5 w-1.5 rounded-full bg-red-400" />
+          <span className="text-[10px] font-medium text-error-400">No</span>
+          <span className="h-1.5 w-1.5 rounded-full bg-error-400" />
         </div>
       </div>
 
@@ -130,13 +136,13 @@ export function ConditionNode({ id, data, selected }: NodeProps) {
         type="source"
         position={Position.Bottom}
         id="yes"
-        className="!-translate-x-[60px] !h-3.5 !w-3.5 !rounded-full !border-2 !border-[var(--background)] !bg-emerald-400"
+        className="!-translate-x-[60px] !h-3.5 !w-3.5 !rounded-full !border-2 !border-[var(--background)] !bg-primary-400"
       />
       <Handle
         type="source"
         position={Position.Bottom}
         id="no"
-        className="!translate-x-[60px] !h-3.5 !w-3.5 !rounded-full !border-2 !border-[var(--background)] !bg-red-400"
+        className="!translate-x-[60px] !h-3.5 !w-3.5 !rounded-full !border-2 !border-[var(--background)] !bg-error-400"
       />
 
       <NodeToolbar position={Position.Bottom} offset={18} align="center" isVisible={hovered}>

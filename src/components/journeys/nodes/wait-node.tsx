@@ -5,6 +5,7 @@ import { Handle, Position, NodeToolbar, type NodeProps } from "@xyflow/react";
 import { Clock, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { QuickAddButton } from "@/components/journeys/quick-add-button";
+import { NodeErrorBadge } from "@/components/journeys/nodes/node-error-badge";
 
 function formatDuration(duration: number, unit: string): string {
   if (unit === "hours" && duration >= 24 && duration % 24 === 0) return `${duration / 24}d`;
@@ -39,47 +40,52 @@ export function WaitNode({ id, data, selected }: NodeProps) {
       className={cn(
         "node-card journey-node-enter relative w-[280px] overflow-hidden rounded-xl border bg-card shadow-md transition-all duration-150",
         selected
-          ? "border-amber-500/60 shadow-lg shadow-amber-500/20 ring-2 ring-amber-500/40"
+          ? "border-warning-500/60 shadow-lg shadow-warning-500/20 ring-2 ring-warning-500/40"
           : "border-border/60 hover:border-border hover:shadow-lg"
       )}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
     >
-      <div className="h-1 w-full bg-amber-500" />
+      <div className="h-1 w-full bg-warning-500" />
+      <NodeErrorBadge
+        message={data._error as string | undefined}
+        severity={((data._errorSeverity as string) === "warning" ? "warning" : "blocker") as "blocker" | "warning"}
+        side="left"
+      />
       <Handle type="target" position={Position.Top} className={HANDLE_CLS} />
 
-      <div className="flex items-center gap-2.5 bg-amber-500/10 px-3 py-2.5">
-        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-amber-500/20">
-          <Clock className="h-4 w-4 text-amber-400" />
+      <div className="flex items-center gap-2.5 bg-warning-500/10 px-3 py-2.5">
+        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-warning-500/20">
+          <Clock className="h-4 w-4 text-warning-400" />
         </div>
         <div className="min-w-0 flex-1">
           <div className="truncate text-xs font-semibold text-foreground">
             {(data.label as string) ?? "Wait"}
           </div>
-          <div className="text-[9px] uppercase tracking-wider text-amber-400/80">
+          <div className="text-[9px] uppercase tracking-wider text-warning-400/80">
             Flow Control
           </div>
         </div>
       </div>
 
       <div className="border-t border-border/40 px-3 py-2.5">
-        <div className="flex items-center justify-center rounded bg-amber-500/10 py-2">
-          <span className="text-xl font-bold tabular-nums text-amber-300">{display}</span>
+        <div className="flex items-center justify-center rounded bg-warning-500/10 py-2">
+          <span className="text-xl font-bold tabular-nums text-warning-300">{display}</span>
         </div>
         {(skipWeekends || respectContactHours) && (
           <div className="mt-1.5 flex flex-wrap gap-1">
             {skipWeekends && (
-              <span className="rounded bg-amber-500/15 px-1.5 py-0.5 text-[9px] text-amber-300/80">Skip weekends</span>
+              <span className="rounded bg-warning-500/15 px-1.5 py-0.5 text-[9px] text-warning-300/80">Skip weekends</span>
             )}
             {respectContactHours && (
-              <span className="rounded bg-amber-500/15 px-1.5 py-0.5 text-[9px] text-amber-300/80">Contact hours</span>
+              <span className="rounded bg-warning-500/15 px-1.5 py-0.5 text-[9px] text-warning-300/80">Contact hours</span>
             )}
           </div>
         )}
       </div>
 
       {typeof simCount === "number" && (
-        <div className="absolute -right-2 -top-2 z-10 rounded-full bg-amber-500 px-2 py-0.5 text-[10px] font-semibold text-amber-950 shadow-lg">
+        <div className="absolute -right-2 -top-2 z-10 rounded-full bg-warning-500 px-2 py-0.5 text-[10px] font-semibold text-warning-950 shadow-lg">
           {simCount.toLocaleString()}
         </div>
       )}

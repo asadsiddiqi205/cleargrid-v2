@@ -161,65 +161,59 @@ export const BLOCK_CATEGORIES: BlockCategory[] = [
 ];
 
 export const BLOCK_TYPES: BlockType[] = [
-  // ───── Entry / Trigger (8) ─────
-  { type: "event_trigger", label: "Event Trigger", icon: Zap, description: "Start when user performs an event", category: "entry", nodeKind: "trigger", defaultData: { label: "Event Trigger", triggerType: "event" } },
-  { type: "segment_trigger", label: "Segment Membership", icon: Users, description: "Start when user enters/exits a segment", category: "entry", nodeKind: "trigger", defaultData: { label: "Segment Membership", triggerType: "segment_entry" } },
-  { type: "profile_change_trigger", label: "Profile Attribute Change", icon: User, description: "Start when a profile attribute changes", category: "entry", nodeKind: "trigger", defaultData: { label: "Profile Attribute Change", triggerType: "attribute_change" } },
-  { type: "datetime_trigger", label: "Date/Time Trigger", icon: Clock, description: "Start based on date/time or schedule", category: "entry", nodeKind: "trigger", defaultData: { label: "Date/Time Trigger", triggerType: "datetime" } },
-  { type: "specific_users_trigger", label: "Specific Users", icon: Upload, description: "Start from uploaded or curated users", category: "entry", nodeKind: "trigger", defaultData: { label: "Specific Users", triggerType: "specific_users" } },
-  { type: "geofence_trigger", label: "Geofence Trigger", icon: MapPin, description: "Start when user enters/exits a location", category: "entry", nodeKind: "trigger", defaultData: { label: "Geofence Trigger", triggerType: "geofence" } },
-  { type: "inbound_message_trigger", label: "Inbound Message", icon: MessageCircle, description: "Start when user sends an inbound message", category: "entry", nodeKind: "trigger", defaultData: { label: "Inbound Message", triggerType: "inbound_message" } },
-  { type: "incoming_call_trigger", label: "Incoming Call", icon: Phone, description: "Start when an inbound call arrives", category: "entry", nodeKind: "trigger", defaultData: { label: "Incoming Call", triggerType: "incoming_call" } },
-  { type: "journey_handoff_entry", label: "Journey Handoff Entry", icon: ArrowRightLeft, description: "Accept borrowers handed off from other journeys (runs in parallel with the journey's normal Trigger)", category: "entry", nodeKind: "trigger", defaultData: { label: "Journey Handoff Entry", triggerType: "journey_handoff_entry", acceptFrom: "all" } },
+  // ───── Entry / Trigger (7) — matches command.cleargrid.ai ─────
+  { type: "event_trigger", label: "Event Trigger", icon: Zap, description: "Start when a system event occurs (e.g. deal enters bucket)", category: "entry", nodeKind: "trigger", defaultData: { label: "Event Trigger", triggerType: "event" } },
+  { type: "segment_trigger", label: "Segment Membership", icon: Users, description: "Enrol borrowers when they enter or exit a segment", category: "entry", nodeKind: "trigger", defaultData: { label: "Segment Membership", triggerType: "segment_entry" } },
+  { type: "profile_change_trigger", label: "Profile Attribute Change", icon: User, description: "Fires when a borrower attribute changes to a value", category: "entry", nodeKind: "trigger", defaultData: { label: "Profile Attribute Change", triggerType: "attribute_change" } },
+  { type: "specific_users_trigger", label: "Specific Users", icon: Upload, description: "Manually enrol a defined list of borrowers", category: "entry", nodeKind: "trigger", defaultData: { label: "Specific Users", triggerType: "specific_users" } },
+  { type: "inbound_message_trigger", label: "Inbound Message", icon: MessageCircle, description: "Fires when a borrower sends an email / SMS / WhatsApp", category: "entry", nodeKind: "trigger", defaultData: { label: "Inbound Message", triggerType: "inbound_message" } },
+  { type: "incoming_call_trigger", label: "Incoming Call", icon: Phone, description: "Fires when an inbound call is received on a lender line", category: "entry", nodeKind: "trigger", defaultData: { label: "Incoming Call", triggerType: "incoming_call" } },
+  { type: "journey_handoff_entry", label: "Journey Handoff Entry", icon: ArrowRightLeft, description: "Accept borrowers handed off from another journey", category: "entry", nodeKind: "trigger", defaultData: { label: "Journey Handoff Entry", triggerType: "journey_handoff_entry", acceptFrom: "all" } },
 
-  // ───── Channels / Actions (4) ─────
-  { type: "send_email", label: "Send Email", icon: Mail, description: "Send email with personalization", category: "channels", nodeKind: "action", defaultData: { label: "Send Email", actionType: "email" } },
-  { type: "send_sms", label: "Send SMS", icon: MessageSquare, description: "Send SMS with delivery controls", category: "channels", nodeKind: "action", defaultData: { label: "Send SMS", actionType: "sms" } },
-  { type: "show_inapp", label: "In-App Message", icon: Layers, description: "Display in-app content", category: "channels", nodeKind: "action", defaultData: { label: "In-App Message", actionType: "inapp" } },
-  { type: "trigger_ai_call", label: "Trigger AI Call", icon: Phone, description: "Trigger an AI calling agent", category: "channels", nodeKind: "action", defaultData: { label: "Trigger AI Call", actionType: "call" } },
+  // ───── Channels / Actions (5) — matches command.cleargrid.ai ─────
+  { type: "send_email", label: "Send Email", icon: Mail, description: "Send an email via the lender's Infobip Connection", category: "channels", nodeKind: "action", defaultData: { label: "Send Email", actionType: "email" } },
+  { type: "send_sms", label: "Send SMS", icon: MessageSquare, description: "Send an SMS via Unifonic using the lender's Connection", category: "channels", nodeKind: "action", defaultData: { label: "Send SMS", actionType: "sms" } },
+  { type: "whatsapp_ott", label: "WhatsApp / OTT", icon: MessageCircle, description: "Send a WhatsApp Business template or OTT message", category: "channels", nodeKind: "action", defaultData: { label: "WhatsApp / OTT", actionType: "whatsapp" } },
+  { type: "trigger_ai_call", label: "Trigger AI Call", icon: Phone, description: "Initiate an outbound ClearVoice call (pick a project)", category: "channels", nodeKind: "action", defaultData: { label: "Trigger AI Call", actionType: "call" } },
+  { type: "send_slack", label: "Send Slack", icon: Send, description: "Post a team notification to a Slack channel", category: "channels", nodeKind: "action", defaultData: { label: "Send Slack", actionType: "slack" } },
+  { type: "trigger_human_campaign", label: "Trigger Human Campaign", icon: Users, description: "Enroll borrower into a human-agent calling campaign", category: "channels", nodeKind: "action", defaultData: { label: "Trigger Human Campaign", actionType: "human_campaign", continueMode: "immediate" } },
 
-  // ───── Conditions (8) ─────
-  { type: "decision_split", label: "Decision Split", icon: GitBranch, description: "Binary Yes/No branch", category: "conditions", maxOutputs: 2, nodeKind: "condition", defaultData: { label: "Decision Split", conditionType: "check_attribute" } },
-  { type: "audience_split", label: "Audience Split", icon: Users, description: "Route by segment/audience", category: "conditions", maxOutputs: 5, nodeKind: "generic", defaultData: { label: "Audience Split", branchKind: "audience_split", branches: 5 } },
-  { type: "action_path", label: "Action Path Split", icon: MousePointer, description: "Route based on user actions", category: "conditions", maxOutputs: 4, nodeKind: "generic", defaultData: { label: "Action Path Split", branchKind: "action_path", branches: 4 } },
-  { type: "has_done_event", label: "Has Done Event", icon: Activity, description: "Check if user performed an event", category: "conditions", maxOutputs: 2, nodeKind: "condition", defaultData: { label: "Has Done Event", conditionType: "has_done_event" } },
-  { type: "profile_check", label: "Profile Attribute Check", icon: Filter, description: "Branch on profile value", category: "conditions", maxOutputs: 3, nodeKind: "generic", defaultData: { label: "Profile Attribute Check", branchKind: "profile_check", branches: 3 } },
-  { type: "reachability_check", label: "Reachability Check", icon: Wifi, description: "Check channel reachability", category: "conditions", maxOutputs: 2, nodeKind: "condition", defaultData: { label: "Reachability Check", conditionType: "is_reachable_on" } },
-  { type: "best_channel", label: "Best Channel", icon: Send, description: "Choose best viable channel", category: "conditions", maxOutputs: 4, nodeKind: "generic", defaultData: { label: "Best Channel", branchKind: "best_channel", branches: 4 } },
-  { type: "inbound_evaluator", label: "Inbound Response Evaluator", icon: MessageSquare, description: "Branch on user reply sentiment", category: "conditions", maxOutputs: 4, nodeKind: "generic", defaultData: { label: "Inbound Response", branchKind: "inbound_evaluator", branches: 4 } },
+  // ───── Conditions (8) — matches command.cleargrid.ai ─────
+  { type: "decision_split", label: "Decision Split", icon: GitBranch, description: "Evaluate a structured rule (audience-style yes/no)", category: "conditions", maxOutputs: 2, nodeKind: "condition", defaultData: { label: "Decision Split", conditionType: "check_attribute" } },
+  { type: "conditional_switch", label: "Conditional Switch", icon: GitBranch, description: "Multiple inline conditions — borrower takes the first matching branch", category: "conditions", maxOutputs: 5, nodeKind: "generic", defaultData: { label: "Conditional Switch", branchKind: "conditional_switch", branches: 3 } },
+  { type: "audience_split", label: "Audience Split", icon: Users, description: "Route by membership in one or more segments", category: "conditions", maxOutputs: 5, nodeKind: "generic", defaultData: { label: "Audience Split", branchKind: "audience_split", branches: 5 } },
+  { type: "action_path", label: "Action Path Split", icon: MousePointer, description: "Route borrowers based on how they engaged with a prior send", category: "conditions", maxOutputs: 4, nodeKind: "generic", defaultData: { label: "Action Path Split", branchKind: "action_path", branches: 4 } },
+  { type: "has_done_event", label: "Has Done Event", icon: Activity, description: "Snapshot check: did an event occur within N days", category: "conditions", maxOutputs: 2, nodeKind: "condition", defaultData: { label: "Has Done Event", conditionType: "has_done_event" } },
+  { type: "profile_check", label: "Profile Attribute Check", icon: Filter, description: "Branch on a borrower/deal attribute — one of / equals / range", category: "conditions", maxOutputs: 3, nodeKind: "generic", defaultData: { label: "Profile Attribute Check", branchKind: "profile_check", branches: 3 } },
+  { type: "reachability_check", label: "Reachability Check", icon: Wifi, description: "Check whether the borrower is reachable on a channel", category: "conditions", maxOutputs: 2, nodeKind: "condition", defaultData: { label: "Reachability Check", conditionType: "is_reachable_on" } },
+  { type: "best_channel", label: "Best Channel", icon: Send, description: "AI-selected optimal channel based on borrower engagement", category: "conditions", maxOutputs: 4, nodeKind: "generic", defaultData: { label: "Best Channel", branchKind: "best_channel", branches: 4 } },
 
-  // ───── Flow Controls (8) ─────
-  { type: "delay", label: "Delay / Wait", icon: Timer, description: "Hold for a duration", category: "flow", nodeKind: "wait", defaultData: { label: "Delay / Wait", duration: 24, unit: "hours" } },
-  { type: "wait_until_date", label: "Wait Until Date", icon: Calendar, description: "Hold until a specific date/time", category: "flow", nodeKind: "wait", defaultData: { label: "Wait Until Date", waitMode: "date" } },
-  { type: "wait_time_slots", label: "Wait for Time Slots", icon: Clock, description: "Progress only during allowed windows", category: "flow", nodeKind: "wait", defaultData: { label: "Wait for Time Slots", waitMode: "time_slots" } },
-  { type: "wait_for_event", label: "Wait for Event", icon: AlarmClock, description: "Hold until event or timeout", category: "flow", maxOutputs: 2, nodeKind: "generic", defaultData: { label: "Wait for Event", branchKind: "wait_for_event", branches: 2 } },
-  { type: "wait_profile_change", label: "Wait for Profile Change", icon: RefreshCw, description: "Hold until attribute changes", category: "flow", nodeKind: "wait", defaultData: { label: "Wait for Profile Change", waitMode: "profile_change" } },
-  // Pause / Hold descoped — keep the underlying PauseHoldForm in block-configs.tsx
-  // so it can be re-enabled later.
-  // { type: "pause", label: "Pause / Hold", icon: Pause, description: "Explicit pause block", category: "flow", nodeKind: "wait", defaultData: { label: "Pause / Hold", waitMode: "pause" } },
-  { type: "traffic_split", label: "Traffic Split", icon: Split, description: "Split users by percentage", category: "flow", maxOutputs: 5, nodeKind: "generic", defaultData: { label: "Traffic Split", branchKind: "traffic_split", branches: 2, splits: [50, 50] } },
-  { type: "end_journey", label: "End Journey", icon: Square, description: "End the journey", category: "flow", nodeKind: "end", defaultData: { label: "End Journey", outcome: "Completed" } },
+  // ───── Flow Controls (8) — matches command.cleargrid.ai ─────
+  { type: "delay", label: "Delay / Wait", icon: Timer, description: "Pause for a fixed duration (hours / days)", category: "flow", nodeKind: "wait", defaultData: { label: "Delay / Wait", duration: 24, unit: "hours" } },
+  { type: "wait_until_date", label: "Wait Until Date", icon: Calendar, description: "Hold a borrower until a fixed date or a date attribute", category: "flow", nodeKind: "wait", defaultData: { label: "Wait Until Date", waitMode: "date" } },
+  { type: "wait_time_slots", label: "Wait for Time Slots", icon: Clock, description: "Hold until the current time enters a contact window", category: "flow", nodeKind: "wait", defaultData: { label: "Wait for Time Slots", waitMode: "time_slots" } },
+  { type: "wait_for_event", label: "Wait for Event", icon: AlarmClock, description: "Pause until an event occurs (with a timeout branch)", category: "flow", maxOutputs: 2, nodeKind: "generic", defaultData: { label: "Wait for Event", branchKind: "wait_for_event", branches: 2 } },
+  { type: "wait_profile_change", label: "Wait for Profile Change", icon: RefreshCw, description: "Pause until a borrower attribute changes to a value", category: "flow", nodeKind: "wait", defaultData: { label: "Wait for Profile Change", waitMode: "profile_change" } },
+  { type: "pause_hold", label: "Pause / Hold", icon: Pause, description: "Indefinite hold; released manually via the API or ops action", category: "flow", nodeKind: "wait", defaultData: { label: "Pause / Hold", waitMode: "pause" } },
+  { type: "traffic_split", label: "Traffic Split", icon: Split, description: "Route borrowers across N branches by percentage", category: "flow", maxOutputs: 5, nodeKind: "generic", defaultData: { label: "Traffic Split", branchKind: "traffic_split", branches: 2, splits: [50, 50] } },
+  { type: "end_journey", label: "Exit Journey", icon: Square, description: "Terminate the journey for the borrower with an outcome tag", category: "flow", nodeKind: "end", defaultData: { label: "Exit Journey", outcome: "Completed" } },
 
-  // ───── Data / State (6) ─────
-  { type: "context_variable", label: "Context Variable", icon: Variable, description: "Create journey-scoped variable", category: "data", nodeKind: "generic", defaultData: { label: "Context Variable" } },
-  { type: "update_variable", label: "Update Variable", icon: Edit, description: "Update variable with formula", category: "data", nodeKind: "generic", defaultData: { label: "Update Variable" } },
-  { type: "update_profile", label: "Update Profile", icon: UserCog, description: "Write permanent profile updates", category: "data", nodeKind: "generic", defaultData: { label: "Update Profile" } },
-  // Tag Management descoped for v1 — borrower profiles don't carry tags yet,
-  // so the node has nothing to write to. Re-enable once tagging is added to
-  // the borrower data model. Underlying form is kept in block-configs.tsx.
-  // { type: "tag_management", label: "Tag Management", icon: Tag, description: "Add or remove tags/labels", category: "data", nodeKind: "generic", defaultData: { label: "Tag Management" } },
-  { type: "consent_management", label: "Consent / DNC", icon: ShieldOff, description: "Manage DNC and consent states", category: "data", nodeKind: "generic", defaultData: { label: "Consent / DNC" } },
-  { type: "catalog_lookup", label: "Catalog Lookup", icon: BookOpen, description: "Retrieve data from catalog", category: "data", nodeKind: "generic", defaultData: { label: "Catalog Lookup" } },
+  // ───── Data / State (5) — matches command.cleargrid.ai ─────
+  { type: "context_variable", label: "Context Variable", icon: Variable, description: "Read a value from borrower/deal/context into the journey", category: "data", nodeKind: "generic", defaultData: { label: "Context Variable" } },
+  { type: "update_variable", label: "Set / Update Variable", icon: Edit, description: "Set or modify a journey-scoped variable", category: "data", nodeKind: "generic", defaultData: { label: "Set / Update Variable" } },
+  { type: "update_profile", label: "Update Profile", icon: UserCog, description: "Write a value back to a borrower or deal profile", category: "data", nodeKind: "generic", defaultData: { label: "Update Profile" } },
+  { type: "dnc_gate", label: "DNC Gate", icon: ShieldOff, description: "Is this borrower DNC'd on every scoped channel?", category: "data", maxOutputs: 2, nodeKind: "condition", defaultData: { label: "DNC Gate", conditionType: "dnc_gate" } },
+  { type: "add_to_dnc", label: "Add to DNC", icon: ShieldOff, description: "Mark the deal's primary phone or email as DNC", category: "data", nodeKind: "generic", defaultData: { label: "Add to DNC" } },
 
-  // ───── Integrations (2) ─────
-  { type: "flow_handoff", label: "Journey Handoff", icon: ArrowRightLeft, description: "Pass user to another journey", category: "integrations", nodeKind: "generic", defaultData: { label: "Journey Handoff" } },
-  { type: "audience_sync", label: "Audience Sync", icon: RefreshCw, description: "Sync to ad platforms", category: "integrations", nodeKind: "generic", defaultData: { label: "Audience Sync" } },
+  // ───── Integrations (2) — matches command.cleargrid.ai ─────
+  { type: "flow_handoff", label: "Journey Handoff", icon: ArrowRightLeft, description: "Exit and re-enrol the borrower into another journey", category: "integrations", nodeKind: "generic", defaultData: { label: "Journey Handoff" } },
+  { type: "audience_sync", label: "Audience Sync", icon: RefreshCw, description: "Add or remove the deal from a static audience", category: "integrations", nodeKind: "generic", defaultData: { label: "Audience Sync" } },
 
-  // ───── AI & Optimization (1) ─────
-  { type: "experiment", label: "Experiment / A-B Test", icon: FlaskConical, description: "Test paths with control group", category: "ai", maxOutputs: 4, nodeKind: "split", defaultData: { label: "Experiment", variantCount: 4, splitA: 25, splitB: 25, splitC: 25, splitD: 25 } },
+  // ───── AI & Optimization (1) — matches command.cleargrid.ai ─────
+  { type: "experiment", label: "Experiment / A-B Test", icon: FlaskConical, description: "Stable per-borrower A/B routing — same person always sees same variant", category: "ai", maxOutputs: 4, nodeKind: "split", defaultData: { label: "Experiment", variantCount: 4, splitA: 25, splitB: 25, splitC: 25, splitD: 25 } },
 
-  // ───── Exit / Governance (1) ─────
-  { type: "global_exit", label: "Global Exit Trigger Manager", icon: Power, description: "Remove users when conditions met", category: "exit", nodeKind: "end", defaultData: { label: "Global Exit", outcome: "Exited" } },
+  // ───── Exit / Governance (1) — matches command.cleargrid.ai ─────
+  { type: "global_exit", label: "Global Exit Trigger Manager", icon: Power, description: "Define rules that immediately exit any borrower from this journey", category: "exit", nodeKind: "end", defaultData: { label: "Global Exit", outcome: "Exited" } },
 ];
 
 export function getBlockType(type: string): BlockType | undefined {

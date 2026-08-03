@@ -5,6 +5,7 @@ import { Handle, Position, NodeToolbar, type NodeProps } from "@xyflow/react";
 import { Play, Zap, Users, Star } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { QuickAddButton } from "@/components/journeys/quick-add-button";
+import { NodeErrorBadge } from "@/components/journeys/nodes/node-error-badge";
 
 const triggerIcons: Record<string, typeof Play> = {
   segment_entry: Users,
@@ -51,23 +52,29 @@ export function TriggerNode({ id, data, selected }: NodeProps) {
       className={cn(
         "node-card journey-node-enter relative w-[280px] overflow-hidden rounded-xl border bg-card shadow-md transition-all duration-150",
         selected
-          ? "border-emerald-500/60 shadow-lg shadow-emerald-500/20 ring-2 ring-emerald-500/40"
+          ? "border-primary-500/60 shadow-lg shadow-primary-500/20 ring-2 ring-primary-500/40"
           : "border-border/60 hover:border-border hover:shadow-lg"
       )}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
     >
-      <div className="h-1 w-full bg-emerald-500" />
+      <div className="h-1 w-full bg-primary-500" />
 
-      <div className="flex items-center gap-2.5 bg-emerald-500/10 px-3 py-2.5">
-        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-emerald-500/20">
-          <Icon className="h-4 w-4 text-emerald-400" />
+      <NodeErrorBadge
+        message={data._error as string | undefined}
+        severity={((data._errorSeverity as string) === "warning" ? "warning" : "blocker") as "blocker" | "warning"}
+        side="left"
+      />
+
+      <div className="flex items-center gap-2.5 bg-primary-500/10 px-3 py-2.5">
+        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-primary-500/20">
+          <Icon className="h-4 w-4 text-primary-400" />
         </div>
         <div className="min-w-0 flex-1">
           <div className="truncate text-xs font-semibold text-foreground">
             {(data.label as string) ?? "Trigger"}
           </div>
-          <div className="text-[9px] uppercase tracking-wider text-emerald-400/80">
+          <div className="text-[9px] uppercase tracking-wider text-primary-400/80">
             Entry / Trigger
           </div>
         </div>
@@ -79,7 +86,7 @@ export function TriggerNode({ id, data, selected }: NodeProps) {
         </p>
         {!!data.schedule && (data.schedule as string) !== "continuously" && (
           <div className="mt-1.5">
-            <span className="inline-block rounded bg-emerald-500/15 px-1.5 py-0.5 text-[9px] font-medium text-emerald-400">
+            <span className="inline-block rounded bg-primary-500/15 px-1.5 py-0.5 text-[9px] font-medium text-primary-400">
               {data.schedule === "daily"
                 ? `Daily at ${(data.scheduleTime as string) ?? "09:00"}`
                 : (data.schedule as string)}
@@ -89,7 +96,7 @@ export function TriggerNode({ id, data, selected }: NodeProps) {
       </div>
 
       {typeof simCount === "number" && (
-        <div className="absolute -right-2 -top-2 z-10 rounded-full bg-emerald-500 px-2 py-0.5 text-[10px] font-semibold text-emerald-950 shadow-lg">
+        <div className="absolute -right-2 -top-2 z-10 rounded-full bg-primary-500 px-2 py-0.5 text-[10px] font-semibold text-primary-950 shadow-lg">
           {simCount.toLocaleString()}
         </div>
       )}

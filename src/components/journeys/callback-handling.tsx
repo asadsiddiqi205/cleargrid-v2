@@ -55,14 +55,14 @@ export function CallbackHandlingSection({
         className="flex w-full items-center gap-2 px-3 py-2.5 text-left"
         aria-expanded={expanded}
       >
-        <PhoneIncoming className="h-3.5 w-3.5 text-emerald-400" />
+        <PhoneIncoming className="h-3.5 w-3.5 text-primary-400" />
         <span className="flex-1 text-xs font-semibold text-foreground">Callback Handling</span>
         {enabled ? (
-          <span className="rounded bg-emerald-500/15 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-emerald-400">
+          <span className="rounded bg-primary-500/15 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-primary-400">
             On
           </span>
         ) : (
-          <span className="rounded bg-zinc-500/15 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-zinc-400">
+          <span className="rounded bg-neutral-500/15 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-neutral-400">
             Off
           </span>
         )}
@@ -102,7 +102,7 @@ export function CallbackHandlingSection({
                   Compliance rules
                 </p>
                 <span
-                  className="inline-flex items-center gap-1 rounded-md bg-zinc-800 px-1.5 py-0.5 text-[9px] font-medium text-zinc-300"
+                  className="inline-flex items-center gap-1 rounded-md bg-neutral-800 px-1.5 py-0.5 text-[9px] font-medium text-neutral-300"
                   title="Compliance settings come from the lender configuration"
                 >
                   <Building2 className="h-2.5 w-2.5" />
@@ -122,7 +122,7 @@ export function CallbackHandlingSection({
 
             {/* 2b. Max hold duration — fixed at end of working day */}
             <div className="flex items-center gap-2.5 rounded-md border border-border bg-muted/20 px-2.5 py-2">
-              <Sun className="h-3.5 w-3.5 shrink-0 text-amber-400" />
+              <Sun className="h-3.5 w-3.5 shrink-0 text-warning-400" />
               <div className="min-w-0">
                 <p className="text-[11px] font-medium text-foreground">
                   Hold until end of current working day
@@ -246,8 +246,8 @@ function ComplianceRow({
       <span
         className={cn(
           "shrink-0 rounded px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-wider",
-          tag === "holds" && "bg-amber-500/15 text-amber-400",
-          tag === "cancels" && "bg-red-500/15 text-red-400",
+          tag === "holds" && "bg-warning-500/15 text-warning-400",
+          tag === "cancels" && "bg-error-500/15 text-error-400",
         )}
       >
         {tag === "holds" ? "Holds when blocked" : "Cancels when blocked"}
@@ -272,14 +272,14 @@ function RadioRow({
       className={cn(
         "flex w-full items-center gap-2 rounded-md border px-2.5 py-1.5 text-left text-[11px] transition-colors",
         checked
-          ? "border-emerald-500/40 bg-emerald-500/10 text-foreground"
+          ? "border-primary-500/40 bg-primary-500/10 text-foreground"
           : "border-border bg-card/40 text-muted-foreground hover:border-border/80 hover:text-foreground",
       )}
     >
       <span
         className={cn(
           "flex h-3 w-3 shrink-0 items-center justify-center rounded-full border",
-          checked ? "border-emerald-400 bg-emerald-500" : "border-zinc-600",
+          checked ? "border-primary-400 bg-primary-500" : "border-neutral-600",
         )}
       >
         {checked && <span className="h-1 w-1 rounded-full bg-white" />}

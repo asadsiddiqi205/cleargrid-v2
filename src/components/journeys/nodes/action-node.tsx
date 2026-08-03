@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { QuickAddButton } from "@/components/journeys/quick-add-button";
+import { NodeErrorBadge } from "@/components/journeys/nodes/node-error-badge";
 
 const actionIcons: Record<string, typeof Mail> = {
   email: Mail, sms: MessageSquare, whatsapp: MessageCircle, call: Phone,
@@ -71,6 +72,12 @@ export function ActionNode({ id, data, selected }: NodeProps) {
     >
       <div className="h-1 w-full bg-cyan-500" />
 
+      <NodeErrorBadge
+        message={data._error as string | undefined}
+        severity={((data._errorSeverity as string) === "warning" ? "warning" : "blocker") as "blocker" | "warning"}
+        side="left"
+      />
+
       <Handle type="target" position={Position.Top} className={HANDLE_CLS} />
 
       <div className="flex items-center gap-2.5 bg-cyan-500/10 px-3 py-2.5">
@@ -93,7 +100,7 @@ export function ActionNode({ id, data, selected }: NodeProps) {
             (typeof data.description === "string" ? data.description : "Pick template...")}
         </p>
         {actionType === "whatsapp" && template && (
-          <div className="mt-1.5 inline-flex items-center rounded bg-emerald-500/15 px-1.5 py-0.5 text-[9px] font-medium text-emerald-400">
+          <div className="mt-1.5 inline-flex items-center rounded bg-primary-500/15 px-1.5 py-0.5 text-[9px] font-medium text-primary-400">
             Approved template
           </div>
         )}
@@ -102,7 +109,7 @@ export function ActionNode({ id, data, selected }: NodeProps) {
       {/* Callback Handling badge (top-right) */}
       {callbackEnabled && typeof simCount !== "number" && (
         <div
-          className="absolute -right-2 -top-2 z-10 flex items-center gap-1 rounded-full border border-zinc-700 bg-zinc-800 px-1.5 py-0.5 text-[9px] font-medium text-zinc-300 shadow"
+          className="absolute -right-2 -top-2 z-10 flex items-center gap-1 rounded-full border border-neutral-700 bg-neutral-800 px-1.5 py-0.5 text-[9px] font-medium text-neutral-300 shadow"
           title={`Callbacks enabled. Max ${callbackMax} per borrower. Holds on DND, contact window, 7-in-7. Cancels on DNC, opt-out, consent revoked.`}
         >
           <PhoneIncoming className="h-2.5 w-2.5" />

@@ -25,6 +25,9 @@ export interface StrategyChannelTemplate {
   templateId: string
   templateName: string
   enabled: boolean
+  /** Optional rich HTML template id (from rich-email-templates registry). */
+  htmlTemplateId?: string
+  htmlTemplateName?: string
 }
 
 export interface Strategy {

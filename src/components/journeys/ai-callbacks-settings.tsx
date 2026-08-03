@@ -48,7 +48,7 @@ export const AICallbacksSettings = React.forwardRef<HTMLDivElement, Props>(funct
     >
       <div>
         <div className="flex items-center gap-2">
-          <PhoneIncoming className="h-3.5 w-3.5 text-emerald-400" />
+          <PhoneIncoming className="h-3.5 w-3.5 text-primary-400" />
           <h4 className="text-xs font-semibold uppercase tracking-wider text-foreground">
             AI Callbacks
           </h4>
@@ -59,7 +59,7 @@ export const AICallbacksSettings = React.forwardRef<HTMLDivElement, Props>(funct
       </div>
 
       {!hasAiCallNode && (
-        <div className="flex items-start gap-2 rounded-md border border-zinc-700 bg-zinc-800/40 p-2.5 text-[11px] text-zinc-400">
+        <div className="flex items-start gap-2 rounded-md border border-neutral-700 bg-neutral-800/40 p-2.5 text-[11px] text-neutral-400">
           <Info className="mt-0.5 h-3 w-3 shrink-0" />
           <span>
             This journey has no AI Call nodes. These settings will apply if you add one later.
@@ -162,7 +162,7 @@ function ComplianceField({
       <div className="flex items-center justify-between gap-3">
         <p className="text-[11px] font-medium text-foreground">{label}</p>
         <span
-          className="inline-flex items-center gap-1 rounded-md bg-zinc-800 px-1.5 py-0.5 text-[9px] font-medium text-zinc-300"
+          className="inline-flex items-center gap-1 rounded-md bg-neutral-800 px-1.5 py-0.5 text-[9px] font-medium text-neutral-300"
           title="Configured at lender level"
         >
           <Building2 className="h-2.5 w-2.5" />
@@ -172,15 +172,15 @@ function ComplianceField({
       <div
         className={cn(
           "flex items-center justify-between gap-2 rounded-md border px-2.5 py-1.5",
-          behavior === "cancels" ? "border-red-500/30 bg-red-500/5" : "border-border bg-card/40",
+          behavior === "cancels" ? "border-error-500/30 bg-error-500/5" : "border-border bg-card/40",
         )}
       >
         <span className="text-[11px] text-foreground">{value}</span>
         <span
           className={cn(
             "shrink-0 rounded px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-wider",
-            behavior === "holds" && "bg-amber-500/15 text-amber-400",
-            behavior === "cancels" && "bg-red-500/15 text-red-400",
+            behavior === "holds" && "bg-warning-500/15 text-warning-400",
+            behavior === "cancels" && "bg-error-500/15 text-error-400",
           )}
         >
           {behavior === "holds" ? "Holds when blocked" : "Cancels when blocked"}
@@ -207,14 +207,14 @@ function RadioRow({
       className={cn(
         "flex w-full items-center gap-2 rounded-md border px-2.5 py-1.5 text-left text-[11px] transition-colors",
         checked
-          ? "border-emerald-500/40 bg-emerald-500/10 text-foreground"
+          ? "border-primary-500/40 bg-primary-500/10 text-foreground"
           : "border-border bg-card/40 text-muted-foreground hover:border-border/80 hover:text-foreground",
       )}
     >
       <span
         className={cn(
           "flex h-3 w-3 shrink-0 items-center justify-center rounded-full border",
-          checked ? "border-emerald-400 bg-emerald-500" : "border-zinc-600",
+          checked ? "border-primary-400 bg-primary-500" : "border-neutral-600",
         )}
       >
         {checked && <span className="h-1 w-1 rounded-full bg-white" />}

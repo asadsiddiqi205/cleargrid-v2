@@ -296,7 +296,7 @@ function uid(prefix: string) {
   return `${prefix}-${_id}`
 }
 
-function createFilter(): FilterCondition {
+export function createFilter(): FilterCondition {
   return {
     id: uid("f"),
     field: "",
@@ -307,7 +307,7 @@ function createFilter(): FilterCondition {
   }
 }
 
-function createGroup(): FilterGroup {
+export function createGroup(): FilterGroup {
   return { id: uid("g"), joinLogic: "AND", filters: [createFilter()] }
 }
 
@@ -716,14 +716,70 @@ function CalculatedFieldChip({
 // ---------------------------------------------------------------------------
 
 export interface FilterBuilderProps {
+  /** Uncontrolled fallback — legacy callers get just the filter count. */
   onChange?: (totalFilterCount: number) => void
+  /**
+   * Controlled value + change handler. When both are supplied, the component
+   * reads groups from `value` and delegates all mutation upwards via
+   * `onValueChange`. Segment builder passes these; Journey simulator (Part 1)
+   * passes these to lift the cohort state into its own drawer.
+   */
+  value?: FilterGroup[]
+  onValueChange?: (groups: FilterGroup[]) => void
+  /** Controlled top-level AND/OR between groups. */
+  groupJoin?: "AND" | "OR"
+  onGroupJoinChange?: (v: "AND" | "OR") => void
+  /**
+   * Hide the "Create calculation" button + calculated-fields strip. Simulator
+   * cohorts don't want calculated-field authoring in the drawer — they can
+   * still reference already-saved calculated fields since the field catalog
+   * hydrates them.
+   */
+  enableCalculatedFields?: boolean
+  /** Optional heading override. Defaults to "Filters". */
+  heading?: string
+  /** Hide the heading + description entirely (simulator drawer is compact). */
+  hideHeading?: boolean
 }
 
-export function FilterBuilder({ onChange }: FilterBuilderProps) {
-  const [groups, setGroups] = React.useState<FilterGroup[]>([createGroup()])
-  const [groupJoinLogic, setGroupJoinLogic] = React.useState<"AND" | "OR">(
-    "OR"
+export function FilterBuilder({
+  onChange,
+  value,
+  onValueChange,
+  groupJoin,
+  onGroupJoinChange,
+  enableCalculatedFields = true,
+  heading = "Filters",
+  hideHeading = false,
+}: FilterBuilderProps) {
+  const isControlled = value !== undefined && onValueChange !== undefined
+  const [internalGroups, setInternalGroups] = React.useState<FilterGroup[]>([createGroup()])
+  const groups = isControlled ? value : internalGroups
+  const setGroups: (
+    updater: FilterGroup[] | ((prev: FilterGroup[]) => FilterGroup[]),
+  ) => void = React.useCallback(
+    (updater) => {
+      if (isControlled) {
+        const next =
+          typeof updater === "function"
+            ? (updater as (p: FilterGroup[]) => FilterGroup[])(value!)
+            : updater
+        onValueChange!(next)
+      } else {
+        setInternalGroups(updater as never)
+      }
+    },
+    [isControlled, value, onValueChange],
   )
+
+  const isJoinControlled = groupJoin !== undefined && onGroupJoinChange !== undefined
+  const [internalGroupJoin, setInternalGroupJoin] = React.useState<"AND" | "OR">("OR")
+  const groupJoinLogic = isJoinControlled ? groupJoin : internalGroupJoin
+  const setGroupJoinLogic = (v: "AND" | "OR") => {
+    if (isJoinControlled) onGroupJoinChange!(v)
+    else setInternalGroupJoin(v)
+  }
+
   const [calculatedFields, setCalculatedFields] = React.useState<
     CalculatedField[]
   >([])
@@ -845,47 +901,52 @@ export function FilterBuilder({ onChange }: FilterBuilderProps) {
   return (
     <div className="space-y-4">
       {/* Section header */}
-      <div>
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <h3 className="text-[11px] font-bold uppercase tracking-[0.14em] text-muted-foreground">
-              Filters
-            </h3>
-            <span className="text-red-400">*</span>
+      {!hideHeading && (
+        <div>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <h3 className="text-[11px] font-bold uppercase tracking-[0.14em] text-muted-foreground">
+                {heading}
+              </h3>
+              <span className="text-red-400">*</span>
+            </div>
+            <div className="flex items-center gap-2">
+              {enableCalculatedFields && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={openNewCalcDialog}
+                  className="gap-1.5"
+                >
+                  <Calculator className="size-3.5" />
+                  Create calculation
+                </Button>
+              )}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={addGroup}
+                className="gap-1.5"
+              >
+                <Plus className="size-3.5" />
+                Add filter group
+              </Button>
+            </div>
           </div>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={openNewCalcDialog}
-              className="gap-1.5"
-            >
-              <Calculator className="size-3.5" />
-              Create calculation
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={addGroup}
-              className="gap-1.5"
-            >
-              <Plus className="size-3.5" />
-              Add filter group
-            </Button>
-          </div>
+          <p className="mt-1.5 text-xs text-muted-foreground leading-relaxed">
+            Pick which borrowers belong in this{" "}
+            {heading === "Filters" ? "segment" : "cohort"}. Use{" "}
+            <span className="font-semibold text-foreground">AND</span> when
+            borrowers must match every condition. Use{" "}
+            <span className="font-semibold text-foreground">OR</span> when
+            matching any one is enough. Add a second group if you need more
+            advanced logic.
+          </p>
         </div>
-        <p className="mt-1.5 text-xs text-muted-foreground leading-relaxed">
-          Pick which borrowers belong in this segment. Use{" "}
-          <span className="font-semibold text-foreground">AND</span> when
-          borrowers must match every condition. Use{" "}
-          <span className="font-semibold text-foreground">OR</span> when
-          matching any one is enough. Add a second group if you need more
-          advanced logic.
-        </p>
-      </div>
+      )}
 
       {/* Saved calculated fields strip */}
-      {calculatedFields.length > 0 && (
+      {enableCalculatedFields && calculatedFields.length > 0 && (
         <div className="rounded-lg border border-border bg-muted/30 p-3 animate-in fade-in duration-200">
           <div className="mb-2 flex items-center justify-between">
             <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
@@ -1018,17 +1079,19 @@ export function FilterBuilder({ onChange }: FilterBuilderProps) {
       </div>
 
       {/* Calculated fields editor dialog */}
-      <CalculationEditorDialog
-        open={calcDialogOpen}
-        onOpenChange={(val) => {
-          setCalcDialogOpen(val)
-          if (!val) setEditingCalcField(null)
-        }}
-        initialField={editingCalcField}
-        onSaved={() => {
-          setCalculatedFields(loadCalculatedFields())
-        }}
-      />
+      {enableCalculatedFields && (
+        <CalculationEditorDialog
+          open={calcDialogOpen}
+          onOpenChange={(val) => {
+            setCalcDialogOpen(val)
+            if (!val) setEditingCalcField(null)
+          }}
+          initialField={editingCalcField}
+          onSaved={() => {
+            setCalculatedFields(loadCalculatedFields())
+          }}
+        />
+      )}
     </div>
   )
 }

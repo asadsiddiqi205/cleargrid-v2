@@ -5,6 +5,7 @@ import { Handle, Position, NodeToolbar, type NodeProps } from "@xyflow/react";
 import { FlaskConical, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { QuickAddButton } from "@/components/journeys/quick-add-button";
+import { NodeErrorBadge } from "@/components/journeys/nodes/node-error-badge";
 
 const HANDLE_CLS = "!h-3.5 !w-3.5 !rounded-full !border-2 !border-[var(--background)] !bg-[var(--primary)]";
 
@@ -41,6 +42,11 @@ export function SplitNode({ id, data, selected }: NodeProps) {
       onMouseLeave={onMouseLeave}
     >
       <div className="h-1 w-full bg-fuchsia-500" />
+      <NodeErrorBadge
+        message={data._error as string | undefined}
+        severity={((data._errorSeverity as string) === "warning" ? "warning" : "blocker") as "blocker" | "warning"}
+        side="left"
+      />
       <Handle type="target" position={Position.Top} className={HANDLE_CLS} />
 
       <div className="flex items-center gap-2.5 bg-fuchsia-500/10 px-3 py-2.5">
@@ -61,7 +67,7 @@ export function SplitNode({ id, data, selected }: NodeProps) {
         <div className="flex h-2 w-full overflow-hidden rounded-full bg-muted/20">
           <div className="bg-blue-500" style={{ width: `${splitA}%` }} />
           <div className="bg-purple-500" style={{ width: `${splitB}%` }} />
-          {variantCount >= 3 && <div className="bg-amber-500" style={{ width: `${splitC}%` }} />}
+          {variantCount >= 3 && <div className="bg-warning-500" style={{ width: `${splitC}%` }} />}
           {variantCount >= 4 && <div className="bg-rose-500" style={{ width: `${splitD}%` }} />}
         </div>
         <p className="mt-1 text-center text-[10px] text-muted-foreground">
@@ -75,7 +81,7 @@ export function SplitNode({ id, data, selected }: NodeProps) {
       <div className="flex items-center justify-around border-t border-border/40 px-3 py-1.5">
         <span className="text-[10px] font-medium text-blue-400">A</span>
         <span className="text-[10px] font-medium text-purple-400">B</span>
-        {variantCount >= 3 && <span className="text-[10px] font-medium text-amber-400">C</span>}
+        {variantCount >= 3 && <span className="text-[10px] font-medium text-warning-400">C</span>}
         {variantCount >= 4 && <span className="text-[10px] font-medium text-rose-400">D</span>}
       </div>
 
@@ -103,7 +109,7 @@ export function SplitNode({ id, data, selected }: NodeProps) {
       {variantCount >= 3 && (
         <Handle type="source" position={Position.Bottom} id="c"
           style={{ left: variantCount === 3 ? "80%" : "60%" }}
-          className="!h-3.5 !w-3.5 !rounded-full !border-2 !border-[var(--background)] !bg-amber-400"
+          className="!h-3.5 !w-3.5 !rounded-full !border-2 !border-[var(--background)] !bg-warning-400"
         />
       )}
       {variantCount >= 4 && (

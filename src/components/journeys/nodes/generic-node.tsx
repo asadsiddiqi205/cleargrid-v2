@@ -6,9 +6,10 @@ import { Box, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getBlockType, getBlockCategory } from "@/data/journeys";
 import { QuickAddButton } from "@/components/journeys/quick-add-button";
+import { NodeErrorBadge } from "@/components/journeys/nodes/node-error-badge";
 
 const SCOPE_BADGE: Record<string, string> = {
-  borrower: "bg-emerald-500/15 text-emerald-300 border-emerald-500/30",
+  borrower: "bg-primary-500/15 text-primary-300 border-primary-500/30",
   account: "bg-cyan-500/15 text-cyan-300 border-cyan-500/30",
   sub_account: "bg-orange-500/15 text-orange-300 border-orange-500/30",
 };
@@ -66,6 +67,12 @@ export function GenericNode({ id, data, selected }: NodeProps) {
       onMouseLeave={onMouseLeave}
     >
       <div className="h-1 w-full" style={{ backgroundColor: accent }} />
+
+      <NodeErrorBadge
+        message={data._error as string | undefined}
+        severity={((data._errorSeverity as string) === "warning" ? "warning" : "blocker") as "blocker" | "warning"}
+        side="left"
+      />
 
       {!isEntry && (
         <Handle type="target" position={Position.Top} className={HANDLE_CLS} />

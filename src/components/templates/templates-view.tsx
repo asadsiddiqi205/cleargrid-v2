@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -697,6 +698,7 @@ function CreateTemplateDialog({
   onOpenChange: (val: boolean) => void;
   defaultLenderId: string;
 }) {
+  const router = useRouter();
   const [step, setStep] = React.useState(1);
   const [lenderId, setLenderId] = React.useState<string>(defaultLenderId);
   const [purpose, setPurpose] = React.useState<TemplatePurpose | "">("");
@@ -774,6 +776,21 @@ function CreateTemplateDialog({
     onOpenChange(false);
   }
 
+  function handleOpenBuilder() {
+    if (!name.trim()) {
+      toast.error("Give the template a name first");
+      return;
+    }
+    const params = new URLSearchParams({
+      name: name.trim(),
+      lender: lenderId,
+      purpose: purpose || "",
+      channel: channel || "email",
+    });
+    onOpenChange(false);
+    router.push(`/email-generator/builder/new?${params.toString()}`);
+  }
+
   return (
     <Dialog open={open} onOpenChange={(v: boolean) => onOpenChange(v)}>
       <DialogContent className={cn("sm:max-w-lg", step === 4 && "sm:max-w-3xl")}>
@@ -832,29 +849,51 @@ function CreateTemplateDialog({
         )}
 
         {step === 3 && (
-          <div className="space-y-2">
-            <Label>Channel</Label>
-            <div className="grid grid-cols-2 gap-2">
-              {CHANNEL_ORDER.map((c) => {
-                const Icon = CHANNEL_ICONS[c];
-                return (
-                  <button
-                    key={c}
-                    type="button"
-                    onClick={() => setChannel(c)}
-                    className={cn(
-                      "flex items-center gap-2 rounded-lg border px-3 py-2.5 text-left text-sm transition-colors",
-                      channel === c
-                        ? "border-primary bg-primary/10 text-foreground"
-                        : "border-border bg-background hover:bg-muted/40",
-                    )}
-                  >
-                    <Icon className="size-4" />
-                    {CHANNEL_LABELS[c]}
-                  </button>
-                );
-              })}
+          <div className="space-y-3">
+            <div className="space-y-2">
+              <Label>Channel</Label>
+              <div className="grid grid-cols-2 gap-2">
+                {CHANNEL_ORDER.map((c) => {
+                  const Icon = CHANNEL_ICONS[c];
+                  return (
+                    <button
+                      key={c}
+                      type="button"
+                      onClick={() => setChannel(c)}
+                      className={cn(
+                        "flex items-center gap-2 rounded-lg border px-3 py-2.5 text-left text-sm transition-colors",
+                        channel === c
+                          ? "border-primary bg-primary/10 text-foreground"
+                          : "border-border bg-background hover:bg-muted/40",
+                      )}
+                    >
+                      <Icon className="size-4" />
+                      {CHANNEL_LABELS[c]}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
+            <div className="space-y-2">
+              <Label htmlFor="new-template-name">Template name</Label>
+              <Input
+                id="new-template-name"
+                value={name}
+                placeholder="e.g. Payment Reminder — Soft"
+                onChange={(e) => setName(e.target.value)}
+              />
+            </div>
+            {channel === "email" && (
+              <div className="rounded-md border border-emerald-500/30 bg-emerald-500/5 px-3 py-2.5 text-[11px]">
+                <p className="font-semibold text-emerald-300">
+                  This will open the v3 email builder
+                </p>
+                <p className="mt-0.5 text-emerald-300/80">
+                  Drag-and-drop rows + columns, saved modules, Composer GPT, conditional blocks,
+                  RTL, A/B testing. Or pick &ldquo;Use inline editor&rdquo; below for the simpler textarea flow.
+                </p>
+              </div>
+            )}
           </div>
         )}
 
@@ -971,7 +1010,35 @@ function CreateTemplateDialog({
               Back
             </Button>
           )}
-          {step < 4 ? (
+          {step === 3 && channel === "email" && (
+            <Button variant="outline" onClick={() => setStep(4)}>
+              Use inline editor
+            </Button>
+          )}
+          {step === 3 ? (
+            <Button
+              onClick={() => {
+                if (!channel) {
+                  toast.error("Please pick a channel");
+                  return;
+                }
+                if (channel === "email") {
+                  handleOpenBuilder();
+                } else {
+                  setStep(4);
+                }
+              }}
+            >
+              {channel === "email" ? (
+                <>
+                  <Wand2 className="size-3.5" />
+                  Continue in v3 builder
+                </>
+              ) : (
+                "Next"
+              )}
+            </Button>
+          ) : step < 4 ? (
             <Button
               onClick={() => {
                 if (step === 1 && !lenderId) {
@@ -1621,6 +1688,13 @@ function RichTemplatePreviewDialog({
 
             <DialogFooter className="gap-2 border-t border-border p-4">
               <DialogClose render={<Button variant="outline" />}>Close</DialogClose>
+              <Link
+                href={`/email-generator/builder/${template.id}`}
+                className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-3 py-1.5 text-xs font-medium text-emerald-300 transition-colors hover:bg-emerald-500/20"
+              >
+                <Sparkles className="h-3.5 w-3.5" />
+                Open in v3 builder
+              </Link>
               <Link
                 href={`/email-generator/new?template=${template.id}`}
                 className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90"

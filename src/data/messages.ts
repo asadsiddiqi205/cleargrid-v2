@@ -3,6 +3,10 @@ export type MessageStatus = "draft" | "scheduled" | "sent" | "failed";
 
 export interface MessageListItem {
   id: string;
+  /** Campaign name — required at send time, always present. Primary title in
+   *  the message listing. Distinct from `subject`, which is the email subject
+   *  line (or first ~80 chars of the body for SMS/WhatsApp). */
+  campaignName: string;
   subject: string; // For email; for SMS/WhatsApp, first ~80 chars of body
   channel: MessageChannel;
   status: MessageStatus;
@@ -30,6 +34,16 @@ export interface MessageListItem {
   funnel?: MessageFunnel;
   /** Per-link click breakdown (for sent emails) */
   linkClicks?: Array<{ label: string; url: string; clicks: number; isPayment?: boolean }>;
+  /** A/B/n variations. When present with length > 1, the analytics page
+   *  renders the variation switcher + per-variation comparison table. The
+   *  top-level `funnel` remains the aggregate across variations. */
+  variations?: MessageVariation[];
+  /** Optional holdout / control arm — used to compute campaign lift on
+   *  the analytics comparison table. */
+  holdout?: MessageHoldout;
+  /** Recurring campaign metadata. Present on the parent series template
+   *  and on every occurrence copy. */
+  recurring?: RecurringMeta;
 }
 
 /**
@@ -70,7 +84,104 @@ export interface MessageFunnel {
   attributionWindowDays: number;
 }
 
-export const messagesList: MessageListItem[] = [
+/**
+ * One variation of a sent A/B/n campaign. All the funnel/subject/from fields
+ * mirror the top-level Message shape so the analytics page can reuse its
+ * existing render logic scoped to a variation.
+ */
+export interface MessageVariation {
+  id: string;
+  /** "A", "B", "C" — display label */
+  label: string;
+  /** Traffic split % this variation received at send time. Sums to 100
+   *  across variations (excluding holdout). */
+  splitPct: number;
+  /** How many recipients this variation was sent to. */
+  recipients: number;
+  subject: string;
+  fromName?: string;
+  fromAddress?: string;
+  templateId?: string;
+  funnel: MessageFunnel;
+  linkClicks?: Array<{ label: string; url: string; clicks: number; isPayment?: boolean }>;
+}
+
+/**
+ * Control/holdout arm. When present, its `paidRate` is compared against the
+ * variation aggregate to compute lift.
+ */
+export interface MessageHoldout {
+  pct: number;
+  recipients: number;
+  /** Rate of goal completion in the holdout arm (0..100). */
+  goalRate: number;
+  goalLabel: string;
+}
+
+/**
+ * Recurring-campaign metadata. Present on both the parent series (isParent)
+ * and on every occurrence copy (isOccurrence). Occurrence copies always
+ * point at their parent via `seriesId`.
+ */
+export type RecurringSeriesStatus = "active" | "paused" | "ended";
+
+export type RecurringCadence =
+  | { kind: "daily"; time: string }
+  /**
+   * Custom cadence — either specific weekdays (daysOfWeek non-empty) or an
+   * every-N-days interval. Exactly one of the two shapes is used at a time:
+   * if daysOfWeek is empty, everyN drives the schedule.
+   */
+  | { kind: "custom"; daysOfWeek: number[]; everyN: number; time: string };
+
+export interface RecurringMeta {
+  /** Points at the parent series' message id. On the parent itself, this
+   *  equals the parent's own id for uniformity. */
+  seriesId: string;
+  /** Human-readable series name — sticky across occurrences.
+   *  E.g. "Mashreq · Daily 30 DPD reminder". */
+  seriesName: string;
+  /** True on the parent-template row (visible in the listing as a "series"
+   *  entry); false on individual occurrence copies. */
+  isParent: boolean;
+  /** 1-indexed occurrence number for copies. Undefined on the parent. */
+  occurrenceIndex?: number;
+  /** Total occurrences fired so far — same across the series. */
+  totalOccurrences: number;
+  status: RecurringSeriesStatus;
+  cadence: RecurringCadence;
+  /** Timestamp the series was last paused or resumed — used in banners. */
+  lastStateChangeAt?: string;
+}
+
+/** Manual campaign-name overrides for seeded messages. Anything not in this
+ *  map gets a derived name (see `deriveCampaignName`) so every entry in the
+ *  listing always has a campaign name — matches the mandatory-at-send rule. */
+const SEED_CAMPAIGN_NAMES: Record<string, string> = {
+  "msg-1": "Mashreq · High DPD Wave 12",
+  "msg-2": "Tamara · Ahmed Al-Mansoori (1:1 reminder)",
+  "msg-3": "Mashreq · Final Notice · 91-180 DPD",
+  "msg-4": "CashNow · Early Delinquency SMS · May W2",
+  "msg-5": "ENBD · Settlement Push · May",
+  "msg-6": "Tamara · PTP WhatsApp Confirmation · Daily",
+  "msg-7": "Mashreq · Broken Promise Follow-up",
+  "msg-8": "Tamara · Pre-Due Reminders · May",
+  "msg-9": "CashNow · 1:1 SMS (test)",
+  "msg-10": "General · Mid-DPD Multi-Channel · Wave 8",
+  "msg-11": "ENBD · Hardship Outreach",
+  "msg-12": "Mashreq · Settlement 30% off · WhatsApp",
+  "msg-13": "CashNow · Broken Promise Recovery · June",
+  "msg-14": "General · Settlement 20% off · Wave 3",
+  "msg-15": "General · Welcome / Onboarding · May",
+  "msg-16": "Tamara · PTP SMS Reminder · May W4",
+  // Recurring series parent (schedule template) + occurrence copies
+  "msg-rec-parent": "Mashreq · Daily 30 DPD Reminder (recurring)",
+  "msg-rec-occ-1": "Mashreq · Daily 30 DPD Reminder — Wave 12",
+  "msg-rec-occ-2": "Mashreq · Daily 30 DPD Reminder — Wave 13",
+  "msg-rec-occ-3": "Mashreq · Daily 30 DPD Reminder — Wave 14",
+}
+
+const rawMessagesList: Array<Omit<MessageListItem, "campaignName">> = [
   {
     id: "msg-1",
     subject: "Payment Reminder — Action Required",
@@ -110,6 +221,100 @@ export const messagesList: MessageListItem[] = [
       { label: "Reply / support", url: "mailto:support@cleargrid.co", clicks: 22 },
       { label: "Unsubscribe", url: "/unsubscribe", clicks: 12 },
     ],
+    variations: [
+      {
+        id: "var-a",
+        label: "A",
+        splitPct: 40,
+        recipients: 500,
+        subject: "Payment Reminder — Action Required",
+        fromName: "ClearGrid Collections",
+        fromAddress: "collections@cleargrid.co",
+        templateId: "rich-cg-payment-reminder",
+        funnel: {
+          sent: 500,
+          delivered: 494,
+          opened: 178,
+          clicked: 56,
+          goal: {
+            key: "paid",
+            label: "Paid",
+            count: 28,
+            valueLabel: "AED 47,600 recovered",
+            rateLabelOverride: "50.0% of clicks paid",
+          },
+          attributionWindowDays: 7,
+        },
+        linkClicks: [
+          { label: "Pay now (CTA)", url: "{{payment_link}}", clicks: 42, isPayment: true },
+          { label: "Reply / support", url: "mailto:support@cleargrid.co", clicks: 9 },
+          { label: "Unsubscribe", url: "/unsubscribe", clicks: 5 },
+        ],
+      },
+      {
+        id: "var-b",
+        label: "B",
+        splitPct: 40,
+        recipients: 500,
+        subject: "AED 3,450 due — pay in one tap",
+        fromName: "Mashreq Care",
+        fromAddress: "care@notifications.mashreq.ae",
+        templateId: "rich-cg-payment-reminder",
+        funnel: {
+          sent: 500,
+          delivered: 496,
+          opened: 214,
+          clicked: 78,
+          goal: {
+            key: "paid",
+            label: "Paid",
+            count: 44,
+            valueLabel: "AED 74,720 recovered",
+            rateLabelOverride: "56.4% of clicks paid",
+          },
+          attributionWindowDays: 7,
+        },
+        linkClicks: [
+          { label: "Pay now (CTA)", url: "{{payment_link}}", clicks: 59, isPayment: true },
+          { label: "Reply / support", url: "mailto:support@cleargrid.co", clicks: 12 },
+          { label: "Unsubscribe", url: "/unsubscribe", clicks: 7 },
+        ],
+      },
+      {
+        id: "var-c",
+        label: "C",
+        splitPct: 20,
+        recipients: 248,
+        subject: "Ahmed, a quick note about your Mashreq account",
+        fromName: "Mashreq Care",
+        fromAddress: "care@notifications.mashreq.ae",
+        templateId: "rich-cg-payment-reminder",
+        funnel: {
+          sent: 248,
+          delivered: 242,
+          opened: 79,
+          clicked: 21,
+          goal: {
+            key: "paid",
+            label: "Paid",
+            count: 12,
+            valueLabel: "AED 20,000 recovered",
+            rateLabelOverride: "57.1% of clicks paid",
+          },
+          attributionWindowDays: 7,
+        },
+        linkClicks: [
+          { label: "Pay now (CTA)", url: "{{payment_link}}", clicks: 15, isPayment: true },
+          { label: "Reply / support", url: "mailto:support@cleargrid.co", clicks: 3 },
+        ],
+      },
+    ],
+    holdout: {
+      pct: 10,
+      recipients: 139,
+      goalRate: 2.9,
+      goalLabel: "Paid (control arm — no message sent)",
+    },
   },
   {
     id: "msg-2",
@@ -545,7 +750,179 @@ export const messagesList: MessageListItem[] = [
       { label: "Unsubscribe", url: "/unsubscribe", clicks: 13 },
     ],
   },
+  // ─────── Recurring campaign: parent template ───────
+  {
+    id: "msg-rec-parent",
+    subject: "Payment Reminder — 30 DPD",
+    channel: "email",
+    status: "scheduled", // conceptually the "series" is active; latest occurrence is queued
+    audience: "Mashreq 30 DPD Reminders (daily)",
+    audienceType: "segment",
+    recipients: 420, // last-run count as a reference
+    sentAt: null,
+    createdAt: "2026-07-14T09:00:00Z",
+    createdBy: "Rabab Abbas",
+    lenderId: "lnd-mashreq",
+    playbookId: "pb-general-reminder",
+    playbookName: "General Payment Reminder",
+    openRate: null,
+    clickRate: null,
+    replyRate: null,
+    templateId: "rich-cg-payment-reminder",
+    fromName: "Mashreq Care",
+    fromAddress: "care@notifications.mashreq.ae",
+    recurring: {
+      seriesId: "msg-rec-parent",
+      seriesName: "Mashreq · Daily 30 DPD Reminder",
+      isParent: true,
+      totalOccurrences: 14,
+      status: "active",
+      cadence: { kind: "daily", time: "09:00" },
+    },
+  },
+  // ─────── Occurrence copies (already sent) ───────
+  {
+    id: "msg-rec-occ-1",
+    subject: "Payment Reminder — 30 DPD",
+    channel: "email",
+    status: "sent",
+    audience: "Mashreq 30 DPD Reminders (daily)",
+    audienceType: "segment",
+    recipients: 418,
+    sentAt: "2026-07-28T09:00:00Z",
+    createdAt: "2026-07-28T09:00:00Z",
+    createdBy: "System · recurring",
+    lenderId: "lnd-mashreq",
+    playbookId: "pb-general-reminder",
+    playbookName: "General Payment Reminder",
+    openRate: 41.2,
+    clickRate: 11.6,
+    replyRate: 2.4,
+    templateId: "rich-cg-payment-reminder",
+    fromName: "Mashreq Care",
+    fromAddress: "care@notifications.mashreq.ae",
+    funnel: {
+      sent: 418,
+      delivered: 414,
+      opened: 172,
+      clicked: 49,
+      goal: {
+        key: "paid",
+        label: "Paid",
+        count: 26,
+        valueLabel: "AED 44,720 recovered",
+      },
+      attributionWindowDays: 7,
+    },
+    linkClicks: [
+      { label: "Pay now (CTA)", url: "{{payment_link}}", clicks: 41, isPayment: true },
+      { label: "Reply / support", url: "mailto:support@cleargrid.co", clicks: 6 },
+    ],
+    recurring: {
+      seriesId: "msg-rec-parent",
+      seriesName: "Mashreq · Daily 30 DPD Reminder",
+      isParent: false,
+      occurrenceIndex: 14,
+      totalOccurrences: 14,
+      status: "active",
+      cadence: { kind: "daily", time: "09:00" },
+    },
+  },
+  {
+    id: "msg-rec-occ-2",
+    subject: "Payment Reminder — 30 DPD",
+    channel: "email",
+    status: "sent",
+    audience: "Mashreq 30 DPD Reminders (daily)",
+    audienceType: "segment",
+    recipients: 402,
+    sentAt: "2026-07-27T09:00:00Z",
+    createdAt: "2026-07-27T09:00:00Z",
+    createdBy: "System · recurring",
+    lenderId: "lnd-mashreq",
+    playbookId: "pb-general-reminder",
+    playbookName: "General Payment Reminder",
+    openRate: 39.8,
+    clickRate: 10.9,
+    replyRate: 2.2,
+    templateId: "rich-cg-payment-reminder",
+    fromName: "Mashreq Care",
+    fromAddress: "care@notifications.mashreq.ae",
+    funnel: {
+      sent: 402,
+      delivered: 398,
+      opened: 160,
+      clicked: 44,
+      goal: { key: "paid", label: "Paid", count: 23, valueLabel: "AED 39,100 recovered" },
+      attributionWindowDays: 7,
+    },
+    linkClicks: [
+      { label: "Pay now (CTA)", url: "{{payment_link}}", clicks: 37, isPayment: true },
+      { label: "Reply / support", url: "mailto:support@cleargrid.co", clicks: 4 },
+    ],
+    recurring: {
+      seriesId: "msg-rec-parent",
+      seriesName: "Mashreq · Daily 30 DPD Reminder",
+      isParent: false,
+      occurrenceIndex: 13,
+      totalOccurrences: 14,
+      status: "active",
+      cadence: { kind: "daily", time: "09:00" },
+    },
+  },
+  {
+    id: "msg-rec-occ-3",
+    subject: "Payment Reminder — 30 DPD",
+    channel: "email",
+    status: "sent",
+    audience: "Mashreq 30 DPD Reminders (daily)",
+    audienceType: "segment",
+    recipients: 388,
+    sentAt: "2026-07-26T09:00:00Z",
+    createdAt: "2026-07-26T09:00:00Z",
+    createdBy: "System · recurring",
+    lenderId: "lnd-mashreq",
+    playbookId: "pb-general-reminder",
+    playbookName: "General Payment Reminder",
+    openRate: 40.2,
+    clickRate: 11.1,
+    replyRate: 2.3,
+    templateId: "rich-cg-payment-reminder",
+    fromName: "Mashreq Care",
+    fromAddress: "care@notifications.mashreq.ae",
+    funnel: {
+      sent: 388,
+      delivered: 384,
+      opened: 156,
+      clicked: 43,
+      goal: { key: "paid", label: "Paid", count: 21, valueLabel: "AED 35,700 recovered" },
+      attributionWindowDays: 7,
+    },
+    linkClicks: [
+      { label: "Pay now (CTA)", url: "{{payment_link}}", clicks: 36, isPayment: true },
+    ],
+    recurring: {
+      seriesId: "msg-rec-parent",
+      seriesName: "Mashreq · Daily 30 DPD Reminder",
+      isParent: false,
+      occurrenceIndex: 12,
+      totalOccurrences: 14,
+      status: "active",
+      cadence: { kind: "daily", time: "09:00" },
+    },
+  },
 ];
+
+export const messagesList: MessageListItem[] = rawMessagesList.map((m) => ({
+  ...m,
+  campaignName: SEED_CAMPAIGN_NAMES[m.id] ?? deriveCampaignName(m),
+}));
+
+function deriveCampaignName(m: Omit<MessageListItem, "campaignName">): string {
+  // Fallback for any seed entry not explicitly named: audience + short subject.
+  const short = m.subject.length > 60 ? m.subject.slice(0, 57).trim() + "…" : m.subject
+  return `${m.audience} · ${short}`
+}
 
 export const messageKpis = [
   { label: "Sent (7d)", value: "5,981" },
@@ -553,6 +930,27 @@ export const messageKpis = [
   { label: "Scheduled", value: "2" },
   { label: "Failed (7d)", value: "1" },
 ];
+
+/**
+ * Given any message that belongs to a recurring series (parent or occurrence
+ * copy), return the parent-template message. Returns undefined for
+ * non-recurring messages.
+ */
+export function getRecurringParent(id: string): MessageListItem | undefined {
+  const m = messagesList.find((x) => x.id === id);
+  if (!m?.recurring) return undefined;
+  return messagesList.find((x) => x.id === m.recurring!.seriesId);
+}
+
+/**
+ * All messages in a recurring series (parent + occurrence copies), sorted
+ * by createdAt descending (most recent occurrence first).
+ */
+export function getSeriesOccurrences(seriesId: string): MessageListItem[] {
+  return messagesList
+    .filter((m) => m.recurring?.seriesId === seriesId && !m.recurring.isParent)
+    .sort((a, b) => (b.createdAt.localeCompare(a.createdAt)));
+}
 
 export function getMessageById(id: string): MessageListItem | undefined {
   return messagesList.find((m) => m.id === id);

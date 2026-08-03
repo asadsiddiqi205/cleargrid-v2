@@ -75,6 +75,8 @@ import {
   type StrategyChannelTemplate,
 } from "@/data/strategies"
 import { templates as templateLibrary } from "@/data/templates"
+import { richEmailTemplates } from "@/data/rich-email-templates"
+import { LayoutTemplate, Wand2 as Wand2Icon } from "lucide-react"
 
 // ---------------------------------------------------------------------------
 // Helpers / constants
@@ -627,6 +629,56 @@ function StrategyEditorDialog({
                       >
                         Edit template →
                       </Link>
+                    </div>
+                  )}
+
+                  {/* HTML template attachment — email channel only. */}
+                  {c.channel === "email" && c.enabled && (
+                    <div className="rounded-md border border-emerald-500/30 bg-emerald-500/5 p-2.5">
+                      <div className="mb-1.5 flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-1.5 text-[11px] font-semibold text-emerald-300">
+                          <LayoutTemplate className="h-3.5 w-3.5" />
+                          Rich HTML template
+                        </div>
+                        <Link
+                          href={`/email-generator/builder/new?lender=${state.lenderId}&channel=email&purpose=${state.purpose}`}
+                          className="inline-flex h-6 items-center gap-1 rounded border border-emerald-500/40 bg-emerald-500/10 px-2 text-[10px] font-medium text-emerald-300 hover:bg-emerald-500/20"
+                        >
+                          <Wand2Icon className="h-2.5 w-2.5" />
+                          Author in v3 builder
+                        </Link>
+                      </div>
+                      <Select
+                        value={c.htmlTemplateId || "__none__"}
+                        onValueChange={(v) => {
+                          if (!v || v === "__none__") {
+                            updateChannel(idx, { htmlTemplateId: undefined, htmlTemplateName: undefined })
+                            return
+                          }
+                          const t = richEmailTemplates.find((tt) => tt.id === v)
+                          updateChannel(idx, {
+                            htmlTemplateId: v,
+                            htmlTemplateName: t?.name,
+                          })
+                        }}
+                      >
+                        <SelectTrigger className="w-full">
+                          <SelectValue placeholder="Pick an HTML template (or leave plain)" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="__none__">— No HTML template, use plain only —</SelectItem>
+                          {richEmailTemplates.map((t) => (
+                            <SelectItem key={t.id} value={t.id}>
+                              {t.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      {c.htmlTemplateName && (
+                        <p className="mt-1.5 text-[10px] text-emerald-300/80">
+                          Attached: <span className="font-medium text-emerald-300">{c.htmlTemplateName}</span>
+                        </p>
+                      )}
                     </div>
                   )}
                 </div>

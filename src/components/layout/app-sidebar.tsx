@@ -34,8 +34,13 @@ export function AppSidebar() {
   return (
     <Sidebar collapsible="icon" className="border-r border-sidebar-border">
       <SidebarHeader className="p-4">
-        <Link href="/borrowers/deals" className="flex items-center gap-2">
-          <ClearGridIcon className="h-8 w-8 shrink-0 text-sidebar-foreground" />
+        <Link
+          href="/borrowers/deals"
+          className="flex items-center gap-2 group-data-[collapsible=icon]:justify-center"
+        >
+          {/* Collapsed sidebar → mark only */}
+          <ClearGridIcon className="hidden h-8 w-8 shrink-0 text-sidebar-foreground group-data-[collapsible=icon]:block" />
+          {/* Expanded sidebar → full lockup (already contains the mark) */}
           <ClearGridLogo className="h-6 w-auto text-sidebar-foreground group-data-[collapsible=icon]:hidden" />
         </Link>
       </SidebarHeader>

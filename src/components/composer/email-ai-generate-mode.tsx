@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { useRouter } from "next/navigation"
 import {
   Sparkles,
   Wand2,
@@ -9,6 +10,8 @@ import {
   ChevronUp,
   Loader2,
   Check,
+  FileText,
+  LayoutTemplate,
 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -105,6 +108,10 @@ const REFINE_OPTIONS = [
  * generated subject/preheader/body + reasoning expander + Use/Regenerate/Refine.
  */
 export function EmailAiGenerateMode({ onUseEmail }: EmailAiGenerateModeProps) {
+  const router = useRouter()
+  /** Whether the user wants a text-based email (stays in composer) or a full
+   *  HTML template (pushes to the v3 builder). Null until they pick. */
+  const [outputFormat, setOutputFormat] = React.useState<"text" | "html" | null>(null)
   const [config, setConfig] = React.useState<AiGenerateConfig>({
     objective: "reminder",
     tone: "professional",
@@ -120,6 +127,33 @@ export function EmailAiGenerateMode({ onUseEmail }: EmailAiGenerateModeProps) {
   const [generating, setGenerating] = React.useState(false)
   const [generated, setGenerated] = React.useState<AiGeneratedEmail | null>(null)
   const [showReasoning, setShowReasoning] = React.useState(false)
+
+  /** Map AI objective → starter-doc purpose (v3 builder route). */
+  function objectiveToPurpose(o: string): string {
+    switch (o) {
+      case "reminder": return "reminder"
+      case "overdue": return "reminder"
+      case "settlement": return "settlement"
+      case "welcome": return "welcome"
+      case "ptp": return "broken-promise"
+      case "hardship": return "hardship"
+      case "final": return "final-notice"
+      default: return "reminder"
+    }
+  }
+
+  function openInV3Builder() {
+    const params = new URLSearchParams({
+      name: `AI · ${config.objective}`,
+      lender: "general",
+      purpose: objectiveToPurpose(config.objective),
+      channel: "email",
+      // Signals to the builder page to use the complete HTML-email factory
+      // instead of the lean starter.
+      from: "ai",
+    })
+    router.push(`/email-generator/builder/new?${params.toString()}`)
+  }
 
   const updateConfig = <K extends keyof AiGenerateConfig>(
     key: K,
@@ -160,20 +194,79 @@ export function EmailAiGenerateMode({ onUseEmail }: EmailAiGenerateModeProps) {
     [config]
   )
 
+  // Step 0 — pick the output format before showing the form.
+  if (!outputFormat) {
+    return (
+      <div className="space-y-4">
+        <div className="rounded-lg border border-purple-500/30 bg-purple-500/5 p-3">
+          <div className="flex items-center gap-2">
+            <Sparkles className="h-4 w-4 text-purple-400" />
+            <span className="text-xs font-semibold text-purple-300">AI Email Generation</span>
+          </div>
+          <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+            What kind of email do you want to generate?
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+          <button
+            type="button"
+            onClick={() => setOutputFormat("text")}
+            className="group flex flex-col gap-2 rounded-lg border border-border bg-card/40 p-4 text-left transition-all hover:border-purple-500/40 hover:bg-purple-500/5"
+          >
+            <div className="flex h-9 w-9 items-center justify-center rounded-md bg-purple-500/15 text-purple-300">
+              <FileText className="h-4 w-4" />
+            </div>
+            <p className="text-sm font-semibold text-foreground">Text-based template</p>
+            <p className="text-[11px] leading-relaxed text-muted-foreground">
+              A plain-text email body with a subject + preheader. Stays in the inline composer — quick to edit and send.
+            </p>
+            <span className="mt-1 inline-flex w-fit items-center gap-1 rounded-md border border-purple-500/30 bg-purple-500/10 px-2 py-0.5 text-[10px] font-medium text-purple-300">
+              Best for SMS/email follow-ups
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setOutputFormat("html")}
+            className="group flex flex-col gap-2 rounded-lg border border-emerald-500/40 bg-emerald-500/5 p-4 text-left transition-all hover:border-emerald-500/70 hover:bg-emerald-500/10"
+          >
+            <div className="flex h-9 w-9 items-center justify-center rounded-md bg-emerald-500/15 text-emerald-300">
+              <LayoutTemplate className="h-4 w-4" />
+            </div>
+            <p className="text-sm font-semibold text-foreground">Complete HTML template</p>
+            <p className="text-[11px] leading-relaxed text-muted-foreground">
+              A full branded email with header, body blocks, CTA, footer. Opens the v3 builder so you can drag, drop, and refine.
+            </p>
+            <span className="mt-1 inline-flex w-fit items-center gap-1 rounded-md border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-300">
+              Recommended for campaigns
+            </span>
+          </button>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-4">
       {/* Header card */}
-      <div className="rounded-lg border border-purple-500/30 bg-purple-500/5 p-3">
-        <div className="flex items-center gap-2">
-          <Sparkles className="h-4 w-4 text-purple-400" />
-          <span className="text-xs font-semibold text-purple-300">
-            AI Email Generation
-          </span>
+      <div className="flex items-center justify-between gap-2 rounded-lg border border-purple-500/30 bg-purple-500/5 p-3">
+        <div>
+          <div className="flex items-center gap-2">
+            <Sparkles className="h-4 w-4 text-purple-400" />
+            <span className="text-xs font-semibold text-purple-300">
+              AI Email Generation · {outputFormat === "text" ? "Text-based" : "HTML template"}
+            </span>
+          </div>
+          <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+            {outputFormat === "text"
+              ? "Generates a subject + preheader + body. Stays inline."
+              : "After Generate, hand off to the v3 builder for layout and branding."}
+          </p>
         </div>
-        <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
-          Describe what you want and we'll generate a complete email with
-          subject, preheader, body, and CTA — using realistic borrower context.
-        </p>
+        <Button variant="ghost" size="sm" className="h-7 text-[11px]" onClick={() => setOutputFormat(null)}>
+          Change
+        </Button>
       </div>
 
       {/* Form */}
@@ -343,15 +436,21 @@ export function EmailAiGenerateMode({ onUseEmail }: EmailAiGenerateModeProps) {
           <Button
             size="lg"
             className="w-full bg-primary text-primary-foreground hover:bg-primary/90"
-            onClick={runGenerate}
+            onClick={outputFormat === "html" ? openInV3Builder : runGenerate}
             disabled={generating}
           >
             {generating ? (
               <Loader2 className="h-4 w-4 animate-spin" />
+            ) : outputFormat === "html" ? (
+              <LayoutTemplate className="h-4 w-4" />
             ) : (
               <Wand2 className="h-4 w-4" />
             )}
-            {generating ? "Generating..." : "Generate Email"}
+            {generating
+              ? "Generating..."
+              : outputFormat === "html"
+                ? "Build HTML template in v3 builder"
+                : "Generate Email"}
           </Button>
         </div>
       )}
