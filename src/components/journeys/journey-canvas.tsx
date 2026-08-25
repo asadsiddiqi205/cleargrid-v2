@@ -121,6 +121,8 @@ import {
   Boxes,
 } from "lucide-react";
 import { SimulateDrawer, NodeSampleList } from "@/components/journeys/simulate-drawer";
+import { BorrowerTraceDrawer } from "@/components/journeys/borrower-trace-drawer";
+import { BorrowerTracePicker } from "@/components/journeys/borrower-trace-picker";
 import {
   SimulationViewChip,
   OverlayLegend,
@@ -291,6 +293,11 @@ export default function JourneyCanvas({ journeyId }: JourneyCanvasProps) {
 
   // Part 1.2 — in-canvas Simulate drawer + per-node count overlay from result.
   const [simulateOpen, setSimulateOpen] = useState(false);
+  // Single-borrower trace — the trace picker + drawer. tracePickerOpen shows
+  // the borrower search; traceBorrowerActive holds the borrower whose trace
+  // is currently rendered in the drawer.
+  const [tracePickerOpen, setTracePickerOpen] = useState(false);
+  const [traceBorrowerActive, setTraceBorrowerActive] = useState<string | null>(null);
   // Trace modal (Part 2.6) — set to a borrower id to open.
   const [traceBorrowerId, setTraceBorrowerId] = useState<string | null>(null);
   // Simulation overlay visibility toggle (Part 3.1).
@@ -1535,6 +1542,10 @@ export default function JourneyCanvas({ journeyId }: JourneyCanvasProps) {
                 <Play className="h-3.5 w-3.5" />
                 Open simulator
               </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setTracePickerOpen(true)}>
+                <User className="h-3.5 w-3.5" />
+                Trace a borrower
+              </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={() => toast.info("Journey archived")}>
                 <Archive className="h-3.5 w-3.5" />
@@ -2686,6 +2697,24 @@ export default function JourneyCanvas({ journeyId }: JourneyCanvasProps) {
           else setSampleForNodeId(id);
         }}
         initialResult={simulateResult}
+      />
+
+      {/* Single-borrower trace picker + drawer. Picker chooses a borrower;
+          drawer renders their map+timeline against the current journey. */}
+      <BorrowerTracePicker
+        open={tracePickerOpen}
+        onOpenChange={setTracePickerOpen}
+        journeyId={journeyId}
+        onSelect={(id) => {
+          setTraceBorrowerActive(id);
+          setTracePickerOpen(false);
+        }}
+      />
+      <BorrowerTraceDrawer
+        open={traceBorrowerActive !== null}
+        onOpenChange={(o) => { if (!o) setTraceBorrowerActive(null); }}
+        borrowerId={traceBorrowerActive}
+        journeyId={journeyId}
       />
 
       {/* Custom styles for simulation animation & React Flow */}

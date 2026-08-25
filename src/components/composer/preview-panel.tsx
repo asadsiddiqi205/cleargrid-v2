@@ -52,6 +52,7 @@ import type { Segment } from "@/data/segments"
 import type { ComposerState, RecurrenceFreq, SendMode, SendSchedule } from "@/components/composer/composer-view"
 import { richEmailTemplates } from "@/data/rich-email-templates"
 import { getSenderProfileById } from "@/data/sender-profiles"
+import { MessagePreview } from "@/components/shared/message-preview"
 
 interface PreviewPanelProps {
   state: ComposerState
@@ -272,19 +273,15 @@ export function PreviewPanel({
           </Select>
         </div>
 
-        {state.channel === "email" && (
-          <EmailPreviewCard
-            subject={renderedSubject}
-            previewText={renderVars(state.previewText, previewBorrower)}
-            body={renderedBody}
-          />
-        )}
-        {state.channel === "sms" && (
-          <SmsPreviewCard body={renderedBody} phone={previewBorrower.phone} />
-        )}
-        {state.channel === "whatsapp" && (
-          <WhatsAppPreviewCard body={renderedBody} name={previewBorrower.name} />
-        )}
+        <MessagePreview
+          channel={state.channel}
+          subject={renderedSubject}
+          previewText={renderVars(state.previewText, previewBorrower)}
+          body={renderedBody}
+          recipientPhone={previewBorrower.phone}
+          recipientName={previewBorrower.name}
+          senderId="ClearGrid"
+        />
       </section>
 
       {/* ---- Compliance checks ---- */}
@@ -566,99 +563,10 @@ function CheckRow({
   )
 }
 
-function EmailPreviewCard({
-  subject,
-  previewText,
-  body,
-}: {
-  subject: string
-  previewText: string
-  body: string
-}) {
-  return (
-    <div className="overflow-hidden rounded-lg border border-border bg-background">
-      <div className="border-b border-border/60 px-3 py-2">
-        <div className="flex items-center gap-2">
-          <div className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/20 text-[10px] font-semibold text-primary">
-            CG
-          </div>
-          <div className="min-w-0 flex-1">
-            <div className="truncate text-[11px] font-medium text-foreground">
-              ClearGrid Collections
-            </div>
-            <div className="truncate text-[10px] text-muted-foreground">
-              collections@cleargrid.ae
-            </div>
-          </div>
-          <Clock className="h-3 w-3 text-muted-foreground" />
-        </div>
-      </div>
-      <div className="space-y-1 px-3 py-2">
-        <div className="text-[13px] font-semibold text-foreground">
-          {subject || <span className="text-muted-foreground">(no subject)</span>}
-        </div>
-        {previewText && (
-          <div className="text-[10px] text-muted-foreground line-clamp-1">
-            {previewText}
-          </div>
-        )}
-      </div>
-      <div className="max-h-64 overflow-y-auto whitespace-pre-wrap border-t border-border/60 px-3 py-3 text-[11px] leading-relaxed text-foreground">
-        {body || (
-          <span className="text-muted-foreground">
-            Your message preview will appear here...
-          </span>
-        )}
-      </div>
-    </div>
-  )
-}
-
-function SmsPreviewCard({ body, phone }: { body: string; phone: string }) {
-  return (
-    <div className="rounded-lg border border-border bg-muted/10 p-3">
-      <div className="mb-2 text-center text-[10px] text-muted-foreground">
-        {phone}
-      </div>
-      <div className="rounded-2xl rounded-tl-sm bg-muted px-3 py-2 text-[11px] leading-relaxed text-foreground">
-        {body || (
-          <span className="text-muted-foreground">
-            Your SMS preview will appear here...
-          </span>
-        )}
-      </div>
-      <div className="mt-1 text-right text-[9px] text-muted-foreground">
-        ClearGrid · just now
-      </div>
-    </div>
-  )
-}
-
-function WhatsAppPreviewCard({ body, name }: { body: string; name: string }) {
-  return (
-    <div className="rounded-lg bg-[#0b141a] p-3 ring-1 ring-emerald-900/40">
-      <div className="mb-2 flex items-center gap-2">
-        <div className="flex h-6 w-6 items-center justify-center rounded-full bg-emerald-600 text-[10px] font-semibold text-white">
-          CG
-        </div>
-        <div className="min-w-0 flex-1 text-[11px]">
-          <div className="truncate font-medium text-emerald-100">ClearGrid</div>
-          <div className="truncate text-[10px] text-emerald-100/60">{name}</div>
-        </div>
-      </div>
-      <div className="ml-auto max-w-[85%] rounded-lg rounded-br-sm bg-[#005c4b] px-3 py-2 text-[11px] leading-relaxed text-emerald-50">
-        {body || (
-          <span className="text-emerald-100/50">
-            Your WhatsApp preview will appear here...
-          </span>
-        )}
-      </div>
-      <div className="mt-1 text-right text-[9px] text-emerald-100/50">
-        12:34 ✓✓
-      </div>
-    </div>
-  )
-}
+/* EmailPreviewCard / SmsPreviewCard / WhatsAppPreviewCard live in
+   `@/components/shared/message-preview` — this file used to ship its own
+   copies but they were superseded when previews became shared with the
+   Journey Builder Send-node inspectors. */
 
 /* ────────────────────────────────────────────────────────────────────── */
 /*  Review all variations dialog                                           */

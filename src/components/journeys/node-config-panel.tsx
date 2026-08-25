@@ -58,6 +58,11 @@ import {
   CURRENT_ROLE,
   type FilterDefinition,
 } from "@/data/filter-registry";
+/* Shared "as the borrower received it" preview — same component the
+ * Composer uses. Ensures Send Email / Send SMS / Send WhatsApp nodes
+ * always render at parity with the Composer preview panel. */
+import { MessagePreview, type MessageChannel as PreviewChannel } from "@/components/shared/message-preview";
+import { borrowers } from "@/data/borrowers";
 
 /* ------------------------------------------------------------------ */
 /*  Mock data for dropdowns                                           */
@@ -1217,6 +1222,11 @@ export function NodeConfigPanel({ node, onClose, onUpdate, onDeleteNode, nodes =
                 )}
               </>
             )}
+
+            {/* ---- Shared message preview (email/sms/whatsapp) ---- */}
+            {(["email", "sms", "whatsapp"] as const).includes(
+              (d.actionType as "email" | "sms" | "whatsapp"),
+            ) && <NodeMessagePreview data={d} />}
 
             {/* ---- Start AI Call — ClearVoice project picker ---- */}
             {(d.actionType as string) === "call" && (
@@ -2873,5 +2883,100 @@ function RoleScopedFilterPicker({
       )}
     </>
   );
+}
+
+/* ─────────────────────────────────────────────────────────────────── */
+/*  NodeMessagePreview                                                */
+/*                                                                    */
+/*  Renders the shared "as the borrower received it" preview against  */
+/*  a sample borrower + the resolved template/manual body from this   */
+/*  Send node's config. Same component the Composer uses so           */
+/*  authors get parity when reviewing a journey end-to-end.           */
+/* ─────────────────────────────────────────────────────────────────── */
+
+function NodeMessagePreview({ data }: { data: Record<string, unknown> }) {
+  const [device, setDevice] = React.useState<"ios" | "android">("ios")
+  const [borrowerId, setBorrowerId] = React.useState<string>(borrowers[0].id)
+  const borrower = borrowers.find((b) => b.id === borrowerId) ?? borrowers[0]
+
+  const actionType = (data.actionType as string) ?? "email"
+  const channel = (actionType === "call" ? "email" : actionType) as PreviewChannel
+
+  const composeMode = (data.composeMode as string) ?? "template"
+  const template = (data.template as string) ?? ""
+  const manualSubject = (data.manualSubject as string) ?? ""
+  const manualBodyHtml = (data.manualBodyHtml as string) ?? ""
+  const manualBodyText = (data.manualBodyText as string) ?? ""
+
+  // Template mode picks the template's stub body from the composer registry;
+  // in prototype terms we render the template label as a stand-in body when
+  // the registry doesn't return a match. Manual mode uses the entered body.
+  const bodySource =
+    composeMode === "manual"
+      ? channel === "email" && manualBodyHtml
+        ? manualBodyHtml.replace(/<[^>]+>/g, "") // strip HTML for the plain-text preview
+        : manualBodyText
+      : template
+        ? `Template · ${template}\n\nHi {{borrower.first_name}},\n\nThis is a sample rendering of the "${template}" template as the borrower will receive it.`
+        : `(no template picked)`
+
+  const subjectSource =
+    composeMode === "manual"
+      ? manualSubject
+      : template
+        ? `Reminder — ${template}`
+        : ""
+
+  const rendered = renderVars(bodySource, borrower)
+  const subject = renderVars(subjectSource, borrower)
+
+  return (
+    <div className="mt-3 space-y-2 rounded-md border border-border/60 bg-muted/[0.04] p-2.5">
+      <div className="flex items-center justify-between gap-2">
+        <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+          As the borrower received it
+        </div>
+        <select
+          value={borrowerId}
+          onChange={(e) => setBorrowerId(e.target.value)}
+          className="h-6 rounded border border-input bg-transparent px-1.5 text-[10px] text-foreground outline-none focus-visible:border-ring dark:bg-input/30"
+        >
+          {borrowers.slice(0, 6).map((b) => (
+            <option key={b.id} value={b.id}>
+              {b.name}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <MessagePreview
+        channel={channel}
+        subject={subject}
+        body={rendered}
+        recipientPhone={borrower.phone}
+        recipientName={borrower.name}
+        senderId={(data.smsSenderId as string) || "ClearGrid"}
+        fromName={(data.fromName as string) || "ClearGrid Collections"}
+        fromAddress={(data.fromAddress as string) || "collections@cleargrid.ae"}
+        clickTracking={data.smsClickTracking !== false}
+        device={device}
+        onDeviceChange={setDevice}
+      />
+    </div>
+  )
+}
+
+/** Minimal mustache-style variable renderer, used only for the preview. */
+function renderVars(text: string, b: { name: string; phone: string; outstanding: number; product: string }): string {
+  if (!text) return ""
+  const first = b.name.split(" ")[0] ?? b.name
+  return text
+    .replace(/\{\{\s*borrower\.first_name\s*\}\}/g, first)
+    .replace(/\{\{\s*borrower\.name\s*\}\}/g, b.name)
+    .replace(/\{\{\s*borrower\.phone\s*\}\}/g, b.phone)
+    .replace(/\{\{\s*borrower\.outstanding\s*\}\}/g, `AED ${b.outstanding.toLocaleString()}`)
+    .replace(/\{\{\s*borrower\.product\s*\}\}/g, b.product)
+    .replace(/\{\{\s*first_name\s*\}\}/g, first)
+    .replace(/\{\{\s*amount\s*\}\}/g, `AED ${b.outstanding.toLocaleString()}`)
 }
 
