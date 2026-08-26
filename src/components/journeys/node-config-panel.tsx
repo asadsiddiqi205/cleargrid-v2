@@ -65,6 +65,8 @@ import {
 import { MessagePreview, type MessageChannel as PreviewChannel } from "@/components/shared/message-preview";
 import { borrowers } from "@/data/borrowers";
 import { getRichTemplate } from "@/data/rich-email-templates";
+import { NodeAnalyticsTab } from "@/components/journeys/node-analytics-tab";
+import { BarChart3 } from "lucide-react";
 
 /* ------------------------------------------------------------------ */
 /*  Mock data for dropdowns                                           */
@@ -219,6 +221,12 @@ interface NodeConfigPanelProps {
    *  nodes like Action Path Split that adapt to their predecessor. */
   nodes?: Node[];
   edges?: Edge[];
+  /** Journey id — required for the Analytics tab. */
+  journeyId?: string;
+  /** Currently-selected run id from the canvas Analytics chip. When set, the
+   *  Analytics tab shows who entered this node during that specific run.
+   *  When null, the tab prompts the author to pick a run. */
+  selectedRunId?: string | null;
   /**
    * Part 1.5 — Fix-button target. When present, scrolls the offending field
    * into view and pulses its border red for 3 seconds. `ts` is used to
@@ -251,7 +259,7 @@ interface NodeConfigPanelProps {
 /*  Component                                                          */
 /* ------------------------------------------------------------------ */
 
-export function NodeConfigPanel({ node, onClose, onUpdate, onDeleteNode, nodes = [], edges = [], focusField, masterContext, instanceContext }: NodeConfigPanelProps) {
+export function NodeConfigPanel({ node, onClose, onUpdate, onDeleteNode, nodes = [], edges = [], journeyId, selectedRunId, focusField, masterContext, instanceContext }: NodeConfigPanelProps) {
   const d = (node?.data ?? {}) as Record<string, unknown>;
 
   // Walk the graph backward from the selected node to find the nearest
@@ -523,6 +531,12 @@ export function NodeConfigPanel({ node, onClose, onUpdate, onDeleteNode, nodes =
               <SlidersHorizontal className="h-3 w-3" />
               Advanced
             </TabsTrigger>
+            {journeyId && (
+              <TabsTrigger value="analytics" className="flex-none px-2 text-[10px]">
+                <BarChart3 className="h-3 w-3" />
+                Analytics
+              </TabsTrigger>
+            )}
           </TabsList>
         </div>
 
@@ -1617,6 +1631,20 @@ export function NodeConfigPanel({ node, onClose, onUpdate, onDeleteNode, nodes =
           </>
         )}
         </TabsContent>
+
+        {/* Analytics tab — per-run per-node borrower list. */}
+        {journeyId && node && (
+          <TabsContent value="analytics" className="min-h-0 flex-1 overflow-hidden p-0">
+            <NodeAnalyticsTab
+              journeyId={journeyId}
+              runId={selectedRunId ?? null}
+              nodeId={node.id}
+              nodeLabel={(d.label as string) ?? node.id}
+              nodeType={node.type ?? "action"}
+              blockType={d.blockType as string | undefined}
+            />
+          </TabsContent>
+        )}
       </Tabs>
       <div className="border-t border-border p-4">
         <Button

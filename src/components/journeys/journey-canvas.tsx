@@ -124,6 +124,7 @@ import {
 import { SimulateDrawer, NodeSampleList } from "@/components/journeys/simulate-drawer";
 import { BorrowerTraceDrawer } from "@/components/journeys/borrower-trace-drawer";
 import { BorrowerTracePicker } from "@/components/journeys/borrower-trace-picker";
+import { RunPicker } from "@/components/journeys/run-picker";
 import {
   SimulationViewChip,
   OverlayLegend,
@@ -433,6 +434,9 @@ export default function JourneyCanvas({ journeyId }: JourneyCanvasProps) {
   }, [simulateResult?.id]);
   // Part 3.1 — analytics time range for canvas count pills.
   const [analyticsRange, setAnalyticsRange] = useState<"24h" | "7d" | "30d" | "all">("7d");
+  // Which specific run the Analytics tab inside the node config panel
+  // should analyze. null = aggregate view (report-level rollups).
+  const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
   const [sampleForNodeId, setSampleForNodeId] = useState<string | null>(null);
 
   // Part 1.6 — deviation alert banner state (dismissible per session).
@@ -2335,9 +2339,14 @@ export default function JourneyCanvas({ journeyId }: JourneyCanvasProps) {
                 <Maximize2 className="h-3.5 w-3.5" />
               </button>
             </Panel>
-            {/* Analytics range + minimap toggle — canvas overlay (top-right) */}
+            {/* Analytics range + run picker + minimap toggle — canvas overlay (top-right) */}
             <Panel position="top-right" className="!m-3">
               <div className="flex items-center gap-1.5">
+                <RunPicker
+                  journeyId={journeyId}
+                  value={selectedRunId}
+                  onChange={setSelectedRunId}
+                />
                 <div className="flex items-center gap-0.5 rounded-md border border-border bg-card/80 p-0.5 backdrop-blur-sm">
                   {(["24h", "7d", "30d", "all"] as const).map((r) => (
                     <button
@@ -2595,6 +2604,8 @@ export default function JourneyCanvas({ journeyId }: JourneyCanvasProps) {
               onDeleteNode={deleteSelectedNode}
               nodes={nodes}
               edges={edges}
+              journeyId={journeyId}
+              selectedRunId={selectedRunId}
               focusField={
                 focusFieldToken && focusFieldToken.nodeId === selectedNode.id
                   ? { field: focusFieldToken.field, ts: focusFieldToken.ts }
