@@ -94,6 +94,7 @@ import {
   User,
   FileText,
   Settings as SettingsIcon,
+  Sliders,
   Check,
   Undo2,
   Redo2,
@@ -1510,6 +1511,12 @@ export default function JourneyCanvas({ journeyId }: JourneyCanvasProps) {
               <DropdownMenuItem onClick={() => setShowSettings(true)}>
                 <SettingsIcon className="h-3.5 w-3.5" />
                 Settings
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => router.push(`/journeys/${journeyId}/settings`)}
+              >
+                <Sliders className="h-3.5 w-3.5" />
+                Conversion events + business metrics
               </DropdownMenuItem>
               <DropdownMenuItem onClick={handleScheduleOpen}>
                 <Calendar className="h-3.5 w-3.5" />

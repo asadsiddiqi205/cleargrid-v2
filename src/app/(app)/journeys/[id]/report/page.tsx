@@ -23,6 +23,7 @@ import {
   Banknote,
   CheckCircle2,
   Download,
+  Info,
   LogOut,
   PhoneCall,
   RefreshCcw,
@@ -46,6 +47,14 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { getJourneyById, getJourneyFlow } from "@/data/journeys";
 import type { Node } from "@xyflow/react";
 import { toast } from "sonner";
+import { NodeDrilldownModal } from "@/components/journeys/node-drilldown-modal";
+import {
+  DropOffFunnel,
+  Breakdowns,
+  TimeToConvertDistribution,
+  ConfigurableBusinessMetricsBand,
+} from "@/components/journeys/aggregate-analytics-sections";
+import { Sliders } from "lucide-react";
 
 /* ------------------------------------------------------------------ */
 /* Types                                                              */
@@ -377,6 +386,13 @@ export default function JourneyReportPage() {
                   </button>
                 ))}
               </div>
+              <Link
+                href={`/journeys/${journeyId}/settings`}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-primary/40 bg-primary/10 px-3 py-1.5 text-[12px] font-medium text-primary transition-colors hover:bg-primary/20"
+              >
+                <Sliders className="h-3.5 w-3.5" />
+                Settings
+              </Link>
               <button
                 type="button"
                 onClick={handleExportCsv}
@@ -550,41 +566,15 @@ export default function JourneyReportPage() {
                 </div>
               </div>
 
-              {/* Business metrics stack */}
+              {/* Configurable business metrics (drives from Journey Settings) */}
               <div className="flex flex-col gap-3">
-                <div>
-                  <h2 className="text-[16px] font-semibold text-foreground">Business metrics</h2>
-                  <p className="mt-0.5 text-[12px] text-muted-foreground">
-                    Aligned with Campaigns reporting.
-                  </p>
-                </div>
-                <BusinessMetricCard
-                  icon={PhoneCall}
-                  label="PTPs Captured"
-                  value={metrics.ptpsCaptured.toLocaleString()}
-                  hint={`${((metrics.ptpsCaptured / Math.max(1, metrics.totalEnrolled)) * 100).toFixed(1)}% of enrolled`}
-                  accent="teal"
-                />
-                <BusinessMetricCard
-                  icon={Activity}
-                  label="RPCs Made"
-                  value={metrics.rpcs.toLocaleString()}
-                  hint={`${((metrics.rpcs / Math.max(1, metrics.totalEnrolled)) * 100).toFixed(1)}% of enrolled`}
-                  accent="teal"
-                />
-                <BusinessMetricCard
-                  icon={Banknote}
-                  label="Revenue Attributed"
-                  value={`AED ${metrics.revenueAed.toLocaleString()}`}
-                  hint={`Avg AED ${Math.round(metrics.revenueAed / Math.max(1, metrics.converted)).toLocaleString()} / converted`}
-                  accent="teal-strong"
-                />
-                <p className="mt-1 px-1 text-[11px] leading-relaxed text-muted-foreground">
-                  Definitions match Campaigns reporting. See{" "}
-                  <Link href="/reports" className="text-primary-400 underline decoration-dotted underline-offset-2 hover:text-primary-300">
-                    Data Dictionary
-                  </Link>{" "}
-                  for full metric specs.
+                <ConfigurableBusinessMetricsBand journeyId={journeyId} />
+                <p className="px-1 text-[11px] leading-relaxed text-muted-foreground">
+                  Tiles above are configured for this journey. Change what appears in{" "}
+                  <Link href={`/journeys/${journeyId}/settings`} className="text-primary-400 underline decoration-dotted underline-offset-2 hover:text-primary-300">
+                    Journey Settings
+                  </Link>
+                  .
                 </p>
               </div>
             </div>
@@ -595,6 +585,15 @@ export default function JourneyReportPage() {
 
         {/* ================== Band 2.5 · Conversion events ================== */}
         {hasEverRun && <JourneyConversionsBand journeyId={journeyId} />}
+
+        {/* ================== Band 2.6 · Drop-off funnel ================== */}
+        {hasEverRun && <DropOffFunnel journeyId={journeyId} />}
+
+        {/* ================== Band 2.7 · Time to convert ================== */}
+        {hasEverRun && <TimeToConvertDistribution journeyId={journeyId} />}
+
+        {/* ================== Band 2.8 · Breakdowns ================== */}
+        {hasEverRun && <Breakdowns journeyId={journeyId} />}
 
         {/* ================== Band 3 · Per-node breakdown ================== */}
         <section>
@@ -643,6 +642,7 @@ export default function JourneyReportPage() {
               sortKey={sortKey}
               sortDir={sortDir}
               onSort={toggleSort}
+              journeyId={journeyId}
             />
           )}
         </section>
@@ -862,6 +862,7 @@ function PerNodeTable({
   sortKey,
   sortDir,
   onSort,
+  journeyId,
 }: {
   rows: Array<{
     nodeId: string;
@@ -878,7 +879,9 @@ function PerNodeTable({
   sortKey: string | null;
   sortDir: "asc" | "desc";
   onSort: (k: "runs" | "ok" | "failed" | "skipped" | "waiting" | "avg" | "conversion") => void;
+  journeyId: string;
 }) {
+  const [drilldown, setDrilldown] = React.useState<null | { nodeId: string; label: string; type: string }>(null)
   const H = ({
     label,
     k,
@@ -935,8 +938,9 @@ function PerNodeTable({
           {rows.map((n, i) => (
             <tr
               key={n.nodeId}
+              onClick={() => setDrilldown({ nodeId: n.nodeId, label: n.label, type: n.type })}
               className={cn(
-                "border-t border-border/50 transition-colors hover:bg-muted/15",
+                "cursor-pointer border-t border-border/50 transition-colors hover:bg-primary/5",
                 i % 2 === 1 && "bg-muted/[0.04]",
               )}
             >
@@ -944,6 +948,7 @@ function PerNodeTable({
                 <div className="flex items-center gap-2">
                   <span className="h-1.5 w-1.5 rounded-full bg-primary-500/70" />
                   {n.label}
+                  <ArrowRight className="ml-1 h-3 w-3 text-primary/50" />
                 </div>
               </td>
               <td className="px-4 py-3.5 text-[11px] uppercase tracking-wider text-muted-foreground">
@@ -974,6 +979,18 @@ function PerNodeTable({
           ))}
         </tbody>
       </table>
+      <NodeDrilldownModal
+        open={drilldown !== null}
+        onOpenChange={(o) => { if (!o) setDrilldown(null) }}
+        journeyId={journeyId}
+        nodeId={drilldown?.nodeId ?? ""}
+        nodeLabel={drilldown?.label ?? ""}
+        nodeType={drilldown?.type ?? ""}
+      />
+      <p className="border-t border-border/40 px-4 py-2 text-[10px] text-muted-foreground">
+        <Info className="mr-1 inline h-2.5 w-2.5" />
+        Click any row to open the borrower list at that node — with search, filter by state, export, and a link into each borrower&apos;s full trace.
+      </p>
     </div>
   );
 }
