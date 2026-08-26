@@ -124,6 +124,13 @@ export default function BorrowerProfilePage() {
             Every journey this borrower is (or was) enrolled in. Click Trace to see the exact
             path they took.
           </span>
+          <Link
+            href={`/reports/borrower-tracker/${borrower.id}`}
+            className="ml-auto inline-flex items-center gap-1 rounded border border-primary/40 bg-primary/10 px-2 py-1 text-[10px] font-medium text-primary transition-colors hover:bg-primary/20"
+          >
+            Open full tracker
+            <ChevronRight className="h-2.5 w-2.5" />
+          </Link>
         </div>
         {journeys.length === 0 ? (
           <div className="p-8 text-center text-[12px] text-muted-foreground">

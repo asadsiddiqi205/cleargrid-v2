@@ -49,8 +49,16 @@ export default function ReportsHubPage() {
           <KpiCard label="SMS campaigns" value={(smsOv?.campaignCount ?? 0).toString()} icon={MessageSquare} />
         </div>
 
-        {/* Three navigation cards — Conversions setup, Email report, SMS report */}
-        <div className="grid gap-3 lg:grid-cols-3">
+        {/* Four navigation cards */}
+        <div className="grid gap-3 lg:grid-cols-2">
+          <ReportsNavCard
+            href="/reports/borrower-tracker"
+            title="Borrower Journey Tracker"
+            description="Pick a borrower to see every journey they've been through — and, step by step, what the outreach was and how they responded (delivered · opened · clicked · call outcome · conversion)."
+            icon={Users}
+            accent="primary"
+            featured
+          />
           <ReportsNavCard
             href="/reports/conversions"
             title="Conversion setup"
@@ -139,6 +147,7 @@ function ReportsNavCard({
   icon: Icon,
   accent,
   stats,
+  featured,
 }: {
   href: string
   title: string
@@ -146,10 +155,14 @@ function ReportsNavCard({
   icon: React.ComponentType<{ className?: string }>
   accent: "primary" | "info" | "warning"
   stats?: Array<{ label: string; value: string }> | null | false
+  featured?: boolean
 }) {
   const accentClass =
     accent === "primary"
-      ? "border-primary/40 bg-primary/[0.04] hover:border-primary/60"
+      ? cn(
+          "border-primary/40 hover:border-primary/60",
+          featured ? "bg-primary/[0.08]" : "bg-primary/[0.04]",
+        )
       : accent === "info"
         ? "border-info-500/40 bg-info-500/[0.04] hover:border-info-500/60"
         : "border-warning-500/40 bg-warning-500/[0.04] hover:border-warning-500/60"

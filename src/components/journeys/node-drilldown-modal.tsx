@@ -360,12 +360,13 @@ export function NodeDrilldownModal({
                       <ChevronRight className="h-3 w-3" />
                     </button>
                     <a
-                      href={`/borrowers/${r.borrower.id}`}
+                      href={`/reports/borrower-tracker/${r.borrower.id}`}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="inline-flex items-center gap-1 rounded border border-border px-2 py-1 text-[11px] font-medium text-muted-foreground hover:text-foreground"
+                      title="Open the full borrower journey tracker in a new tab"
                     >
-                      Profile
+                      Tracker
                       <ArrowRight className="h-3 w-3" />
                     </a>
                   </li>
