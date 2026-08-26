@@ -186,8 +186,12 @@ function IosFrame({
 }) {
   return (
     <div className="mx-auto w-full max-w-[260px] overflow-hidden rounded-[36px] border-[6px] border-neutral-800 bg-black shadow-lg">
+      {/* Notch — approximates a modern iPhone Dynamic Island. */}
+      <div className="flex justify-center bg-black pt-1.5">
+        <div className="h-4 w-16 rounded-full bg-neutral-900" />
+      </div>
       {/* Status bar */}
-      <div className="flex items-center justify-between bg-black px-4 pt-3 pb-1 text-[10px] font-semibold text-white">
+      <div className="flex items-center justify-between bg-black px-4 pt-1 pb-1 text-[10px] font-semibold text-white">
         <span>9:41</span>
         <span className="flex items-center gap-1 text-white/90">
           <Signal className="h-2.5 w-2.5" />
@@ -196,18 +200,23 @@ function IosFrame({
         </span>
       </div>
       {/* Chat header */}
-      <div className="flex flex-col items-center bg-[#1c1c1e] px-3 py-2 text-white/90">
-        <div className="mb-1 flex h-8 w-8 items-center justify-center rounded-full bg-neutral-600 text-[10px] font-semibold">
+      <div className="flex flex-col items-center bg-[#1c1c1e] px-3 py-2.5 text-white/90">
+        <div className="mb-1 flex h-9 w-9 items-center justify-center rounded-full bg-neutral-600 text-[11px] font-semibold">
           {senderId.slice(0, 2).toUpperCase()}
         </div>
-        <div className="text-[10px] font-medium">{senderId}</div>
+        <div className="text-[11px] font-medium">{senderId}</div>
         {recipientPhone && (
           <div className="text-[9px] text-white/50">to {recipientPhone}</div>
         )}
       </div>
-      {/* Bubble area */}
-      <div className="min-h-[140px] space-y-2 bg-black px-3 py-3">
+      {/* Bubble area — realistic phone aspect ratio (9:19.5 for modern iPhones).
+          260px wide → ~440px tall for the bubble region, plus the chrome above. */}
+      <div className="flex min-h-[440px] flex-col gap-2 bg-black px-3 py-3">
         <IosBubble body={body} rtl={rtl} />
+      </div>
+      {/* Home indicator */}
+      <div className="flex justify-center bg-black pb-1.5 pt-1">
+        <div className="h-1 w-24 rounded-full bg-white/60" />
       </div>
     </div>
   )
@@ -246,8 +255,12 @@ function AndroidFrame({
 }) {
   return (
     <div className="mx-auto w-full max-w-[260px] overflow-hidden rounded-[24px] border-[6px] border-neutral-800 bg-[#0f172a] shadow-lg">
+      {/* Punch-hole camera */}
+      <div className="relative bg-[#0f172a] pt-2">
+        <div className="absolute left-1/2 top-2 h-2.5 w-2.5 -translate-x-1/2 rounded-full bg-black" />
+      </div>
       {/* Status bar */}
-      <div className="flex items-center justify-between bg-[#0f172a] px-4 pt-3 pb-1 text-[10px] font-medium text-white/90">
+      <div className="flex items-center justify-between bg-[#0f172a] px-4 pt-2 pb-1 text-[10px] font-medium text-white/90">
         <span>9:41</span>
         <span className="flex items-center gap-1 text-white/70">
           <Signal className="h-2.5 w-2.5" />
@@ -256,8 +269,8 @@ function AndroidFrame({
         </span>
       </div>
       {/* Header */}
-      <div className="flex items-center gap-2 bg-[#0f172a] px-3 py-2 text-white/90">
-        <div className="flex h-7 w-7 items-center justify-center rounded-full bg-primary/80 text-[10px] font-semibold text-primary-foreground">
+      <div className="flex items-center gap-2 bg-[#0f172a] px-3 py-2.5 text-white/90">
+        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/80 text-[11px] font-semibold text-primary-foreground">
           {senderId.slice(0, 2).toUpperCase()}
         </div>
         <div className="min-w-0 flex-1">
@@ -267,9 +280,13 @@ function AndroidFrame({
           )}
         </div>
       </div>
-      {/* Bubble area */}
-      <div className="min-h-[140px] space-y-2 bg-[#111827] px-3 py-3">
+      {/* Bubble area — matches iOS proportions. */}
+      <div className="flex min-h-[440px] flex-col gap-2 bg-[#111827] px-3 py-3">
         <AndroidBubble body={body} rtl={rtl} />
+      </div>
+      {/* Gesture bar */}
+      <div className="flex justify-center bg-[#0f172a] pb-1.5 pt-1">
+        <div className="h-1 w-20 rounded-full bg-white/50" />
       </div>
     </div>
   )

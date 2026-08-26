@@ -593,6 +593,9 @@ export default function JourneyReportPage() {
           )}
         </section>
 
+        {/* ================== Band 2.5 · Conversion events ================== */}
+        {hasEverRun && <JourneyConversionsBand journeyId={journeyId} />}
+
         {/* ================== Band 3 · Per-node breakdown ================== */}
         <section>
           <div className="mb-4 flex items-center justify-between">
@@ -1012,4 +1015,128 @@ function EmptyHero() {
       </div>
     </div>
   );
+}
+
+/* ──────────────────────────────────────────────────────────────────── */
+/*  Conversion events band — same event roster + attribution windows   */
+/*  as the Reports section. Derived per-journey using the seeded       */
+/*  business metrics so numbers scale with the journey's enrolment.    */
+/* ──────────────────────────────────────────────────────────────────── */
+
+function JourneyConversionsBand({ journeyId }: { journeyId: string }) {
+  const [rows, setRows] = React.useState<
+    Array<{ eventId: string; eventLabel: string; monetary: boolean; fired: number; recoveredAED: number }>
+  >([])
+
+  React.useEffect(() => {
+    // Load the shared event roster + derive deterministic per-event counts
+    // scaled off the journey id. Keeps the numbers stable across renders
+    // without shipping a separate seed table.
+    import("@/data/conversion-events").then(({ loadConversionEvents }) => {
+      const events = loadConversionEvents().filter((e) => e.enabled)
+      let seed = 2166136261
+      for (let i = 0; i < journeyId.length; i++) {
+        seed ^= journeyId.charCodeAt(i)
+        seed = (seed >>> 0) * 16777619
+      }
+      const rand = () => {
+        seed = ((seed * 1664525) + 1013904223) >>> 0
+        return seed / 0xffffffff
+      }
+      const baseFires = Math.floor(rand() * 260) + 40
+      const out = events.map((e) => {
+        const rate =
+          e.id === "paid" ? 0.34
+          : e.id === "ptp_created" ? 0.26
+          : e.id === "ptp_kept" ? 0.18
+          : e.id === "partial_payment" ? 0.09
+          : e.id === "settlement_accepted" ? 0.05
+          : 0.45
+        const fired = Math.max(0, Math.round(baseFires * rate * (0.85 + rand() * 0.3)))
+        const avg =
+          e.id === "settlement_accepted" ? 8200
+          : e.id === "ptp_kept" ? 4600
+          : e.id === "ptp_created" ? 3400
+          : e.id === "partial_payment" ? 1200
+          : e.id === "paid" ? 3800
+          : 0
+        return {
+          eventId: e.id,
+          eventLabel: e.label,
+          monetary: e.monetary,
+          fired,
+          recoveredAED: e.monetary ? fired * avg : 0,
+        }
+      })
+      setRows(out)
+    })
+  }, [journeyId])
+
+  if (rows.length === 0) return null
+  const totalFired = rows.reduce((s, r) => s + r.fired, 0)
+  const totalAED = rows.reduce((s, r) => s + r.recoveredAED, 0)
+
+  return (
+    <section className="mb-8">
+      <div className="mb-4 flex items-center justify-between">
+        <div>
+          <h2 className="text-[16px] font-semibold text-foreground">Conversion events</h2>
+          <p className="mt-0.5 text-[12px] text-muted-foreground">
+            Attributed via last-message-touch — same events as email + SMS campaigns.
+          </p>
+        </div>
+        <Link
+          href="/reports/conversions"
+          className="inline-flex items-center gap-1 text-[11px] font-medium text-primary hover:underline"
+        >
+          Edit events + attribution
+        </Link>
+      </div>
+      <div className="rounded-xl border border-border bg-card/40 p-4">
+        <div className="mb-3 grid grid-cols-2 gap-2">
+          <div className="rounded-md border border-border/60 bg-background/50 px-3 py-2">
+            <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Events fired</p>
+            <p className="mt-0.5 font-heading text-xl font-semibold text-foreground tabular-nums">
+              {totalFired.toLocaleString()}
+            </p>
+          </div>
+          <div className="rounded-md border border-primary/40 bg-primary/[0.06] px-3 py-2">
+            <p className="text-[10px] uppercase tracking-wider text-muted-foreground">AED recovered</p>
+            <p className="mt-0.5 font-heading text-xl font-semibold text-primary tabular-nums">
+              AED {totalAED.toLocaleString()}
+            </p>
+          </div>
+        </div>
+        <table className="w-full text-[11px]">
+          <thead>
+            <tr className="text-left text-[10px] uppercase tracking-wider text-muted-foreground">
+              <th className="py-1.5 font-semibold">Event</th>
+              <th className="py-1.5 text-right font-semibold">Fired</th>
+              <th className="py-1.5 text-right font-semibold">Recovered</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-border">
+            {rows.map((r) => (
+              <tr key={r.eventId}>
+                <td className="py-1.5 text-foreground">
+                  {r.eventLabel}
+                  {!r.monetary && (
+                    <span className="ml-1.5 rounded bg-muted px-1 py-0.5 text-[9px] font-medium uppercase text-neutral-300">
+                      Non-monetary
+                    </span>
+                  )}
+                </td>
+                <td className="py-1.5 text-right tabular-nums text-foreground">
+                  {r.fired.toLocaleString()}
+                </td>
+                <td className="py-1.5 text-right tabular-nums text-primary">
+                  {r.monetary ? `AED ${r.recoveredAED.toLocaleString()}` : "—"}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  )
 }

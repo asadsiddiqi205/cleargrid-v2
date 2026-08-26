@@ -30,6 +30,7 @@ import {
   ChevronRight,
   AlertTriangle,
   Lock,
+  Blocks,
 } from "lucide-react";
 import { getBlockType, getBlockCategory } from "@/data/journeys";
 import { cn } from "@/lib/utils";
@@ -1753,6 +1754,26 @@ function ComposerTemplatePicker({
   const playbooks = getComposerPlaybooks();
   const active = templates.find((t) => t.id === value);
   const [advancedOpen, setAdvancedOpen] = useState(false);
+  // Category filter — All / HTML (rich) / Plain text.
+  const [category, setCategory] = useState<"all" | "rich" | "plain">("all");
+  const [query, setQuery] = useState("");
+
+  const filtered = React.useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return templates.filter((t) => {
+      if (category === "rich" && t.source !== "rich") return false;
+      if (category === "plain" && t.source !== "plain") return false;
+      if (!q) return true;
+      return (
+        t.name.toLowerCase().includes(q) ||
+        t.lenderName.toLowerCase().includes(q) ||
+        (t.subject ?? "").toLowerCase().includes(q)
+      );
+    });
+  }, [templates, category, query]);
+
+  const richCount = templates.filter((t) => t.source === "rich").length;
+  const plainCount = templates.filter((t) => t.source === "plain").length;
 
   const prefillUrl =
     "/email-generator/builder/new?" +
@@ -1766,28 +1787,126 @@ function ComposerTemplatePicker({
       }),
     }).toString();
 
+  // "Edit template" points at the v3 builder for rich HTML templates and at
+  // the legacy plain editor for plain-text ones.
+  const editHref = active
+    ? active.source === "rich"
+      ? `/email-generator/builder/${active.id}`
+      : `/templates/editor?id=${active.id}`
+    : "";
+
   return (
     <>
       <Section title="Composer template">
-        <div data-focus-field="template">
-        <NativeSelect value={value} onChange={onChange}>
-          <option value="">Select template…</option>
-          {templates.map((t) => (
-            <option key={t.id} value={t.id}>
-              {t.name} · {t.lenderName}
-              {t.source === "rich" ? " · rich HTML" : ""}
-            </option>
-          ))}
-        </NativeSelect>
-        <p className="mt-1 text-[10px] text-muted-foreground">
-          Pulls from Composer&apos;s template registry. Every send is tagged{" "}
-          <code className="font-mono">source: journey_[id]</code> for
-          reconciliation.
-        </p>
+        <div data-focus-field="template" className="space-y-2">
+          {/* Category chips — visually distinguish HTML vs plain sources. */}
+          {channel === "email" && (
+            <div className="flex items-center gap-1 rounded-md border border-border/60 bg-muted/[0.04] p-0.5 text-[10px]">
+              <CategoryChip
+                active={category === "all"}
+                onClick={() => setCategory("all")}
+              >
+                All <span className="opacity-60">· {templates.length}</span>
+              </CategoryChip>
+              <CategoryChip
+                active={category === "rich"}
+                onClick={() => setCategory("rich")}
+                tone="primary"
+              >
+                <Blocks className="h-2.5 w-2.5" />
+                HTML <span className="opacity-60">· {richCount}</span>
+              </CategoryChip>
+              <CategoryChip
+                active={category === "plain"}
+                onClick={() => setCategory("plain")}
+                tone="muted"
+              >
+                Plain text <span className="opacity-60">· {plainCount}</span>
+              </CategoryChip>
+            </div>
+          )}
+          {/* Search */}
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search templates by name, lender, subject…"
+            className="h-8 w-full rounded-md border border-input bg-transparent px-2.5 text-[11px] outline-none focus-visible:border-ring dark:bg-input/30"
+          />
+          {/* Card list — visual template previews replace the flat dropdown. */}
+          <ul className="max-h-64 space-y-1 overflow-y-auto rounded-md border border-border/60 bg-muted/[0.02] p-1">
+            {filtered.map((t) => (
+              <li key={t.id}>
+                <button
+                  type="button"
+                  onClick={() => onChange(t.id)}
+                  className={cn(
+                    "flex w-full items-center gap-2 rounded-md border px-2 py-1.5 text-left transition-colors",
+                    value === t.id
+                      ? "border-primary/60 bg-primary/[0.08]"
+                      : "border-transparent hover:bg-muted/40",
+                  )}
+                >
+                  <TemplateSwatch source={t.source} />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5">
+                      <span className="truncate text-[11px] font-medium text-foreground">
+                        {t.name}
+                      </span>
+                      {t.source === "rich" ? (
+                        <span className="rounded bg-primary/15 px-1 py-px text-[9px] font-medium uppercase tracking-wider text-primary">
+                          HTML
+                        </span>
+                      ) : (
+                        <span className="rounded bg-muted px-1 py-px text-[9px] font-medium uppercase tracking-wider text-neutral-300">
+                          Plain
+                        </span>
+                      )}
+                    </div>
+                    <div className="truncate text-[10px] text-muted-foreground">
+                      {t.lenderName}
+                      {t.subject ? ` · ${t.subject}` : ""}
+                    </div>
+                  </div>
+                </button>
+              </li>
+            ))}
+            {filtered.length === 0 && (
+              <li className="px-2 py-3 text-center text-[11px] text-muted-foreground">
+                No templates match.
+              </li>
+            )}
+          </ul>
+          <p className="text-[10px] text-muted-foreground">
+            Pulls from Composer&apos;s template registry.{" "}
+            <span className="rounded bg-primary/15 px-1 text-primary">HTML</span>{" "}
+            = rich block-based (Open HTML builder to author).{" "}
+            <span className="rounded bg-muted px-1 text-neutral-300">Plain</span>{" "}
+            = free-text template. Every send tagged{" "}
+            <code className="font-mono">source: journey_[id]</code>.
+          </p>
         </div>
       </Section>
 
-      {active && <ComposerTemplatePreview template={active} />}
+      {active && (
+        <>
+          <ComposerTemplatePreview template={active} />
+          <div className="flex flex-wrap items-center gap-1.5">
+            <Link
+              href={editHref}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex h-7 items-center gap-1.5 rounded-md border border-primary/40 bg-primary/10 px-2.5 text-[11px] font-medium text-primary transition-colors hover:bg-primary/20"
+            >
+              {active.source === "rich" ? <Blocks className="h-3 w-3" /> : <Wand2 className="h-3 w-3" />}
+              Edit template
+              <ExternalLink className="h-3 w-3" />
+            </Link>
+            <span className="text-[10px] text-muted-foreground">
+              opens the {active.source === "rich" ? "HTML builder" : "plain template editor"} in a new tab
+            </span>
+          </div>
+        </>
+      )}
 
       <Section title="Playbook (optional)">
         <NativeSelect value={playbookId} onChange={onChangePlaybook}>
@@ -1869,6 +1988,56 @@ function ComposerTemplatePreview({ template }: { template: ComposerTemplateEntry
       </p>
     </div>
   );
+}
+
+/** Small chip used inside the template category filter row. */
+function CategoryChip({
+  active,
+  onClick,
+  tone,
+  children,
+}: {
+  active: boolean
+  onClick: () => void
+  tone?: "primary" | "muted"
+  children: React.ReactNode
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "flex flex-1 items-center justify-center gap-1 rounded px-2 py-1 font-medium transition-colors",
+        active
+          ? tone === "primary"
+            ? "bg-primary/15 text-primary"
+            : tone === "muted"
+              ? "bg-muted/80 text-foreground"
+              : "bg-background text-foreground shadow-sm"
+          : "text-muted-foreground hover:bg-muted/40 hover:text-foreground",
+      )}
+    >
+      {children}
+    </button>
+  )
+}
+
+/** 20px thumbnail that visually differentiates HTML vs plain templates. */
+function TemplateSwatch({ source }: { source: "rich" | "plain" }) {
+  if (source === "rich") {
+    return (
+      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded border border-primary/40 bg-gradient-to-br from-primary/20 to-primary/5">
+        <Blocks className="h-4 w-4 text-primary" />
+      </div>
+    )
+  }
+  return (
+    <div className="flex h-9 w-9 shrink-0 flex-col items-start justify-center gap-0.5 rounded border border-border/60 bg-muted/40 px-1">
+      <span className="block h-0.5 w-6 rounded bg-neutral-500" />
+      <span className="block h-0.5 w-5 rounded bg-neutral-500" />
+      <span className="block h-0.5 w-6 rounded bg-neutral-500" />
+    </div>
+  )
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
@@ -2936,17 +3105,7 @@ function NodeMessagePreview({ data }: { data: Record<string, unknown> }) {
         <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
           As the borrower received it
         </div>
-        <select
-          value={borrowerId}
-          onChange={(e) => setBorrowerId(e.target.value)}
-          className="h-6 rounded border border-input bg-transparent px-1.5 text-[10px] text-foreground outline-none focus-visible:border-ring dark:bg-input/30"
-        >
-          {borrowers.slice(0, 6).map((b) => (
-            <option key={b.id} value={b.id}>
-              {b.name}
-            </option>
-          ))}
-        </select>
+        <BorrowerSearchPicker value={borrowerId} onChange={setBorrowerId} />
       </div>
 
       <MessagePreview
@@ -2962,6 +3121,101 @@ function NodeMessagePreview({ data }: { data: Record<string, unknown> }) {
         device={device}
         onDeviceChange={setDevice}
       />
+    </div>
+  )
+}
+
+/**
+ * BorrowerSearchPicker — small popover with a searchable input that scans
+ * every seeded borrower (name / id / phone / product). Used in the Send-node
+ * preview so authors can preview against ANY audience borrower, not just
+ * the first six.
+ */
+function BorrowerSearchPicker({
+  value,
+  onChange,
+}: {
+  value: string
+  onChange: (id: string) => void
+}) {
+  const [open, setOpen] = React.useState(false)
+  const [query, setQuery] = React.useState("")
+  const active = borrowers.find((b) => b.id === value) ?? borrowers[0]
+  const filtered = React.useMemo(() => {
+    const q = query.trim().toLowerCase()
+    if (!q) return borrowers.slice(0, 30)
+    return borrowers.filter(
+      (b) =>
+        b.name.toLowerCase().includes(q) ||
+        b.id.toLowerCase().includes(q) ||
+        b.phone.includes(q) ||
+        b.emiratesId.includes(q) ||
+        b.product.toLowerCase().includes(q),
+    ).slice(0, 30)
+  }, [query])
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="flex h-6 items-center gap-1 rounded border border-input bg-transparent px-1.5 text-[10px] text-foreground outline-none hover:border-ring focus-visible:border-ring dark:bg-input/30"
+      >
+        <span className="max-w-[9rem] truncate">{active.name}</span>
+        <ChevronDown className="h-2.5 w-2.5 opacity-70" />
+      </button>
+      {open && (
+        <>
+          {/* Backdrop */}
+          <div
+            className="fixed inset-0 z-40"
+            onClick={() => setOpen(false)}
+          />
+          <div className="absolute right-0 top-full z-50 mt-1 w-[240px] rounded-md border border-border bg-popover shadow-md">
+            <div className="border-b border-border p-1.5">
+              <input
+                autoFocus
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search name, phone, product…"
+                className="h-7 w-full rounded border border-input bg-transparent px-2 text-[11px] outline-none focus-visible:border-ring dark:bg-input/30"
+              />
+            </div>
+            <ul className="max-h-64 overflow-y-auto py-1">
+              {filtered.map((b) => (
+                <li key={b.id}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onChange(b.id)
+                      setOpen(false)
+                      setQuery("")
+                    }}
+                    className={cn(
+                      "flex w-full items-center gap-2 px-2 py-1 text-left text-[11px] hover:bg-muted/60",
+                      b.id === value && "bg-primary/10",
+                    )}
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-foreground">{b.name}</div>
+                      <div className="truncate text-[10px] text-muted-foreground">
+                        {b.dpdBucket} DPD · {b.product}
+                      </div>
+                    </div>
+                  </button>
+                </li>
+              ))}
+              {filtered.length === 0 && (
+                <li className="px-2 py-2 text-center text-[11px] text-muted-foreground">
+                  No matches
+                </li>
+              )}
+            </ul>
+            <p className="border-t border-border px-2 py-1 text-[9px] text-muted-foreground">
+              Journey audience preview · pick any borrower to render
+            </p>
+          </div>
+        </>
+      )}
     </div>
   )
 }

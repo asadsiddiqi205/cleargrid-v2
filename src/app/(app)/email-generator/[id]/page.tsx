@@ -46,6 +46,10 @@ import {
 import { FunnelSegmentCtas } from "@/components/composer/funnel-segment-cta"
 import { ExportMenu } from "@/components/composer/export-menu"
 import { toast } from "sonner"
+import { formatAED } from "@/lib/formatters"
+import { buildCampaignReport, type CampaignReport } from "@/data/campaign-reports"
+import { loadConversionEvents } from "@/data/conversion-events"
+import { DollarSign, Sliders } from "lucide-react"
 
 const CHANNEL_LABEL: Record<MessageChannel, string> = {
   email: "Email",
@@ -300,6 +304,13 @@ export default function MessageDetailPage() {
               holdout={message.holdout ?? null}
               onOpenVariation={(id) => setActiveVarId(id)}
             />
+          )}
+
+          {/* Conversion events — reuse the shared conversion-events config +
+              campaign-report aggregation so this section stays in lockstep
+              with the Reports section. */}
+          {showFunnel && (
+            <CampaignConversionsSection messageId={message.id} channel={message.channel} />
           )}
 
           {showFunnel && <FunnelSegmentCtas message={message} />}
@@ -998,6 +1009,108 @@ function Row({
         <span className="break-words text-foreground">{value}</span>
         {extra}
       </dd>
+    </div>
+  )
+}
+
+/* ──────────────────────────────────────────────────────────────────── */
+/*  Campaign conversions                                                */
+/*                                                                     */
+/*  Renders the same per-event conversion rows the Reports section     */
+/*  builds — reused so this page stays in lockstep with the Reports    */
+/*  view. Uses buildCampaignReport with the shared conversion-events   */
+/*  config. Only render for email + sms channels (WhatsApp analytics   */
+/*  live on the WhatsApp side).                                        */
+/* ──────────────────────────────────────────────────────────────────── */
+
+function CampaignConversionsSection({
+  messageId,
+  channel,
+}: {
+  messageId: string
+  channel: MessageChannel
+}) {
+  const [report, setReport] = React.useState<CampaignReport | null>(null)
+  React.useEffect(() => {
+    if (channel === "email" || channel === "sms") {
+      const events = loadConversionEvents()
+      setReport(buildCampaignReport(messageId, events))
+    }
+  }, [messageId, channel])
+
+  if (!report) return null
+  const totalFired = report.conversions.reduce((s, c) => s + c.fired, 0)
+  const totalAED = report.conversions.reduce((s, c) => s + c.recoveredAED, 0)
+
+  return (
+    <div className="rounded-xl border border-border bg-card/40 p-5">
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+          Conversion events
+        </p>
+        <Link
+          href="/reports/conversions"
+          className="inline-flex items-center gap-1 text-[10px] font-medium text-primary hover:underline"
+        >
+          <Sliders className="h-3 w-3" />
+          Edit events + attribution
+        </Link>
+      </div>
+
+      <div className="mb-3 grid grid-cols-2 gap-2">
+        <div className="rounded-md border border-border/60 bg-background/50 px-3 py-2">
+          <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Events fired</p>
+          <p className="mt-0.5 font-heading text-xl font-semibold text-foreground tabular-nums">
+            {totalFired.toLocaleString()}
+          </p>
+        </div>
+        <div className="rounded-md border border-primary/40 bg-primary/[0.06] px-3 py-2">
+          <p className="text-[10px] uppercase tracking-wider text-muted-foreground">AED recovered</p>
+          <p className="mt-0.5 flex items-center gap-1 font-heading text-xl font-semibold text-primary tabular-nums">
+            <DollarSign className="h-4 w-4" />
+            {formatAED(totalAED)}
+          </p>
+        </div>
+      </div>
+
+      <table className="w-full text-[11px]">
+        <thead>
+          <tr className="text-left text-[10px] uppercase tracking-wider text-muted-foreground">
+            <th className="py-1.5 font-semibold">Event</th>
+            <th className="py-1.5 text-right font-semibold">Fired</th>
+            <th className="py-1.5 text-right font-semibold">Recovered</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-border">
+          {report.conversions.map((c) => (
+            <tr key={c.eventId}>
+              <td className="py-1.5">
+                <span className="text-foreground">{c.eventLabel}</span>
+                {!c.monetary && (
+                  <span className="ml-1.5 rounded bg-muted px-1 py-0.5 text-[9px] font-medium uppercase text-neutral-300">
+                    Non-monetary
+                  </span>
+                )}
+              </td>
+              <td className="py-1.5 text-right tabular-nums text-foreground">
+                {c.fired.toLocaleString()}
+              </td>
+              <td className="py-1.5 text-right tabular-nums text-primary">
+                {c.monetary ? formatAED(c.recoveredAED) : "—"}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+
+      <p className="mt-2 text-[10px] leading-relaxed text-muted-foreground">
+        Attributed via last-message-touch within each event&apos;s window. Change windows or
+        disable events in{" "}
+        <Link href="/reports/conversions" className="text-primary hover:underline">
+          Reports → Conversion setup
+        </Link>{" "}
+        to re-attribute this campaign in real time.
+      </p>
     </div>
   )
 }

@@ -553,14 +553,17 @@ export function EditorPanel({ state, update }: EditorPanelProps) {
                       className="w-full border-b border-border/60 bg-transparent pb-2 text-xs text-muted-foreground outline-none placeholder:text-muted-foreground/70"
                     />
 
-                    {/* Toolbar: AI Assist + Open in v3 builder */}
-                    <div className="flex items-center justify-end gap-2">
+                    {/* Toolbar: prominent HTML builder CTA + AI Assist + Create journey */}
+                    <div className="flex flex-wrap items-center justify-end gap-2">
                       <a
                         href="/email-generator/builder/new"
-                        className="inline-flex h-7 items-center gap-1.5 rounded-md border border-emerald-500/30 bg-emerald-500/5 px-2.5 text-[11px] font-medium text-emerald-300 transition-colors hover:bg-emerald-500/15"
+                        className="group inline-flex h-9 items-center gap-2 rounded-lg bg-primary px-3.5 text-[12px] font-semibold text-primary-foreground shadow-sm shadow-primary/20 transition-all hover:bg-primary/90 hover:shadow-md hover:shadow-primary/30"
                       >
-                        <Blocks className="h-3 w-3" />
-                        Open v3 builder
+                        <Blocks className="h-4 w-4" />
+                        Open HTML builder
+                        <span className="hidden text-[10px] font-normal text-primary-foreground/80 sm:inline">
+                          · blocks, rich layout, brand kit
+                        </span>
                       </a>
                       <CreateJourneyDropdown channel="email" templateName={state.subject || "Composer Draft"} />
                       <Button
