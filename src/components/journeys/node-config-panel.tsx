@@ -64,6 +64,7 @@ import {
  * always render at parity with the Composer preview panel. */
 import { MessagePreview, type MessageChannel as PreviewChannel } from "@/components/shared/message-preview";
 import { borrowers } from "@/data/borrowers";
+import { getRichTemplate } from "@/data/rich-email-templates";
 
 /* ------------------------------------------------------------------ */
 /*  Mock data for dropdowns                                           */
@@ -1961,6 +1962,10 @@ function ComposerTemplatePicker({
 }
 
 function ComposerTemplatePreview({ template }: { template: ComposerTemplateEntry }) {
+  // When the picked template is an HTML rich template, look up its
+  // definition + render the actual JSX so the sidebar preview shows what
+  // the borrower will receive — not just a text description.
+  const rich = template.source === "rich" ? getRichTemplate(template.id) : undefined
   return (
     <div className="rounded-lg border border-border bg-muted/20 p-3">
       <div className="flex items-center justify-between gap-2">
@@ -1983,9 +1988,29 @@ function ComposerTemplatePreview({ template }: { template: ComposerTemplateEntry
           Subject: {template.subject}
         </p>
       )}
-      <p className="mt-1 text-xs leading-relaxed text-muted-foreground/80 line-clamp-3">
-        {template.preview}
-      </p>
+      {rich ? (
+        // Scaled-down live HTML render. The rich template already carries a
+        // full JSX renderer + defaultSlots — we mount it non-interactive and
+        // scale it to fit the sidebar width. Overflow-y is scrollable so long
+        // templates don't blow out the panel height.
+        <div className="mt-2 overflow-hidden rounded-md border border-border/60 bg-white">
+          <div className="max-h-[380px] overflow-y-auto">
+            <div
+              style={{
+                transform: "scale(0.44)",
+                transformOrigin: "top left",
+                width: "227%", // 100 / 0.44 so the scaled-down box fills width
+              }}
+            >
+              {rich.render({ slots: rich.defaultSlots, interactive: false })}
+            </div>
+          </div>
+        </div>
+      ) : (
+        <p className="mt-1 text-xs leading-relaxed text-muted-foreground/80 line-clamp-3">
+          {template.preview}
+        </p>
+      )}
     </div>
   );
 }
