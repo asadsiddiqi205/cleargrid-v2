@@ -2474,23 +2474,12 @@ export default function JourneyCanvas({ journeyId }: JourneyCanvasProps) {
             )}
           </ReactFlow>
 
-          {/* Per-node count pill overlay (positioned via node DOM). Simulation
-              overlay carries richer per-node data (%, branch counts, empty
-              attributes, cost); analytics overlay falls back to plain counts. */}
-          <NodeCountPillOverlay
-            simulation={simulateResult && !simulationOverlayHidden ? simulateResult : null}
-            analytics={
-              simulateResult
-                ? null
-                : buildAnalyticsCounts(nodes, edges, analyticsRange, journeyId)
-            }
-            range={analyticsRange}
-            nodes={nodes}
-            onOpenSample={(id) => {
-              if (id.startsWith("trace:")) setTraceBorrowerId(id.slice(6));
-              else setSampleForNodeId(id);
-            }}
-          />
+          {/* Per-node count pill overlay removed — the small floating count
+              badges (e.g. "2.2k") were visually distracting on top of the
+              canvas. Per-node breakdown lives in the node inspector's
+              Analytics tab (with borrower list) and on the report page's
+              per-node drill-down. Simulation overlay stays available via
+              the SimulateDrawer when a simulation is loaded. */}
 
           <NodeSampleList
             open={!!sampleForNodeId}
