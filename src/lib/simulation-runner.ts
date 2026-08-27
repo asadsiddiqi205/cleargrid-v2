@@ -289,8 +289,8 @@ export function runSimulation(input: RunInputs): SimulationResult {
       if (hop.branch) {
         sim.branchCounts![hop.branch] = (sim.branchCounts![hop.branch] ?? 0) + 1
       }
-      // Only accumulate first 10 sample borrowers per node
-      if (sim.sample.length < 10) {
+      // Sample up to 200 borrowers per node — matches Eternals' "showing first 200"
+      if (sim.sample.length < 200) {
         sim.sample.push(sampleFor(b, trace.dealId))
       }
       // Empty-attribute scan

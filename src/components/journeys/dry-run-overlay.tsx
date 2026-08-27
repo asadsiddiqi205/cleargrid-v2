@@ -17,7 +17,7 @@
 
 import * as React from "react"
 import type { Edge, Node } from "@xyflow/react"
-import type { SimulationResult } from "@/lib/simulation"
+import type { SimulationResult, NodeSimulation } from "@/lib/simulation"
 import { cn } from "@/lib/utils"
 import { formatAED } from "@/lib/formatters"
 import {
@@ -30,7 +30,11 @@ import {
   DollarSign,
   X,
   Info,
+  ExternalLink,
+  Search,
 } from "lucide-react"
+import Link from "next/link"
+import { useParams } from "next/navigation"
 
 interface DryRunOverlayProps {
   result: SimulationResult | null
@@ -89,23 +93,30 @@ export function DryRunOverlay({
   onDismiss,
 }: DryRunOverlayProps) {
   const anchors = useNodeAnchors(nodes, result)
+  const [openNodeId, setOpenNodeId] = React.useState<string | null>(null)
+
   if (!result || hidden) return null
 
   const nodeById = new Map(nodes.map((n) => [n.id, n]))
+  const openNode = openNodeId ? nodeById.get(openNodeId) : null
+  const openSim = openNodeId ? result.perNode[openNodeId] : null
 
   return (
     <>
-      {/* Per-node count pills */}
+      {/* Per-node count pills (clickable — opens borrowers panel) */}
       {Array.from(anchors.entries()).map(([nodeId, rect]) => {
         const sim = result.perNode[nodeId]
         if (!sim) return null
         const node = nodeById.get(nodeId)
         const kind = classifyKind(node)
         return (
-          <span
+          <button
             key={`count-${nodeId}`}
+            type="button"
+            onClick={() => setOpenNodeId(nodeId)}
+            title={`${sim.count.toLocaleString()} borrowers — click to see who`}
             className={cn(
-              "absolute z-30 pointer-events-none rounded-md border px-1.5 py-0.5 text-[10px] font-semibold tabular-nums shadow-sm backdrop-blur-sm",
+              "absolute z-30 rounded-md border px-1.5 py-0.5 text-[10px] font-semibold tabular-nums shadow-sm backdrop-blur-sm transition-transform hover:scale-110 hover:shadow-md cursor-pointer",
               KIND_TONE[kind],
             )}
             style={{
@@ -113,8 +124,9 @@ export function DryRunOverlay({
               left: rect.left + 4,
             }}
           >
+            <Users className="mr-0.5 -mt-0.5 inline h-2.5 w-2.5" />
             {sim.count.toLocaleString()}
-          </span>
+          </button>
         )
       })}
 
@@ -174,12 +186,155 @@ export function DryRunOverlay({
         )
       })}
 
-      {/* Right-side aggregate panel */}
-      <DryRunAggregatePanel result={result} nodes={nodes} onDismiss={onDismiss} />
+      {/* Right-side aggregate panel — hidden when a node panel is open */}
+      {!openNodeId && (
+        <DryRunAggregatePanel
+          result={result}
+          nodes={nodes}
+          onDismiss={onDismiss}
+          onSelectNode={(nid) => setOpenNodeId(nid)}
+        />
+      )}
+
+      {/* Per-node borrowers panel — Eternals-style "click a node → see who's there" */}
+      {openNode && openSim && (
+        <NodeBorrowersPanel
+          node={openNode}
+          sim={openSim}
+          onClose={() => setOpenNodeId(null)}
+        />
+      )}
 
       {/* Color legend bottom-left */}
       <DryRunLegend />
     </>
+  )
+}
+
+/* ─────────── Node borrowers panel ─────────── */
+
+function NodeBorrowersPanel({
+  node,
+  sim,
+  onClose,
+}: {
+  node: Node
+  sim: NodeSimulation
+  onClose: () => void
+}) {
+  const params = useParams<{ id: string }>()
+  const journeyId = params?.id ?? "new"
+  const kind = classifyKind(node)
+  const label = ((node.data as { label?: string } | undefined)?.label) ?? node.id
+  const [query, setQuery] = React.useState("")
+  const filtered = React.useMemo(() => {
+    const q = query.trim().toLowerCase()
+    if (!q) return sim.sample
+    return sim.sample.filter(
+      (s) =>
+        s.borrowerName.toLowerCase().includes(q) ||
+        s.borrowerId.toLowerCase().includes(q) ||
+        s.dealId.toLowerCase().includes(q) ||
+        (s.product ?? "").toLowerCase().includes(q),
+    )
+  }, [sim.sample, query])
+
+  return (
+    <div className="absolute right-4 top-4 z-40 flex w-[360px] flex-col rounded-xl border border-primary/40 bg-card/95 shadow-lg backdrop-blur-sm">
+      <div className="flex items-center gap-1.5 border-b border-border px-3 py-2">
+        <KindIcon kind={kind} />
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-[12px] font-semibold text-foreground">{label}</div>
+          <div className="text-[10px] text-muted-foreground">
+            <Users className="mr-0.5 -mt-0.5 inline h-2.5 w-2.5" />
+            {sim.count.toLocaleString()} borrowers
+            {sim.sample.length < sim.count && (
+              <span className="text-muted-foreground/70">
+                {" "}
+                · showing sample of {sim.sample.length}
+              </span>
+            )}
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Close"
+          className="rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+        >
+          <X className="h-3 w-3" />
+        </button>
+      </div>
+
+      {sim.count === 0 ? (
+        <div className="px-3 py-6 text-center text-[11px] text-muted-foreground">
+          No borrowers reached this node.
+        </div>
+      ) : (
+        <>
+          <div className="border-b border-border/60 px-3 py-1.5">
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-2 top-1/2 h-3 w-3 -translate-y-1/2 text-muted-foreground" />
+              <input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search by name / deal id / product…"
+                className="h-7 w-full rounded border border-input bg-background pl-6 pr-2 text-[11px] outline-none focus-visible:ring-1 focus-visible:ring-primary"
+              />
+            </div>
+          </div>
+          <div className="max-h-[52vh] overflow-y-auto">
+            <table className="w-full text-[10.5px]">
+              <thead className="sticky top-0 bg-muted/[0.08] text-muted-foreground">
+                <tr>
+                  <th className="px-2 py-1 text-left font-semibold">Borrower</th>
+                  <th className="px-2 py-1 text-left font-semibold">Deal id</th>
+                  <th className="px-2 py-1 text-left font-semibold">Product</th>
+                  <th className="w-8" />
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border/60">
+                {filtered.map((s) => (
+                  <tr key={s.borrowerId} className="hover:bg-muted/30">
+                    <td className="px-2 py-1">
+                      <div className="text-foreground">{s.borrowerName}</div>
+                      <div className="font-mono text-[9px] text-muted-foreground">
+                        {s.borrowerId}
+                        {s.dpd ? ` · ${s.dpd} DPD` : ""}
+                      </div>
+                    </td>
+                    <td className="px-2 py-1 font-mono text-[9px] text-muted-foreground">
+                      {s.dealId}
+                    </td>
+                    <td className="px-2 py-1 text-muted-foreground">{s.product ?? "—"}</td>
+                    <td className="px-2 py-1 text-right">
+                      <Link
+                        href={`/journeys/${journeyId}?trace=${s.borrowerId}`}
+                        title="Trace on canvas"
+                        className="inline-flex h-4 w-4 items-center justify-center rounded border border-primary/40 bg-primary/10 text-primary hover:bg-primary/20"
+                      >
+                        <ExternalLink className="h-2 w-2" />
+                      </Link>
+                    </td>
+                  </tr>
+                ))}
+                {filtered.length === 0 && (
+                  <tr>
+                    <td colSpan={4} className="px-2 py-4 text-center text-[10px] text-muted-foreground">
+                      No match for &quot;{query}&quot;.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+          <div className="border-t border-border/60 px-3 py-1.5 text-[9px] text-muted-foreground">
+            <Info className="mr-1 -mt-0.5 inline h-2.5 w-2.5" />
+            Trace icon opens the borrower&apos;s exact executed path on this canvas.
+          </div>
+        </>
+      )}
+    </div>
   )
 }
 
@@ -189,10 +344,12 @@ function DryRunAggregatePanel({
   result,
   nodes,
   onDismiss,
+  onSelectNode,
 }: {
   result: SimulationResult
   nodes: Node[]
   onDismiss: () => void
+  onSelectNode: (nodeId: string) => void
 }) {
   const grouped = React.useMemo(() => aggregateByKind(result, nodes), [result, nodes])
   const totalCost = result.totalCostAed
@@ -229,14 +386,21 @@ function DryRunAggregatePanel({
             </div>
             <ul className="divide-y divide-border/60 rounded border border-border/60">
               {group.rows.map((r) => (
-                <li key={r.nodeId} className="flex items-center gap-2 px-2 py-1.5">
-                  <span className="min-w-0 flex-1 truncate text-foreground">{r.label}</span>
-                  <span className="tabular-nums text-foreground">{r.count.toLocaleString()}</span>
-                  {r.secondary !== undefined && (
-                    <span className="tabular-nums text-muted-foreground">
-                      · {r.secondary.toLocaleString()}
-                    </span>
-                  )}
+                <li key={r.nodeId}>
+                  <button
+                    type="button"
+                    onClick={() => onSelectNode(r.nodeId)}
+                    title="See borrowers at this node"
+                    className="flex w-full items-center gap-2 px-2 py-1.5 text-left hover:bg-muted/30"
+                  >
+                    <span className="min-w-0 flex-1 truncate text-foreground">{r.label}</span>
+                    <span className="tabular-nums text-foreground">{r.count.toLocaleString()}</span>
+                    {r.secondary !== undefined && (
+                      <span className="tabular-nums text-muted-foreground">
+                        · {r.secondary.toLocaleString()}
+                      </span>
+                    )}
+                  </button>
                 </li>
               ))}
               <li className="flex items-center gap-2 bg-muted/[0.06] px-2 py-1.5 text-[10px] font-semibold">
