@@ -27,7 +27,6 @@ import {
   Info,
   Loader2,
   Play,
-  RefreshCcw,
   Search,
   ShieldAlert,
   Users,
@@ -38,10 +37,7 @@ import { JourneySubNav } from "@/components/journeys/journey-sub-nav"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { cn } from "@/lib/utils"
 import { borrowers, type Borrower } from "@/data/borrowers"
-import { journeysList } from "@/data/journeys"
-import { lenders } from "@/data/lenders"
 import { synthesizeTrace } from "@/data/borrower-traces"
 
 interface AudienceRow {
@@ -62,7 +58,6 @@ export default function JourneyValidatorPage() {
   const params = useParams<{ id: string }>()
   const router = useRouter()
   const journeyId = params.id ?? "new"
-  const journey = journeysList.find((j) => j.id === journeyId)
 
   const [count, setCount] = React.useState(100)
   const [audience, setAudience] = React.useState<AudienceRow[] | null>(null)
@@ -132,8 +127,6 @@ export default function JourneyValidatorPage() {
     router.push(`/journeys/${journeyId}?trace=${borrowerId}`)
   }
 
-  const tenantLender = journey ? lenders.find((l) => l.id === journey.lenderId) : null
-
   return (
     <div className="flex flex-col">
       <JourneySubNav journeyId={journeyId} />
@@ -142,39 +135,11 @@ export default function JourneyValidatorPage() {
         description="Snapshot the entry-segment audience, then compare each borrower's executed path against the prediction — node by node, branch by branch. Read-only: this tool never runs the journey."
       >
         <div className="space-y-4">
-          {/* Step 0 — Account (tenant scoping) */}
-          <StepCard num={0} title="Account">
-            <div className="flex flex-wrap items-center gap-2">
-              {lenders.map((l) => (
-                <span
-                  key={l.id}
-                  className={cn(
-                    "inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[10px] font-medium",
-                    tenantLender?.id === l.id
-                      ? "border-primary/60 bg-primary/10 text-primary"
-                      : "border-border bg-muted/[0.06] text-muted-foreground",
-                  )}
-                >
-                  {l.shortName}
-                </span>
-              ))}
-            </div>
-            <p className="mt-2 text-[10px] text-muted-foreground">
-              Tenant inherited from this journey&apos;s lender configuration —
-              <span className="text-foreground font-medium">
-                {" "}
-                {tenantLender?.shortName ?? "(general)"}
-              </span>
-              . The audit only touches deals belonging to this tenant.
-            </p>
-          </StepCard>
-
           <p className="text-[11px] leading-relaxed text-muted-foreground">
-            Pass a <span className="font-medium text-foreground">Journey ID</span>.{" "}
             <span className="rounded bg-primary/10 px-1 py-px font-medium text-primary">
               Fetch Audience
             </span>{" "}
-            grabs the first N members of the entry segment and snapshots their data.{" "}
+            grabs the first N members of this journey&apos;s entry segment and snapshots their data.{" "}
             <span className="rounded bg-primary/10 px-1 py-px font-medium text-primary">
               Validate
             </span>{" "}
@@ -189,14 +154,6 @@ export default function JourneyValidatorPage() {
             {/* Step 1 — Audience */}
             <StepCard num={1} title="Audience">
               <div className="space-y-3">
-                <div>
-                  <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">
-                    Journey
-                  </Label>
-                  <div className="mt-0.5 flex h-9 items-center rounded-md border border-input bg-background/60 px-2.5 font-mono text-[11px] text-foreground">
-                    {journey?.name ?? journeyId}
-                  </div>
-                </div>
                 <div>
                   <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">
                     Count (first N members)
