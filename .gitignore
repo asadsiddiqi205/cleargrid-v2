@@ -48,3 +48,6 @@ next-env.d.ts
 # Personal/machine-specific settings stay local.
 # CLAUDE.md and .claude/commands/ are SHARED across the team and must be committed.
 .claude/settings.local.json
+
+# Local Netlify folder
+.netlify
