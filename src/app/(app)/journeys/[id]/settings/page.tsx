@@ -62,6 +62,7 @@ import {
   type JourneySettings,
 } from "@/data/journey-settings"
 import { journeysList } from "@/data/journeys"
+import { JourneySubNav } from "@/components/journeys/journey-sub-nav"
 
 type Tab = "conversions" | "metrics"
 
@@ -183,7 +184,9 @@ export default function JourneySettingsPage() {
   }
 
   return (
-    <div className="mx-auto max-w-5xl space-y-5 p-6">
+    <div className="flex flex-col">
+      <JourneySubNav journeyId={journeyId} />
+      <div className="mx-auto w-full max-w-5xl space-y-5 p-6">
       <div className="flex flex-wrap items-center gap-3">
         <button
           type="button"
@@ -270,6 +273,7 @@ export default function JourneySettingsPage() {
           setDirty(true)
         }}
       />
+      </div>
     </div>
   )
 }

@@ -55,6 +55,7 @@ import {
   ConfigurableBusinessMetricsBand,
 } from "@/components/journeys/aggregate-analytics-sections";
 import { Sliders } from "lucide-react";
+import { JourneySubNav } from "@/components/journeys/journey-sub-nav";
 
 /* ------------------------------------------------------------------ */
 /* Types                                                              */
@@ -326,10 +327,11 @@ export default function JourneyReportPage() {
 
   return (
     <div className="relative min-h-full w-full bg-background">
+      <JourneySubNav journeyId={journeyId} />
       {/* Decorative top gradient */}
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-x-0 top-0 h-[280px] bg-gradient-to-b from-primary-500/10 via-primary-500/[0.03] to-transparent"
+        className="pointer-events-none absolute inset-x-0 top-[41px] h-[280px] bg-gradient-to-b from-primary-500/10 via-primary-500/[0.03] to-transparent"
       />
 
       <div className="relative mx-auto w-full max-w-[1400px] px-8 py-8">

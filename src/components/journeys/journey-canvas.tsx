@@ -124,6 +124,10 @@ import {
 } from "lucide-react";
 import { SimulateDrawer, NodeSampleList } from "@/components/journeys/simulate-drawer";
 import { DryRunOverlay } from "@/components/journeys/dry-run-overlay";
+import { TraceOverlay } from "@/components/journeys/trace-overlay";
+import { synthesizeTrace } from "@/data/borrower-traces";
+import { borrowers } from "@/data/borrowers";
+import { JourneySubNav } from "@/components/journeys/journey-sub-nav";
 import { BorrowerTraceDrawer } from "@/components/journeys/borrower-trace-drawer";
 import { BorrowerTracePicker } from "@/components/journeys/borrower-trace-picker";
 import { RunPicker } from "@/components/journeys/run-picker";
@@ -1293,6 +1297,23 @@ export default function JourneyCanvas({ journeyId }: JourneyCanvasProps) {
 
   /* ---------- hydrate from composer / funnel / template ---------- */
   const searchParams = useSearchParams();
+
+  /* ---------- Trace overlay (Eternals "Real executed flow") ---------- */
+  const traceQueryId = searchParams?.get("trace") ?? null;
+  const traceOverlayData = useMemo(() => {
+    if (!traceQueryId) return null;
+    const borrower = borrowers.find((b) => b.id === traceQueryId);
+    if (!borrower) return null;
+    return {
+      trace: synthesizeTrace(borrower.id, journeyId),
+      borrowerName: borrower.name,
+    };
+  }, [traceQueryId, journeyId]);
+  const clearTraceParam = useCallback(() => {
+    const url = new URL(window.location.href);
+    url.searchParams.delete("trace");
+    router.replace(url.pathname + (url.search ? url.search : "") + url.hash);
+  }, [router]);
   const fromComposerRef = useRef(false);
   useEffect(() => {
     if (fromComposerRef.current) return;
@@ -1391,6 +1412,10 @@ export default function JourneyCanvas({ journeyId }: JourneyCanvasProps) {
 
   return (
     <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
+      {/* Journey sub-nav — one-click access to Editor / Validator /
+          Borrowers / Settings / Report. Always visible so authors can
+          find the QA tools without hunting through overflow menus. */}
+      <JourneySubNav journeyId={journeyId} compact />
       {/* ====== Top bar ====== */}
       <div className="flex h-12 w-full shrink-0 items-center gap-2 overflow-hidden border-b border-border bg-card/60 px-3">
         {/* ----- Left group: back / breadcrumb / name / chips ----- */}
@@ -1640,9 +1665,10 @@ export default function JourneyCanvas({ journeyId }: JourneyCanvasProps) {
             )}
           />
 
-          {/* Eternals-style Validator — regression against real executed paths. */}
+          {/* Eternals-style Validator — dedicated page for regression
+              against real executed paths. */}
           <ToolbarButton
-            onClick={() => setValidatorOpen(true)}
+            onClick={() => router.push(`/journeys/${journeyId}/validator`)}
             icon={<Users className="h-3.5 w-3.5" />}
             label="Validator"
             labelClass="hidden xl:inline"
@@ -2514,6 +2540,17 @@ export default function JourneyCanvas({ journeyId }: JourneyCanvasProps) {
             hidden={simulationOverlayHidden}
             onDismiss={() => setSimulationOverlayHidden(true)}
           />
+
+          {/* Eternals "Real executed flow" — highlights a borrower's exact
+              path with per-pass loop colouring when ?trace= is in the URL. */}
+          {traceOverlayData && (
+            <TraceOverlay
+              trace={traceOverlayData.trace}
+              borrowerName={traceOverlayData.borrowerName}
+              onDismiss={clearTraceParam}
+              journeyId={journeyId}
+            />
+          )}
 
           <NodeSampleList
             open={!!sampleForNodeId}
