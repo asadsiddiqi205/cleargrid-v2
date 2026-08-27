@@ -551,64 +551,421 @@ both render.
 
 # HTML builder (rich email templates)
 
-The Journey Builder Send-node picker, the Composer editor, and the
-Reports funnel all reference the rich block-based HTML email builder
-(`/email-generator/builder/[id]`). Changes over the past month:
+The block-based HTML email builder — the full editor lives at
+`/email-generator/builder/[id]` and is the shared authoring surface for
+every rich HTML template that shows up in the Journey Builder Send-node
+picker, the Composer, the Reports funnel, and the `/templates` library.
 
-## 1 · Rename + prominence (2026-08-26) — commit [`c031d7c`](https://github.com/asadsiddiqi205/cleargrid-v2/commit/c031d7c)
+This section documents the **entire builder end-to-end**, not just the
+past month.
 
-- **"Open v3 builder"** renamed to **"Open HTML builder"** in the
-  composer inline editor toolbar.
-- Rebuilt as a **primary-filled teal button** (`bg-primary`,
-  `text-primary-foreground`, shadow, hover elevation) with an inline
-  subtitle "blocks, rich layout, brand kit". Reads as a first-class CTA
-  instead of a footer link.
+## Architecture at a glance
 
-## 2 · Visual template picker (Journey Send nodes) (2026-08-26) — commit [`c031d7c`](https://github.com/asadsiddiqi205/cleargrid-v2/commit/c031d7c)
+- **Three-pane app shell**: BlockPalette (left) · BuilderCanvas (centre)
+  · PropertiesPanel (right), plus a top BuilderToolbar and a bottom
+  PlaybookLintBar.
+- **Document model** (`src/data/builder-blocks.ts`): a `BuilderDocument`
+  is an ordered list of `BuilderRow`s. Each row has 1 or 2 columns.
+  Each column holds `BuilderBlock`s of a typed kind. Rows and blocks
+  can be locked. Blocks can carry a `ConditionalConfig` for
+  attribute-driven visibility.
+- **Twelve block kinds**: `text · image · button · payment_link ·
+  divider · spacer · table · social · video · custom_html ·
+  saved_module · ai_conditional`.
+- **Doc-level state**: language (`en / ar / bilingual`), direction
+  (`ltr / rtl`), pageBg, contentWidth.
+- **Undo / redo** with `history[]` + `future[]` stacks captured on every
+  `commit()`. `dirty` tracked separately so the top-right pill can
+  show "Unsaved changes" vs "Saved N ago".
+- **Persistence** in prototype terms is in-memory; the sample docs and
+  seeded starter docs come from
+  `src/data/builder-blocks.ts::SAMPLE_DOCS` and
+  `src/data/starter-docs.ts` respectively.
 
-Rebuilt `ComposerTemplatePicker` inside the Journey Builder Send-node
-inspector.
+## 1 · Block palette (left rail)
 
-- **Category chips** at the top: `All` / `HTML` (with Blocks icon) /
-  `Plain text`, each with a live count. HTML gets primary tint, plain
-  gets a muted tint.
-- **Live search** over name / lender / subject.
-- Flat `<select>` replaced by a **card list**. Each card carries a
-  swatch (HTML → primary-tinted Blocks icon, plain → three neutral
-  bars), the template name, an HTML / Plain badge next to it, lender +
-  subject preview below.
+`src/components/composer/builder/block-palette.tsx` (~321 lines)
 
-## 3 · Edit template button (2026-08-26) — commit [`c031d7c`](https://github.com/asadsiddiqi205/cleargrid-v2/commit/c031d7c)
+- Renders the `BLOCK_CATALOG` from `builder-blocks.ts`.
+- **Featured blocks pinned at the top**: Text, Image, Payment link,
+  Saved module.
+- Live search filter over name + description.
+- Each palette item is **HTML5-draggable** onto the canvas; drop position
+  drives insert (`onInsertBlockAt`) and a `paletteDragActive` flag
+  lights up drop zones.
+- Also supports **click-to-insert** (`onInsert`) — the new block lands
+  after the currently-selected block, or at the end.
+- **Saved modules subsection** — pulls from `src/data/saved-modules.ts`
+  and offers reusable header / footer / payment_cta / compliance /
+  greeting modules to drop in.
 
-Appears when a template is picked in a Send node. Routes to
-`/email-generator/builder/{id}` for HTML templates or
-`/templates/editor?id={id}` for plain-text ones. Opens in a new tab with
-an "opens in a new tab" hint.
+## 2 · Builder canvas (centre)
 
-## 4 · Live HTML preview inside Send-node picker (2026-08-26) — commit [`43063cb`](https://github.com/asadsiddiqi205/cleargrid-v2/commit/43063cb)
+`src/components/composer/builder/builder-canvas.tsx` (~570 lines)
 
-Rebuilt `ComposerTemplatePreview` so it renders the actual email JSX,
-not a text stub, when the picked template is an HTML rich template.
+- Renders each row with its columns; each column is a drop target
+  (`col`, `rowId`, `index`) so palette blocks can be inserted precisely.
+- **Row-level chrome** in author mode: bg picker, padding stepper, RTL
+  toggle, Add row / Delete row / Duplicate row buttons; hidden in
+  `previewMode`.
+- **Block chrome** (via `block-renderers.tsx`): drag handle,
+  quick-delete X, `Lock` badge on locked blocks, conditional-branch
+  indicator on blocks with a `ConditionalConfig`.
+- **Selection**: clicking a block sets `selectedBlockId`; the block
+  gains a primary ring. Selection also drives the properties panel.
+- **Device toggle**: `desktop | mobile` — mobile clamps the canvas
+  width and swaps `<img>` sizing to mobile-safe pixels.
+- Exports `insertBlockIntoDoc` + `makeBlock` for the parent page + AI
+  dialogs to use the same insert helpers.
 
-- Looks up the `RichEmailTemplate` by id via `getRichTemplate(id)`.
-- Mounts `template.render({ slots: template.defaultSlots, interactive:
-  false })` inside a `bg-white` container.
-- Scaled 0.44× (`transform: scale(0.44)`; width `227%` so the scaled
-  box fills the sidebar) with `max-h-[380px] overflow-y-auto` so long
-  templates scroll inside the panel.
-- Plain-text templates keep the line-clamped text preview.
+## 3 · Block renderers
 
-## 5 · Composer registry adapter (already in place, extended)
+`src/components/composer/builder/block-renderers.tsx` (~348 lines)
 
-`src/data/composer-registry-adapter.ts` unifies rich HTML + plain
-templates + playbooks under a single `ComposerTemplateEntry` shape:
+One renderer per block kind. Each renders as inline-styled HTML so what
+the author sees on the canvas matches what the borrower receives.
 
-- `source: "rich" | "plain"` — drives the badge and picker categorization.
-- `getComposerTemplatesForChannel(channel)` combines both sources,
-  rich wins on duplicates.
-- `encodeTemplatePrefill(input)` — base64 blob for
-  `/email-generator/builder/new?prefill=…` so authors starting a template
-  from a journey Send node carry over the channel + a starter name.
+- **`text`** — HTML string; inline align (`left / center / right`) and
+  fontSize. Merge tags stay as literal `{{...}}` at authoring time and
+  resolve at send.
+- **`image`** — src + alt + optional href + max width. Broken image
+  fallback shows the `AlertCircle` icon.
+- **`button`** — label + href + bg + text color + align.
+- **`payment_link`** — the first-class trackable payment button. Points
+  at `{{payment_link}}` which resolves per borrower at send. Carries a
+  `conversionEvent` (`payment_initiated / ptp_captured /
+  settlement_accepted`) so the send auto-attributes conversions when it
+  fires. Optional subline (e.g. "Tap to pay AED {{amount_due}}").
+- **`divider`** — horizontal line with configurable color + thickness.
+- **`spacer`** — configurable vertical whitespace.
+- **`table`** — headers + rows arrays; used for payment schedules or
+  breakdowns.
+- **`social`** — lender social icons row (Facebook / Twitter /
+  LinkedIn / Instagram).
+- **`video`** — thumbnail + play button overlay + href to the video.
+- **`custom_html`** — raw HTML snippet, escape hatch for advanced
+  authors.
+- **`saved_module`** — embed from `savedModules` (header / footer /
+  payment_cta / compliance / greeting). Renders the module's
+  `previewHtml`. **Locked embeds** get a violet ring + lock icon and
+  can't be edited inline in the embedding template.
+- **`ai_conditional`** — two variants (A / B) that swap based on a
+  runtime rule; author sees a labelled tab strip inside the canvas
+  ("Show variant A if paying customer, else variant B").
+
+## 4 · Properties panel (right rail)
+
+`src/components/composer/builder/properties-panel.tsx` (~435 lines)
+
+- **Page properties** (no block selected): document language,
+  direction, page bg, content width, brand-kit picker.
+- **Block properties** (block selected): per-kind form.
+  - Text: rich-text controls, align, fontSize, "Rewrite with AI" (opens
+    `InlineAiDialog`).
+  - Image: src, alt, href, width picker.
+  - Button + Payment link: label, href, bg + text color, align,
+    conversion event (payment_link only).
+  - Divider / Spacer / Table / Social / Video / Custom HTML — their own
+    lightweight forms.
+  - AI Conditional: rule label, plus a Variant switcher.
+- **Universal per-block actions** at the top: Duplicate, Move up, Move
+  down, Delete, **Lock/Unlock** toggle (`Lock ↔ Unlock` icon), **Set
+  conditional** button (opens `ConditionalDialog`), **Insert merge tag**
+  button (opens `MergeTagDialog`).
+
+## 5 · Toolbar (top)
+
+`src/components/composer/builder/builder-toolbar.tsx` (~224 lines)
+
+- Back to templates library link.
+- **Template name** (inline-editable input).
+- **Status pill** — Draft / In review / Active / Archived. Colors + labels
+  come from `template-versions.ts`.
+- **Undo / Redo** (Cmd+Z / Cmd+Shift+Z).
+- **Device toggle** — desktop / mobile icons.
+- **Language switcher** — En / Ar / Bilingual. Switching translates the
+  doc via `translateDocToArabic` / `translateDocToBilingual`; an English
+  snapshot is captured before leaving EN so authors can return to their
+  original copy.
+- **Composer GPT** (Sparkles button) — opens the AI-generation dialog.
+- **A/B test** button — opens `AbTestDialog`.
+- **Version history** button — opens `VersionHistoryDialog`.
+- **Library** button — opens the saved-modules library.
+- **Preview** button — opens `PreviewTestDialog` (multi-device + dark-mode
+  preview).
+- **Save + Approval CTAs**:
+  - Draft → `Save as template` (Save icon)
+  - Draft → `Submit for review` (Send icon)
+  - In-review → `Approve` (CheckCircle2 icon)
+- **Unsaved-changes pill** — "Saved N ago" vs "Unsaved changes"
+  (amber).
+
+## 6 · Playbook lint bar (bottom)
+
+`src/lib/playbook-lint.ts` + `PlaybookLintBar` (in
+`builder-dialogs.tsx`)
+
+- Every document is linted against its **playbook** (from
+  `src/data/playbooks-v3.ts`) — rules cover compliance, brand voice,
+  length caps, forbidden words, mandatory disclaimers, RTL handling,
+  DPD-bucket-specific escalation rules.
+- Findings are returned as `LintFinding[]` with severity
+  (`error / warning / info`), location (block id or "subject"/"body"),
+  and a suggested fix.
+- The bar renders inline at the bottom of the canvas: pass count +
+  first N findings + expand to see all.
+- **Composer GPT gate**: the playbook lint also runs as a pre-output
+  gate on the AI generator — content that fails is regenerated with
+  the failing rules fed back as a system prompt.
+- **Templates list badges**: if a saved template now fails its own
+  playbook (because the playbook was tightened after the template
+  went live), the templates library flags it — visible on the list
+  card.
+
+## 7 · Dialogs
+
+`src/components/composer/builder/builder-dialogs.tsx` (~1,373 lines)
+
+- **ComposerGptDialog** — AI email generator. Prompt input, playbook
+  scope, language, insert-mode (append / replace). Output goes through
+  playbook lint gate. Inserts as rows into the doc.
+- **InlineAiDialog** — rewrite the currently-selected text block.
+  Presets: shorter / longer / friendlier / firmer / translate to
+  Arabic. Diffs the old and new HTML.
+- **MergeTagDialog** — categorised merge-tag picker (borrower / deal /
+  loan / payment / journey / campaign). Insert appends to the currently-
+  focused text or button.
+- **ConditionalDialog** — attribute-driven visibility. AND/OR combiner
+  + rule builder (attributeId + operator + values). `showWhenMatch`
+  toggle.
+- **PreviewTestDialog** — the "how it looks" moment. Renders in
+  desktop / mobile / dark-mode / send-to-test-inbox. Uses the same
+  `BuilderCanvas` with `previewMode=true`.
+- **AbTestDialog** — wire this template to an A/B variant. Traffic
+  split, winner metric, test window.
+- **VersionHistoryDialog** — reads `templateAuthoring[templateId].versions`
+  (newest first). Version label, timestamp, author, change summary,
+  status transition.
+- **CreateJourneyDialog** — from-template journey-blueprint picker.
+  Choose a blueprint (Reminder 3-step / PTP recovery / Settlement
+  push / etc.); pushes to `/journeys/new?from=composer&blueprint=…` with
+  the template + playbook + audience carried over as query params.
+- **PlaybookLintBar** — see §6.
+
+## 8 · Data model (block schemas)
+
+`src/data/builder-blocks.ts` (~443 lines)
+
+Full typed shape (only key fields listed here):
+
+```
+BuilderDocument
+  id
+  rows: BuilderRow[]
+  language: "en" | "ar" | "bilingual"
+  dir: "ltr" | "rtl"
+  pageBg
+  contentWidth
+
+BuilderRow
+  id
+  columns: 1 | 2
+  columnsBlocks: BuilderBlock[][]   // one array per column
+  bg?
+  padding?
+  dir?: "ltr" | "rtl"
+  locked?
+
+BuilderBlockBase
+  id
+  kind: BlockKind
+  locked?
+  conditional?: ConditionalConfig
+  slotKey?
+
+ConditionalConfig
+  combine: "AND" | "OR"
+  rules: ConditionalRule[]           // attributeId + operator + values
+  showWhenMatch: boolean
+```
+
+Every block kind extends `BuilderBlockBase` with its own required
+fields (see §3). `newBlockId()` and `newRowId()` are monotonic counters.
+
+## 9 · Starter documents (`starter-docs.ts` + `builder-blocks.ts::SAMPLE_DOCS`)
+
+Landing on `/email-generator/builder/new` runs a decision tree:
+
+- If `?from=ai` was set (Composer inline AI generator), call
+  `buildAiGeneratedHtmlDoc(lenderId, purpose, name)` — returns a
+  **fully decorated email** (hero + spotlight + CTA + footer) already
+  branded to the lender and tuned to the purpose.
+- Else if `?purpose=…` was set (create-template wizard), call
+  `buildStarterDoc(lenderId, purpose, channel, name)` — returns a
+  **lean starter** for the purpose (payment_reminder / broken_promise
+  / settlement / welcome / hardship / final_notice / ptp_confirmation)
+  with the lender's greeting, saved header module, and locked footer
+  already in place.
+- Else (no context — user opened HTML builder from the composer inline
+  CTA), call `newBlankDoc()` — one empty row, one column, blank canvas.
+
+**Existing template edits** land on `getSampleDoc(builderDocId)` where
+`builderDocId` is read from `templateAuthoring[templateId]`.
+
+## 10 · Brand kits (`brand-kits.ts`)
+
+- One `BrandKit` per lender. Fields: colours (primary /
+  primaryText / secondary / background / surface / text / muted /
+  success / danger / border), fonts (heading / body / optional
+  cssImport), default header + footer HTML, logo URL.
+- Applied automatically when the composer / builder is scoped to that
+  lender.
+- Per-block overrides always win — but the fallback is always the
+  brand kit's palette.
+- Seeded kits: Mashreq Bank (orange), Tamara (violet), CashNow (green),
+  Emirates NBD (red), FAB (navy), plus a General fallback.
+- `getBrandKitByLenderId(lenderId)` + `getBrandKitById(id)` accessors.
+
+## 11 · Saved (synced) modules (`saved-modules.ts`)
+
+- Reusable header / footer / payment_cta / compliance / greeting
+  blocks.
+- Authored once; embedding templates get the module by reference.
+  Update the module → every template that references it updates.
+- **Locked embeds** cannot be edited inline in the embedding template
+  (violet ring + lock icon in the renderer).
+- Palette exposes saved modules in a dedicated subsection; embed as
+  `SavedModuleBlock { kind: "saved_module", moduleId }`.
+
+## 12 · Template versioning + approval (`template-versions.ts`)
+
+- `templateAuthoring[templateId]` carries `currentVersion`,
+  `versions: TemplateVersionEntry[]` (newest first), `approval`
+  (submittedBy + submittedAt + approvedBy + approvedAt +
+  `selfApproved` governance flag), `builderDocId`, `playbookId`,
+  `brandKitId`, `activeAbTestId`.
+- Toolbar CTA transitions:
+  - Draft → **Submit for review** → status = `in_review`, appended to
+    `versions[]`, toast: "Compliance maker/checker — Rabab Abbas
+    notified."
+  - In-review → **Approve** → status = `active`, toast: "Now available
+    in Journey Builder and the Composer message picker."
+- Version-history dialog reads the last N entries; entries include
+  free-text `changeSummary` + optional `statusTransition`.
+
+## 13 · Language + RTL (`translate-builder-doc.ts` + `translations-ar.ts`)
+
+- English is the canonical authoring language. Switching to Arabic or
+  Bilingual runs `translateDocToArabic()` / `translateDocToBilingual()`.
+- **`translateDocToArabic`**:
+  - Walks every block, rewrites visible text via the `EN_TO_AR` phrase
+    dictionary.
+  - Injects RTL + `ARABIC_FONT_STACK` into inline styles.
+  - Locked rows (lender header / footer / compliance modules) pass
+    through untouched — those modules ship their own bilingual
+    variants.
+- **`translateDocToBilingual`**:
+  - Duplicates each non-locked row into a two-column layout: EN on the
+    left, AR on the right.
+- **English snapshot** — the page captures the EN doc before leaving,
+  so `language: "en" → "ar" → "en"` restores the authored copy
+  verbatim (no reliable AR→EN reverse in the prototype).
+
+## 14 · Journey Builder integration
+
+The rich HTML builder is the target of the Journey Builder Send Email
+node's template picker + the "Edit template" button. Recent changes
+(see [Composer](#composer) and the sections below) tighten this loop:
+
+- **Rename + prominence (2026-08-26)** — commit [`c031d7c`](https://github.com/asadsiddiqi205/cleargrid-v2/commit/c031d7c)
+  - "Open v3 builder" → **"Open HTML builder"** in the composer
+    inline editor toolbar.
+  - Rebuilt as a **primary-filled teal button** (`bg-primary`,
+    `text-primary-foreground`, shadow, hover elevation) with an inline
+    subtitle "blocks, rich layout, brand kit". Reads as a first-class
+    CTA instead of a footer link.
+
+- **Visual template picker in Journey Send nodes (2026-08-26)** —
+  commit [`c031d7c`](https://github.com/asadsiddiqi205/cleargrid-v2/commit/c031d7c)
+  - Rebuilt `ComposerTemplatePicker` inside the Journey Builder Send-
+    node inspector.
+  - **Category chips** at the top: `All` / `HTML` (with Blocks icon)
+    / `Plain text`, each with a live count. HTML gets primary tint,
+    plain gets a muted tint.
+  - **Live search** over name / lender / subject.
+  - Flat `<select>` replaced by a **card list**. Each card carries a
+    swatch (HTML → primary-tinted Blocks icon, plain → three neutral
+    bars), the template name, an HTML / Plain badge next to it,
+    lender + subject preview below.
+
+- **Edit template button (2026-08-26)** — commit [`c031d7c`](https://github.com/asadsiddiqi205/cleargrid-v2/commit/c031d7c)
+  - Appears when a template is picked in a Send node. Routes to
+    `/email-generator/builder/{id}` for HTML templates or
+    `/templates/editor?id={id}` for plain-text ones. Opens in a new
+    tab with an "opens in a new tab" hint.
+
+- **Live HTML preview inside Send-node picker (2026-08-26)** — commit
+  [`43063cb`](https://github.com/asadsiddiqi205/cleargrid-v2/commit/43063cb)
+  - Rebuilt `ComposerTemplatePreview` so it renders the actual email
+    JSX (from `RichEmailTemplate.render`), not a text stub, when the
+    picked template is an HTML rich template.
+  - Looks up the `RichEmailTemplate` by id via `getRichTemplate(id)`.
+  - Mounts `template.render({ slots: template.defaultSlots,
+    interactive: false })` inside a `bg-white` container.
+  - Scaled 0.44× (`transform: scale(0.44)`; width `227%` so the
+    scaled box fills the sidebar) with `max-h-[380px] overflow-y-auto`
+    so long templates scroll inside the panel.
+  - Plain-text templates keep the line-clamped text preview.
+
+- **Composer registry adapter (existing, extended)** —
+  `src/data/composer-registry-adapter.ts` unifies rich HTML + plain
+  templates + playbooks under a single `ComposerTemplateEntry` shape:
+  - `source: "rich" | "plain"` — drives the badge and picker
+    categorization.
+  - `getComposerTemplatesForChannel(channel)` combines both sources;
+    rich wins on duplicates.
+  - `encodeTemplatePrefill(input)` — base64 blob for
+    `/email-generator/builder/new?prefill=…` so authors starting a
+    template from a journey Send node carry over the channel + a
+    starter name.
+
+## 15 · What is NOT built
+
+- No true HTML export/download (send-side email HTML is generated at
+  send-time on the back end; the prototype simulates the shape).
+- No Litmus / Email on Acid deliverability preview integration —
+  `PreviewTestDialog` shows desktop / mobile / dark-mode approximations
+  only.
+- No per-block A/B test — A/B is doc-level via `AbTestDialog`.
+- No real-time collaborative editing.
+- No template forking / duplication history graph — versioning is
+  linear.
+- No component-of-component nesting (blocks inside `saved_module`
+  embeds are not recursively editable — the module is atomic).
+
+## 16 · File map
+
+- `src/app/(app)/email-generator/builder/[id]/page.tsx` (~462 lines) —
+  the app shell, state, dialogs, save + approval CTAs, journey handoff.
+- `src/components/composer/builder/builder-canvas.tsx` (~570 lines)
+- `src/components/composer/builder/block-palette.tsx` (~321 lines)
+- `src/components/composer/builder/block-renderers.tsx` (~348 lines)
+- `src/components/composer/builder/builder-toolbar.tsx` (~224 lines)
+- `src/components/composer/builder/properties-panel.tsx` (~435 lines)
+- `src/components/composer/builder/builder-dialogs.tsx` (~1,373 lines)
+- `src/data/builder-blocks.ts` (~443 lines)
+- `src/data/starter-docs.ts` — starter + AI-generated builders.
+- `src/data/brand-kits.ts` (~207 lines)
+- `src/data/saved-modules.ts` — reusable module library.
+- `src/data/template-versions.ts` — authoring + approval metadata.
+- `src/data/playbooks-v3.ts` — voice + ruleset.
+- `src/data/translations-ar.ts` — EN → AR phrase dictionary + font
+  stack.
+- `src/lib/playbook-lint.ts` — lint engine (used by canvas + GPT
+  gate + templates list).
+- `src/lib/translate-builder-doc.ts` — EN → AR / bilingual transform.
+- `src/data/composer-registry-adapter.ts` — cross-source template
+  picker feed.
 
 ---
 
