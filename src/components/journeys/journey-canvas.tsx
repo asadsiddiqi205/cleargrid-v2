@@ -143,8 +143,11 @@ import {
   clearSimulation,
   markPublishNudgeSeen,
   wasPublishNudgeSeen,
+  saveSimulation,
   type SimulationResult,
 } from "@/lib/simulation";
+import { runSimulation } from "@/lib/simulation-runner";
+import { borrowers as ALL_BORROWERS } from "@/data/borrowers";
 import {
   ValidateAiCallModal,
   DeviationAlertBanner,
@@ -329,6 +332,32 @@ export default function JourneyCanvas({ journeyId }: JourneyCanvasProps) {
     masterNodeId: string;
   } | null>(null);
   const [simulateResult, setSimulateResult] = useState<SimulationResult | null>(null);
+  const [isDryRunning, setIsDryRunning] = useState(false);
+
+  /* ---------- Eternals-style one-click Dry-run ---------- */
+  const runDryRun = useCallback(async () => {
+    if (isDryRunning) return;
+    setIsDryRunning(true);
+    setSimulateResult(null);
+    // Small latency so the state change feels like a fetch.
+    await new Promise((r) => window.setTimeout(r, 500));
+    const result = runSimulation({
+      journeyId,
+      cohort: ALL_BORROWERS,
+      cohortLabel: `Full audience · ${ALL_BORROWERS.length.toLocaleString()} borrowers`,
+      cohortMode: "full",
+      cap: ALL_BORROWERS.length,
+      nodes,
+      edges,
+      outcomeChoices: {},
+    });
+    saveSimulation(journeyId, result);
+    setSimulateResult(result);
+    setIsDryRunning(false);
+    toast.success("Dry-run complete", {
+      description: `${result.entered.toLocaleString()} borrowers walked the journey. Click any node's count pill to see who.`,
+    });
+  }, [isDryRunning, journeyId, nodes, edges]);
 
   // Hydrate cached simulation from localStorage (Part 3.2).
   useEffect(() => {
@@ -1652,13 +1681,26 @@ export default function JourneyCanvas({ journeyId }: JourneyCanvasProps) {
             labelClass="hidden xl:inline"
           />
 
-          {/* Eternals-style Dry-run — opens the SimulateDrawer preselected to
-              Full audience. When a result is loaded, canvas gets per-node
-              count pills + per-edge count labels + right-side aggregate. */}
+          {/* Eternals-style one-click Dry-run — runs full-audience sim with
+              realistic outcome defaults and decorates the canvas. No cohort or
+              outcome-config screen; matches eternals.cleargrid.ai/simulator. */}
           <ToolbarButton
-            onClick={() => setSimulateOpen(true)}
-            icon={<BarChart3 className="h-3.5 w-3.5" />}
-            label={simulateResult ? "Dry-run · loaded" : "Dry-run"}
+            onClick={runDryRun}
+            disabled={isDryRunning}
+            icon={
+              isDryRunning ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <BarChart3 className="h-3.5 w-3.5" />
+              )
+            }
+            label={
+              isDryRunning
+                ? "Simulating…"
+                : simulateResult
+                  ? "Dry-run · loaded"
+                  : "Dry-run"
+            }
             labelClass="hidden lg:inline"
             className={cn(
               simulateResult && "border-primary/40 bg-primary/10 text-primary hover:bg-primary/20",
