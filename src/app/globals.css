@@ -141,17 +141,17 @@
 :root {
   --radius: 0.625rem;
 
-  /* Background — matches reference LIGHT theme. Off-white canvas
-     (neutral-50 not pure white) to avoid glare. */
-  --color-bg-canvas: var(--cg-neutral-50);
-  --color-bg-surface: var(--cg-neutral-25);
+  /* Background — matches reference LIGHT theme (measured live).
+     Canvas is pure white; cards + tiles sit on off-white neutral-50. */
+  --color-bg-canvas: var(--cg-neutral-0);
+  --color-bg-surface: var(--cg-neutral-50);
   --color-bg-elevated: var(--cg-neutral-50);
-  --color-bg-raised: var(--cg-neutral-50);
+  --color-bg-raised: var(--cg-neutral-25);
   --color-bg-sunken: var(--cg-neutral-50);
   --color-bg-overlay: var(--cg-neutral-100);
   --color-bg-inverse: var(--cg-neutral-1000);
-  --color-bg-hover: var(--cg-neutral-150);
-  --color-bg-selected: var(--cg-neutral-200);
+  --color-bg-hover: var(--cg-neutral-100);
+  --color-bg-selected: var(--cg-neutral-150);
 
   /* Border — matches reference LIGHT. Two steps softer than we
      previously used. */
@@ -250,8 +250,10 @@
   --sidebar-foreground: var(--color-text-primary);
   --sidebar-primary: var(--cg-primary-500);
   --sidebar-primary-foreground: var(--cg-static-white);
-  --sidebar-accent: var(--cg-neutral-900);
-  --sidebar-accent-foreground: var(--color-text-primary);
+  /* Sidebar active-item bg — subtle teal tint like the reference so the
+     active nav row doesn't turn into a heavy solid block. */
+  --sidebar-accent: var(--cg-primary-50);
+  --sidebar-accent-foreground: var(--cg-primary-700);
   --sidebar-border: var(--color-border-subtle);
   --sidebar-ring: var(--cg-primary-500);
   --warning: var(--cg-warning-500);
@@ -263,10 +265,10 @@
 /* ------------------------------------------------------------------ */
 
 .dark {
-  /* Background — matches reference (rebalanced so overlays / hovers /
-     selected states sit one step lower than we previously used, giving
-     the app a quieter, more restrained feel). */
-  --color-bg-canvas: var(--cg-neutral-0);
+  /* Background — measured live from reference dark mode. Canvas is
+     neutral-50 (#0e1012), NOT pure black — gives the app a warmer,
+     softer look. */
+  --color-bg-canvas: var(--cg-neutral-50);
   --color-bg-surface: var(--cg-neutral-25);
   --color-bg-elevated: var(--cg-neutral-100);
   --color-bg-raised: var(--cg-neutral-150);
@@ -274,7 +276,7 @@
   --color-bg-overlay: var(--cg-neutral-0);
   --color-bg-inverse: var(--cg-neutral-1000);
   --color-bg-hover: var(--cg-neutral-100);
-  --color-bg-selected: var(--cg-neutral-150);
+  --color-bg-selected: var(--cg-neutral-200);
 
   /* Border — matches reference. Two steps softer than our previous stack
      so borders don't fight the flat backgrounds. */
@@ -363,8 +365,10 @@
   --sidebar-foreground: var(--color-text-primary);
   --sidebar-primary: var(--cg-primary-500);
   --sidebar-primary-foreground: var(--cg-static-white);
+  /* Dark-mode sidebar accent — subtle brand-tinted highlight (matches
+     the reference's "Deals" active row at rgb(31,34,38) with teal text). */
   --sidebar-accent: var(--cg-neutral-200);
-  --sidebar-accent-foreground: var(--color-text-primary);
+  --sidebar-accent-foreground: var(--cg-primary-400);
   --sidebar-border: var(--color-border-subtle);
   --sidebar-ring: var(--cg-primary-500);
   --warning: var(--cg-warning-500);
