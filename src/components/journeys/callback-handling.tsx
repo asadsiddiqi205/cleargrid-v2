@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import { simulateCallbackCommit } from "@/components/journeys/callback-runtime"
+import { DncCheck } from "@/components/shared/dnc-check"
 
 /**
  * Part 1 — Callback Handling section on the AI Call action node.
@@ -214,6 +215,21 @@ export function CallbackHandlingSection({
               Dev tool: pretends the human reviewer just confirmed a callback. Schedules a mock
               callback 30 min from now so the monitoring view can show it.
             </p>
+          </div>
+
+          {/* DNC check inline — compliance ops can paste a batch of numbers
+              from the current audience and see which are on the DNC list
+              before the journey enrolls them. */}
+          <div className="rounded-md border border-border bg-background/40 p-3">
+            <div className="mb-2 flex items-center gap-2">
+              <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                Check numbers against DNC
+              </span>
+              <span className="rounded bg-error-500/15 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-error-300">
+                ClearVoice DNC
+              </span>
+            </div>
+            <DncCheck compact />
           </div>
         </div>
       )}

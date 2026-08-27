@@ -3,6 +3,7 @@
 import * as React from "react"
 import Link from "next/link"
 import {
+  BadgeCheck,
   BarChart3,
   Mail,
   MessageSquare,
@@ -58,6 +59,13 @@ export default function ReportsHubPage() {
             icon={Users}
             accent="primary"
             featured
+          />
+          <ReportsNavCard
+            href="/reports/journey-health"
+            title="Journey Health"
+            description="Daily-run monitor + attribute-integrity checks. Which tracked journeys ran today, how many PTPs each produced, Slack alerts on miss, and null-check on PTP-date attributes."
+            icon={BadgeCheck}
+            accent="warning"
           />
           <ReportsNavCard
             href="/reports/conversions"

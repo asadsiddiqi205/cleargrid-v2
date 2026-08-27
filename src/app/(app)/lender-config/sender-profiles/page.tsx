@@ -13,6 +13,7 @@ import {
   ShieldAlert,
 } from "lucide-react"
 import { PageShell } from "@/components/shared/page-shell"
+import { DncCheck } from "@/components/shared/dnc-check"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
@@ -129,6 +130,13 @@ export default function SenderProfilesPage() {
             )}
           </tbody>
         </table>
+      </div>
+
+      {/* Ambient tool: DNC check. Paste phone numbers, get the subset that's
+          on the ClearVoice DNC list. Sits alongside sender-profile governance
+          since both are compliance-ops surfaces. */}
+      <div className="mt-6 rounded-xl border border-border bg-card/40 p-5">
+        <DncCheck clientLabel="Mashreq PJSC" />
       </div>
 
       <NewProfileDialog

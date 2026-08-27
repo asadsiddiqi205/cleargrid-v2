@@ -95,6 +95,7 @@ import {
   FileText,
   Settings as SettingsIcon,
   Sliders,
+  Users,
   Check,
   Undo2,
   Redo2,
@@ -122,9 +123,11 @@ import {
   Boxes,
 } from "lucide-react";
 import { SimulateDrawer, NodeSampleList } from "@/components/journeys/simulate-drawer";
+import { DryRunOverlay } from "@/components/journeys/dry-run-overlay";
 import { BorrowerTraceDrawer } from "@/components/journeys/borrower-trace-drawer";
 import { BorrowerTracePicker } from "@/components/journeys/borrower-trace-picker";
 import { RunPicker } from "@/components/journeys/run-picker";
+import { ValidatorDrawer } from "@/components/journeys/validator-drawer";
 import {
   SimulationViewChip,
   OverlayLegend,
@@ -295,6 +298,11 @@ export default function JourneyCanvas({ journeyId }: JourneyCanvasProps) {
 
   // Part 1.2 — in-canvas Simulate drawer + per-node count overlay from result.
   const [simulateOpen, setSimulateOpen] = useState(false);
+  // Eternals-style Validator (regression drawer).
+  const [validatorOpen, setValidatorOpen] = useState(false);
+  // When set, the canvas renders a single borrower's real path highlighted
+  // with per-pass colours (green/amber/blue/violet). Cleared by the drawer.
+  const [validatorTraceBorrowerId, setValidatorTraceBorrowerId] = useState<string | null>(null);
   // Single-borrower trace — the trace picker + drawer. tracePickerOpen shows
   // the borrower search; traceBorrowerActive holds the borrower whose trace
   // is currently rendered in the drawer.
@@ -1619,6 +1627,27 @@ export default function JourneyCanvas({ journeyId }: JourneyCanvasProps) {
             labelClass="hidden xl:inline"
           />
 
+          {/* Eternals-style Dry-run — opens the SimulateDrawer preselected to
+              Full audience. When a result is loaded, canvas gets per-node
+              count pills + per-edge count labels + right-side aggregate. */}
+          <ToolbarButton
+            onClick={() => setSimulateOpen(true)}
+            icon={<BarChart3 className="h-3.5 w-3.5" />}
+            label={simulateResult ? "Dry-run · loaded" : "Dry-run"}
+            labelClass="hidden lg:inline"
+            className={cn(
+              simulateResult && "border-primary/40 bg-primary/10 text-primary hover:bg-primary/20",
+            )}
+          />
+
+          {/* Eternals-style Validator — regression against real executed paths. */}
+          <ToolbarButton
+            onClick={() => setValidatorOpen(true)}
+            icon={<Users className="h-3.5 w-3.5" />}
+            label="Validator"
+            labelClass="hidden xl:inline"
+          />
+
           <button
             onClick={handlePublish}
             className="flex h-7 shrink-0 items-center gap-1 whitespace-nowrap rounded-md bg-primary px-2.5 text-[12px] font-medium text-primary-foreground transition-colors hover:bg-primary/90"
@@ -2474,12 +2503,17 @@ export default function JourneyCanvas({ journeyId }: JourneyCanvasProps) {
             )}
           </ReactFlow>
 
-          {/* Per-node count pill overlay removed — the small floating count
-              badges (e.g. "2.2k") were visually distracting on top of the
-              canvas. Per-node breakdown lives in the node inspector's
-              Analytics tab (with borrower list) and on the report page's
-              per-node drill-down. Simulation overlay stays available via
-              the SimulateDrawer when a simulation is loaded. */}
+          {/* Eternals-style Dry-run overlay — per-node count pills,
+              per-edge count labels, right-side aggregate panel, color
+              legend. Renders whenever a SimulationResult is loaded and
+              the author hasn't dismissed the overlay for this run. */}
+          <DryRunOverlay
+            result={simulateResult}
+            nodes={nodes}
+            edges={edges}
+            hidden={simulationOverlayHidden}
+            onDismiss={() => setSimulationOverlayHidden(true)}
+          />
 
           <NodeSampleList
             open={!!sampleForNodeId}
@@ -2722,6 +2756,20 @@ export default function JourneyCanvas({ journeyId }: JourneyCanvasProps) {
         onOpenChange={(o) => { if (!o) setTraceBorrowerActive(null); }}
         borrowerId={traceBorrowerActive}
         journeyId={journeyId}
+      />
+
+      {/* Eternals-style Validator (regression). Fetch audience → validate
+          each borrower's path against prediction → trace one borrower. */}
+      <ValidatorDrawer
+        open={validatorOpen}
+        onOpenChange={setValidatorOpen}
+        journeyId={journeyId}
+        nodes={nodes}
+        edges={edges}
+        onOpenTrace={(bid) => {
+          setValidatorOpen(false);
+          setValidatorTraceBorrowerId(bid);
+        }}
       />
 
       {/* Custom styles for simulation animation & React Flow */}
