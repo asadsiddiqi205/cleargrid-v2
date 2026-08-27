@@ -9,95 +9,128 @@
 /* ------------------------------------------------------------------ */
 
 :root {
-  /* Neutral scale */
-  --cg-neutral-0: #000000;
-  --cg-neutral-25: #09090b;
-  --cg-neutral-50: #0f1012;
-  --cg-neutral-100: #121619;
-  --cg-neutral-150: #171b1e;
-  --cg-neutral-200: #1f2227;
-  --cg-neutral-300: #26292e;
-  --cg-neutral-400: #353a40;
-  --cg-neutral-500: #484f57;
-  --cg-neutral-600: #6c737b;
-  --cg-neutral-700: #8c939d;
-  --cg-neutral-800: #b3b8be;
-  --cg-neutral-900: #d9dce1;
-  --cg-neutral-1000: #f5f6f8;
+  /* Neutral scale — LIGHT palette (default). Dark palette swaps under `.dark`. */
+  --cg-neutral-0: #ffffff;
+  --cg-neutral-25: #fbfbfc;
+  --cg-neutral-50: #f5f6f8;
+  --cg-neutral-100: #eceef1;
+  --cg-neutral-150: #e3e6ea;
+  --cg-neutral-200: #d6dade;
+  --cg-neutral-300: #c0c6cd;
+  --cg-neutral-400: #aab1bb;
+  --cg-neutral-500: #848e99;
+  --cg-neutral-600: #7c8590;
+  --cg-neutral-700: #6a707a;
+  --cg-neutral-800: #515862;
+  --cg-neutral-900: #15181c;
+  --cg-neutral-1000: #0a0b0d;
 
   /* Primary — ClearGrid Teal */
-  --cg-primary-50: #e5f7f7;
+  --cg-primary-50: #e6f7f7;
   --cg-primary-100: #c4ecec;
   --cg-primary-200: #8edada;
-  --cg-primary-300: #4dc3c3;
-  --cg-primary-400: #1eacad;
-  --cg-primary-500: #069495;
-  --cg-primary-600: #057978;
+  --cg-primary-300: #4ec3c3;
+  --cg-primary-400: #1eacac;
+  --cg-primary-500: #069494;
+  --cg-primary-600: #057878;
   --cg-primary-700: #045e5e;
-  --cg-primary-800: #024645;
-  --cg-primary-900: #023030;
+  --cg-primary-800: #034646;
+  --cg-primary-900: #022f2f;
+  --cg-primary-950: #032727;
 
   /* Success — Green */
-  --cg-success-50: #e7f7ed;
-  --cg-success-100: #c3ebd1;
-  --cg-success-200: #8cd8a9;
-  --cg-success-300: #4fc27f;
-  --cg-success-400: #1eaf60;
-  --cg-success-500: #129b4d;
+  --cg-success-50: #e7f7ee;
+  --cg-success-100: #c2ebd2;
+  --cg-success-200: #8cd8a8;
+  --cg-success-300: #4ec27e;
+  --cg-success-400: #1faf60;
+  --cg-success-500: #129a4d;
   --cg-success-600: #0e7f3f;
-  --cg-success-700: #0a6431;
-  --cg-success-800: #074d28;
-  --cg-success-900: #053319;
+  --cg-success-700: #0a6432;
+  --cg-success-800: #074d27;
+  --cg-success-900: #04331a;
+  --cg-success-950: #162720;
 
   /* Warning — Amber */
-  --cg-warning-50: #fbf3e0;
+  --cg-warning-50: #fbf3df;
   --cg-warning-100: #f5e2a8;
-  --cg-warning-200: #edca6c;
+  --cg-warning-200: #edcb6c;
   --cg-warning-300: #e3b53b;
-  --cg-warning-400: #d7a62d;
-  --cg-warning-500: #b98a20;
-  --cg-warning-600: #946f17;
-  --cg-warning-700: #735612;
-  --cg-warning-800: #55400b;
-  --cg-warning-900: #392807;
+  --cg-warning-400: #d6a72c;
+  --cg-warning-500: #b88a1f;
+  --cg-warning-600: #956f17;
+  --cg-warning-700: #735611;
+  --cg-warning-800: #55400c;
+  --cg-warning-900: #2a2517;
+  --cg-warning-950: #2a2517;
 
   /* Error — Red */
   --cg-error-50: #fceaea;
-  --cg-error-100: #f5c3c4;
-  --cg-error-200: #ea9090;
-  --cg-error-300: #e26261;
-  --cg-error-400: #d74545;
-  --cg-error-500: #c33333;
-  --cg-error-600: #a22626;
-  --cg-error-700: #7f1d1c;
-  --cg-error-800: #5d1312;
-  --cg-error-900: #3d0d0d;
+  --cg-error-100: #f5c3c3;
+  --cg-error-200: #eb9090;
+  --cg-error-300: #e26161;
+  --cg-error-400: #d84545;
+  --cg-error-500: #c43333;
+  --cg-error-600: #a32626;
+  --cg-error-700: #7f1c1c;
+  --cg-error-800: #5e1313;
+  --cg-error-900: #3d0c0c;
+  --cg-error-950: #2a1b1c;
 
   /* Info — Blue */
-  --cg-info-50: #e8f2fe;
-  --cg-info-100: #c5d9fa;
-  --cg-info-200: #8db9f6;
-  --cg-info-300: #5e9cf1;
-  --cg-info-400: #3c83eb;
-  --cg-info-500: #2670db;
-  --cg-info-600: #1d58b2;
-  --cg-info-700: #15448a;
-  --cg-info-800: #113265;
-  --cg-info-900: #092042;
+  --cg-info-50: #e8f1fe;
+  --cg-info-100: #c5dafb;
+  --cg-info-200: #8eb9f7;
+  --cg-info-300: #5e9cf2;
+  --cg-info-400: #3d83ec;
+  --cg-info-500: #2670dc;
+  --cg-info-600: #1d59b3;
+  --cg-info-700: #16448a;
+  --cg-info-800: #103265;
+  --cg-info-900: #0a2042;
+  --cg-info-950: #18222f;
 
-  /* Chart categorical */
-  --cg-chart-1: #1eacad;
-  --cg-chart-2: #a78bfa;
-  --cg-chart-3: #f0b529;
-  --cg-chart-4: #f4798b;
-  --cg-chart-5: #5e9cf1;
-  --cg-chart-6: #4fc27f;
-  --cg-chart-7: #f28947;
-  --cg-chart-8: #8c939d;
+  /* Chart categorical — light-mode palette */
+  --cg-chart-1: #069494;
+  --cg-chart-2: #7c3aed;
+  --cg-chart-3: #b88a1f;
+  --cg-chart-4: #c43355;
+  --cg-chart-5: #2670dc;
+  --cg-chart-6: #129a4d;
+  --cg-chart-7: #c4612a;
+  --cg-chart-8: #565d66;
 
   /* Static */
   --cg-static-white: #ffffff;
   --cg-static-black: #000000;
+}
+
+/* Dark-mode primitive swap — matches reference palette 1:1. */
+.dark {
+  --cg-neutral-0: #000000;
+  --cg-neutral-25: #09090b;
+  --cg-neutral-50: #0e1012;
+  --cg-neutral-100: #131618;
+  --cg-neutral-150: #181b1e;
+  --cg-neutral-200: #1f2226;
+  --cg-neutral-300: #262a2f;
+  --cg-neutral-400: #353a41;
+  --cg-neutral-500: #494f57;
+  --cg-neutral-600: #6c727a;
+  --cg-neutral-700: #8d939c;
+  --cg-neutral-800: #b3b8be;
+  --cg-neutral-900: #d9dce0;
+  --cg-neutral-1000: #f5f6f7;
+
+  /* Chart categorical — dark-mode palette (softer/brighter hues). */
+  --cg-chart-1: #1eacac;
+  --cg-chart-2: #a78bfa;
+  --cg-chart-3: #f0b528;
+  --cg-chart-4: #f4798a;
+  --cg-chart-5: #5e9cf2;
+  --cg-chart-6: #4ec27e;
+  --cg-chart-7: #f08a4b;
+  --cg-chart-8: #8d939c;
 }
 
 /* ------------------------------------------------------------------ */
@@ -108,57 +141,60 @@
 :root {
   --radius: 0.625rem;
 
-  /* Background */
-  --color-bg-canvas: var(--cg-neutral-1000);
-  --color-bg-surface: var(--cg-static-white);
-  --color-bg-elevated: var(--cg-static-white);
-  --color-bg-raised: var(--cg-neutral-1000);
-  --color-bg-sunken: var(--cg-neutral-900);
-  --color-bg-overlay: var(--cg-neutral-900);
-  --color-bg-inverse: var(--cg-neutral-0);
-  --color-bg-hover: var(--cg-neutral-1000);
-  --color-bg-selected: var(--cg-neutral-900);
+  /* Background — matches reference LIGHT theme. Off-white canvas
+     (neutral-50 not pure white) to avoid glare. */
+  --color-bg-canvas: var(--cg-neutral-50);
+  --color-bg-surface: var(--cg-neutral-25);
+  --color-bg-elevated: var(--cg-neutral-50);
+  --color-bg-raised: var(--cg-neutral-50);
+  --color-bg-sunken: var(--cg-neutral-50);
+  --color-bg-overlay: var(--cg-neutral-100);
+  --color-bg-inverse: var(--cg-neutral-1000);
+  --color-bg-hover: var(--cg-neutral-150);
+  --color-bg-selected: var(--cg-neutral-200);
 
-  /* Border */
-  --color-border-subtle: var(--cg-neutral-900);
-  --color-border-default: var(--cg-neutral-800);
-  --color-border-strong: var(--cg-neutral-700);
-  --color-border-inverse: var(--cg-neutral-200);
+  /* Border — matches reference LIGHT. Two steps softer than we
+     previously used. */
+  --color-border-subtle: var(--cg-neutral-100);
+  --color-border-default: var(--cg-neutral-150);
+  --color-border-strong: var(--cg-neutral-200);
+  --color-border-inverse: var(--cg-neutral-600);
   --color-border-focus: var(--cg-primary-500);
   --color-border-error: var(--cg-error-500);
   --color-border-success: var(--cg-success-500);
   --color-border-warning: var(--cg-warning-500);
 
-  /* Text */
-  --color-text-primary: var(--cg-neutral-0);
-  --color-text-secondary: var(--cg-neutral-300);
-  --color-text-tertiary: var(--cg-neutral-500);
+  /* Text — matches reference LIGHT. The palette is now flipped so
+     neutral-1000 (= #0a0b0d) is the dark ink for light mode. */
+  --color-text-primary: var(--cg-neutral-1000);
+  --color-text-secondary: var(--cg-neutral-800);
+  --color-text-tertiary: var(--cg-neutral-700);
   --color-text-quaternary: var(--cg-neutral-600);
-  --color-text-disabled: var(--cg-neutral-700);
-  --color-text-placeholder: var(--cg-neutral-600);
-  --color-text-link: var(--cg-primary-500);
-  --color-text-brand: var(--cg-primary-500);
+  --color-text-disabled: var(--cg-neutral-500);
+  --color-text-placeholder: var(--cg-neutral-500);
+  --color-text-link: var(--cg-primary-600);
+  --color-text-brand: var(--cg-primary-600);
   --color-text-warning: var(--cg-warning-700);
-  --color-text-success: var(--cg-success-600);
+  --color-text-success: var(--cg-success-700);
   --color-text-error: var(--cg-error-600);
   --color-text-info: var(--cg-info-600);
   --color-text-on-brand: var(--cg-static-white);
   --color-text-on-error: var(--cg-static-white);
   --color-text-on-success: var(--cg-static-white);
-  --color-text-inverse: var(--cg-neutral-1000);
+  --color-text-inverse: var(--cg-neutral-25);
 
   /* Icon (mirrors text) */
-  --color-icon-primary: var(--cg-neutral-0);
-  --color-icon-secondary: var(--cg-neutral-300);
-  --color-icon-tertiary: var(--cg-neutral-500);
-  --color-icon-disabled: var(--cg-neutral-700);
+  --color-icon-primary: var(--cg-neutral-1000);
+  --color-icon-secondary: var(--cg-neutral-800);
+  --color-icon-tertiary: var(--cg-neutral-700);
+  --color-icon-disabled: var(--cg-neutral-500);
   --color-icon-brand: var(--cg-primary-500);
 
-  /* Input */
-  --color-input-bg: var(--cg-static-white);
-  --color-input-bg-disabled: var(--cg-neutral-1000);
-  --color-input-border: var(--cg-neutral-800);
-  --color-input-border-hover: var(--cg-neutral-700);
+  /* Input — matches reference. */
+  --color-input-bg: var(--cg-neutral-25);
+  --color-input-bg-disabled: var(--cg-neutral-50);
+  --color-input-border: var(--cg-neutral-200);
+  --color-input-border-hover: var(--cg-neutral-300);
   --color-input-border-focus: var(--cg-primary-500);
 
   /* Brand-subtle trio */
@@ -227,22 +263,25 @@
 /* ------------------------------------------------------------------ */
 
 .dark {
-  /* Background */
+  /* Background — matches reference (rebalanced so overlays / hovers /
+     selected states sit one step lower than we previously used, giving
+     the app a quieter, more restrained feel). */
   --color-bg-canvas: var(--cg-neutral-0);
-  --color-bg-surface: var(--cg-neutral-50);
+  --color-bg-surface: var(--cg-neutral-25);
   --color-bg-elevated: var(--cg-neutral-100);
   --color-bg-raised: var(--cg-neutral-150);
-  --color-bg-sunken: var(--cg-neutral-25);
-  --color-bg-overlay: var(--cg-neutral-200);
+  --color-bg-sunken: var(--cg-neutral-0);
+  --color-bg-overlay: var(--cg-neutral-0);
   --color-bg-inverse: var(--cg-neutral-1000);
-  --color-bg-hover: var(--cg-neutral-150);
-  --color-bg-selected: var(--cg-neutral-200);
+  --color-bg-hover: var(--cg-neutral-100);
+  --color-bg-selected: var(--cg-neutral-150);
 
-  /* Border */
-  --color-border-subtle: var(--cg-neutral-200);
-  --color-border-default: var(--cg-neutral-300);
-  --color-border-strong: var(--cg-neutral-400);
-  --color-border-inverse: var(--cg-neutral-900);
+  /* Border — matches reference. Two steps softer than our previous stack
+     so borders don't fight the flat backgrounds. */
+  --color-border-subtle: var(--cg-neutral-50);
+  --color-border-default: var(--cg-neutral-100);
+  --color-border-strong: var(--cg-neutral-150);
+  --color-border-inverse: var(--cg-neutral-700);
   --color-border-focus: var(--cg-primary-500);
 
   /* Text */
@@ -251,14 +290,14 @@
   --color-text-tertiary: var(--cg-neutral-700);
   --color-text-quaternary: var(--cg-neutral-600);
   --color-text-disabled: var(--cg-neutral-500);
-  --color-text-placeholder: var(--cg-neutral-600);
-  --color-text-link: var(--cg-primary-400);
+  --color-text-placeholder: var(--cg-neutral-500);
+  --color-text-link: var(--cg-primary-500);
   --color-text-brand: var(--cg-primary-400);
   --color-text-warning: var(--cg-warning-300);
   --color-text-success: var(--cg-success-400);
   --color-text-error: var(--cg-error-300);
   --color-text-info: var(--cg-info-400);
-  --color-text-inverse: var(--cg-neutral-0);
+  --color-text-inverse: var(--cg-neutral-25);
 
   /* Icon */
   --color-icon-primary: var(--cg-neutral-1000);
@@ -267,11 +306,11 @@
   --color-icon-disabled: var(--cg-neutral-500);
   --color-icon-brand: var(--cg-primary-400);
 
-  /* Input */
+  /* Input — matches reference. */
   --color-input-bg: var(--cg-neutral-100);
   --color-input-bg-disabled: var(--cg-neutral-50);
-  --color-input-border: var(--cg-neutral-300);
-  --color-input-border-hover: var(--cg-neutral-400);
+  --color-input-border: var(--cg-neutral-200);
+  --color-input-border-hover: var(--cg-neutral-300);
   --color-input-border-focus: var(--cg-primary-500);
 
   /* Brand-subtle trio (dark) */
