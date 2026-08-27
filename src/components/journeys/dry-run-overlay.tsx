@@ -57,16 +57,19 @@ function useNodeAnchors(nodes: Node[], result: SimulationResult | null): Map<str
   const [anchors, setAnchors] = React.useState<Map<string, AnchorRect>>(new Map())
   React.useEffect(() => {
     if (!result) return
+    // Anchor coordinates must match the overlay's positioning context — which is
+    // the DryRunOverlay's parent (the same div that wraps ReactFlow). `.react-flow`
+    // fills that wrapper and, unlike `.react-flow__viewport`, is NOT affected by the
+    // pan/zoom transform, so its bounding rect is a stable frame of reference.
     const measure = () => {
+      const container = document.querySelector(".react-flow") as HTMLElement | null
+      if (!container) return
+      const containerRect = container.getBoundingClientRect()
       const next = new Map<string, AnchorRect>()
-      const container = document.querySelector(".react-flow__viewport") as HTMLElement | null
-      const containerRect =
-        container?.getBoundingClientRect() ??
-        document.querySelector(".react-flow")?.getBoundingClientRect() ??
-        null
-      if (!containerRect) return
       for (const n of nodes) {
-        const el = document.querySelector(`[data-id="${CSS.escape(n.id)}"]`) as HTMLElement | null
+        // ReactFlow assigns `data-id` to the outer node wrapper (`.react-flow__node`).
+        // Scope the query to the container to avoid duplicate hits from stale DOM.
+        const el = container.querySelector(`[data-id="${CSS.escape(n.id)}"]`) as HTMLElement | null
         if (!el) continue
         const r = el.getBoundingClientRect()
         next.set(n.id, {
@@ -76,11 +79,34 @@ function useNodeAnchors(nodes: Node[], result: SimulationResult | null): Map<str
           height: r.height,
         })
       }
-      setAnchors(next)
+      // Skip the state update if nothing meaningful changed (< 0.5 px drift).
+      setAnchors((prev) => {
+        if (prev.size !== next.size) return next
+        for (const [id, a] of next) {
+          const b = prev.get(id)
+          if (!b) return next
+          if (
+            Math.abs(a.top - b.top) > 0.5 ||
+            Math.abs(a.left - b.left) > 0.5 ||
+            Math.abs(a.width - b.width) > 0.5 ||
+            Math.abs(a.height - b.height) > 0.5
+          )
+            return next
+        }
+        return prev
+      })
     }
+    // Initial measurement + re-measure on every frame so the overlay follows
+    // pan/zoom without drifting. `measure` only calls setState when values
+    // actually change, so React re-renders stay cheap.
     measure()
-    const interval = window.setInterval(measure, 300)
-    return () => window.clearInterval(interval)
+    const interval = window.setInterval(measure, 100)
+    const onResize = () => measure()
+    window.addEventListener("resize", onResize)
+    return () => {
+      window.clearInterval(interval)
+      window.removeEventListener("resize", onResize)
+    }
   }, [nodes, result])
   return anchors
 }
