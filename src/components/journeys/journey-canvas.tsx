@@ -333,6 +333,7 @@ export default function JourneyCanvas({ journeyId }: JourneyCanvasProps) {
   } | null>(null);
   const [simulateResult, setSimulateResult] = useState<SimulationResult | null>(null);
   const [isDryRunning, setIsDryRunning] = useState(false);
+  const searchParams = useSearchParams();
 
   /* ---------- Eternals-style one-click Dry-run ---------- */
   const runDryRun = useCallback(async () => {
@@ -359,11 +360,16 @@ export default function JourneyCanvas({ journeyId }: JourneyCanvasProps) {
     });
   }, [isDryRunning, journeyId, nodes, edges]);
 
-  // Hydrate cached simulation from localStorage (Part 3.2).
+  // Hydrate cached simulation from localStorage — only when the URL carries
+  // `?sim=<id>` (i.e. someone deep-linked to a specific run) or the user
+  // returns via that URL. Without the query param, the canvas opens clean so
+  // authors don't see a stale dry-run they didn't just start.
   useEffect(() => {
+    const simParam = searchParams?.get("sim") ?? null;
+    if (!simParam) return;
     const cached = loadSimulation(journeyId);
-    if (cached) setSimulateResult(cached);
-  }, [journeyId]);
+    if (cached && cached.id === simParam) setSimulateResult(cached);
+  }, [journeyId, searchParams]);
 
   // Seed the component library on first-run (no-op if already seeded).
   useEffect(() => {
@@ -1323,9 +1329,6 @@ export default function JourneyCanvas({ journeyId }: JourneyCanvasProps) {
     if (!validateJourney()) return;
     setScheduleDialogOpen(true);
   }, [nodes, validateJourney]);
-
-  /* ---------- hydrate from composer / funnel / template ---------- */
-  const searchParams = useSearchParams();
 
   /* ---------- Trace overlay (Eternals "Real executed flow") ---------- */
   const traceQueryId = searchParams?.get("trace") ?? null;
@@ -2579,7 +2582,7 @@ export default function JourneyCanvas({ journeyId }: JourneyCanvasProps) {
             result={simulateResult}
             nodes={nodes}
             edges={edges}
-            hidden={simulationOverlayHidden}
+            hidden={simulationOverlayHidden || !!traceQueryId}
             onDismiss={() => setSimulationOverlayHidden(true)}
           />
 
