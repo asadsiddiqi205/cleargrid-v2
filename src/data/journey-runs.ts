@@ -154,7 +154,16 @@ export function listRunNodeBorrowers(
       })
     }
     if (!hop) continue
-    out.push(hopToRunRow(trace, hop, e.borrower, run))
+    const row = hopToRunRow(trace, hop, e.borrower, run)
+    // Condition nodes (Has Done Event / Check Attribute) resolve to Yes / No,
+    // not to the free-form label the trace synthesiser inherits from
+    // action_split. Override deterministically so the analytics distribution
+    // reads as a clean two-sided split.
+    if (fallbackKind === "condition") {
+      const s = hash(e.borrower.id + "|" + nodeId + "|" + run.id)
+      row.branchLabel = s % 100 < 65 ? "Yes" : "No"
+    }
+    out.push(row)
   }
   return out
 }

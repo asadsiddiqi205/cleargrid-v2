@@ -219,6 +219,15 @@ export function buildNodeBorrowerList(
     }
     if (!hop) continue
     const row = hopToRow(trace, hop, e.borrower)
+    // Condition nodes (Has Done Event / Check Attribute) evaluate to Yes / No,
+    // not to a free-form branch label. Trace synthesis reuses the generic
+    // `branch` outcome for every split-shaped node, so override the label here
+    // deterministically per borrower + node so the analytics show a clean
+    // two-sided distribution.
+    if (fallbackKind === "condition") {
+      const seed = hash(e.borrower.id + "|" + nodeId)
+      row.branchLabel = seed % 100 < 65 ? "Yes" : "No"
+    }
     out.push(row)
   }
   return out
@@ -339,8 +348,24 @@ export function buildNodeBreakdown(
       ]
       break
     }
-    case "split":
     case "condition": {
+      // Condition nodes (Has Done Event / Check Attribute) always resolve
+      // to Yes / No. Anchor both keys so a zero side still renders.
+      const yes = rows.filter((r) => r.branchLabel === "Yes").length
+      const no = rows.filter((r) => r.branchLabel === "No").length
+      const totalBranches = yes + no
+      breakdown.branches = [
+        { label: "Yes", count: yes, pct: totalBranches === 0 ? 0 : yes / totalBranches },
+        { label: "No", count: no, pct: totalBranches === 0 ? 0 : no / totalBranches },
+      ]
+      breakdown.metrics = [
+        { label: "Evaluated", value: totalBranches, format: "count" },
+        { label: "Yes", value: yes, format: "count", tone: "primary" },
+        { label: "No", value: no, format: "count", tone: "warn" },
+      ]
+      break
+    }
+    case "split": {
       const branchCounts = new Map<string, number>()
       for (const r of rows) {
         if (!r.branchLabel) continue

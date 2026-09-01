@@ -65,6 +65,7 @@ export function NodeAnalyticsTab({
 }: NodeAnalyticsTabProps) {
   const [query, setQuery] = React.useState("")
   const [stateFilter, setStateFilter] = React.useState<RunNodeRow["state"] | "all">("all")
+  const [branchFilter, setBranchFilter] = React.useState<string | "all">("all")
   const [traceBorrower, setTraceBorrower] = React.useState<string | null>(null)
 
   const run = runId ? getRun(journeyId, runId) : null
@@ -84,6 +85,7 @@ export function NodeAnalyticsTab({
     const q = query.trim().toLowerCase()
     return rows.filter((r) => {
       if (stateFilter !== "all" && r.state !== stateFilter) return false
+      if (branchFilter !== "all" && r.branchLabel !== branchFilter) return false
       if (!q) return true
       const b = r.borrower
       return (
@@ -94,7 +96,14 @@ export function NodeAnalyticsTab({
         b.product.toLowerCase().includes(q)
       )
     })
-  }, [rows, query, stateFilter])
+  }, [rows, query, stateFilter, branchFilter])
+
+  const branchCounts = React.useMemo(() => {
+    if (!breakdown?.branches) return null
+    const counts = new Map<string, number>()
+    for (const b of breakdown.branches) counts.set(b.label, b.count)
+    return counts
+  }, [breakdown?.branches])
 
   const stateCounts = React.useMemo(() => {
     const c: Record<RunNodeRow["state"], number> = {
@@ -203,21 +212,86 @@ export function NodeAnalyticsTab({
             ))}
           </div>
           {breakdown.branches && breakdown.branches.length > 0 && (
-            <div className="mt-2 space-y-1">
+            <div className="mt-2 space-y-1.5">
               <p className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">
-                Branch distribution
+                {kind === "condition" ? "Yes / No distribution" : "Branch distribution"}
               </p>
-              {breakdown.branches.map((b) => (
-                <div key={b.label} className="flex items-center gap-2 text-[10px]">
-                  <span className="min-w-[6rem] truncate text-foreground">{b.label}</span>
-                  <div className="flex-1 rounded bg-muted/40 overflow-hidden h-1.5">
-                    <div className="h-full bg-primary/70" style={{ width: `${(b.pct * 100).toFixed(1)}%` }} />
-                  </div>
-                  <span className="w-20 text-right tabular-nums text-muted-foreground">
-                    {b.count.toLocaleString()} · {(b.pct * 100).toFixed(0)}%
-                  </span>
+              {/* Yes/No two-tile view for conditions; bar-per-branch for splits */}
+              {kind === "condition" ? (
+                <div className="grid grid-cols-2 gap-1.5">
+                  {breakdown.branches.map((b) => {
+                    const isYes = b.label === "Yes"
+                    return (
+                      <button
+                        key={b.label}
+                        type="button"
+                        onClick={() =>
+                          setBranchFilter(branchFilter === b.label ? "all" : b.label)
+                        }
+                        className={cn(
+                          "flex items-center justify-between rounded border px-2 py-1.5 text-left transition-colors",
+                          branchFilter === b.label && "ring-2 ring-primary/50",
+                          isYes
+                            ? "border-primary/40 bg-primary/[0.06] hover:bg-primary/10"
+                            : "border-warning-500/40 bg-warning-500/[0.06] hover:bg-warning-500/10",
+                        )}
+                        title={`Filter to ${b.label} · ${b.count} borrowers`}
+                      >
+                        <div>
+                          <div
+                            className={cn(
+                              "text-[9px] font-semibold uppercase tracking-wider",
+                              isYes ? "text-primary" : "text-warning-300",
+                            )}
+                          >
+                            {b.label}
+                          </div>
+                          <div className="mt-0.5 text-[14px] font-semibold tabular-nums text-foreground">
+                            {b.count.toLocaleString()}
+                          </div>
+                        </div>
+                        <span className="text-[10px] font-medium tabular-nums text-muted-foreground">
+                          {(b.pct * 100).toFixed(0)}%
+                        </span>
+                      </button>
+                    )
+                  })}
                 </div>
-              ))}
+              ) : (
+                breakdown.branches.map((b) => (
+                  <button
+                    key={b.label}
+                    type="button"
+                    onClick={() =>
+                      setBranchFilter(branchFilter === b.label ? "all" : b.label)
+                    }
+                    className={cn(
+                      "flex w-full items-center gap-2 rounded px-1 py-0.5 text-[10px] transition-colors",
+                      branchFilter === b.label
+                        ? "bg-primary/10"
+                        : "hover:bg-muted/40",
+                    )}
+                    title={`Filter to ${b.label}`}
+                  >
+                    <span className="min-w-[6rem] truncate text-left text-foreground">{b.label}</span>
+                    <div className="flex-1 rounded bg-muted/40 overflow-hidden h-1.5">
+                      <div className="h-full bg-primary/70" style={{ width: `${(b.pct * 100).toFixed(1)}%` }} />
+                    </div>
+                    <span className="w-20 text-right tabular-nums text-muted-foreground">
+                      {b.count.toLocaleString()} · {(b.pct * 100).toFixed(0)}%
+                    </span>
+                  </button>
+                ))
+              )}
+              {branchFilter !== "all" && (
+                <button
+                  type="button"
+                  onClick={() => setBranchFilter("all")}
+                  className="text-[9px] font-medium text-primary hover:underline"
+                >
+                  Clear branch filter
+                </button>
+              )}
             </div>
           )}
         </div>
