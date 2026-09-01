@@ -34,6 +34,10 @@ import { cn } from "@/lib/utils"
 import { CampaignScheduleTab } from "@/components/campaigns/campaign-schedule-tab"
 import {
   DEFAULT_CAMPAIGN_SCHEDULE,
+  AGENT_GROUPS,
+  DIALER_OPTIONS,
+  GATEWAY_OPTIONS,
+  DIAL_SPEED_OPTIONS,
   type CampaignSchedule,
 } from "@/data/campaigns-seed"
 
@@ -250,69 +254,93 @@ function BasicsTab({
         />
       </FormField>
       <div className="grid gap-4 sm:grid-cols-2">
-        <FormField label="Dialer">
-          <select
+        <FormField label="Dialer *">
+          <BasicsSelect
             value={cfg.dialerName}
-            onChange={(e) => set("dialerName", e.target.value)}
-            className="h-9 w-full rounded-md border border-input bg-background px-2 text-[13px] outline-none focus-visible:border-ring"
-          >
-            <option>Dialer 1</option>
-            <option>Dialer 2</option>
-            <option>Dialer 3</option>
-          </select>
-        </FormField>
-        <FormField label="Gateway">
-          <Input
-            value={cfg.gateway}
-            onChange={(e) => set("gateway", e.target.value)}
-            className="h-9 text-[13px]"
+            onChange={(v) => set("dialerName", v)}
+            options={DIALER_OPTIONS}
           />
         </FormField>
-        <FormField label="Agent group *">
-          <Input
+        <FormField label="Gateway">
+          <BasicsSelect
+            value={cfg.gateway}
+            onChange={(v) => set("gateway", v)}
+            options={GATEWAY_OPTIONS}
+          />
+        </FormField>
+        <FormField
+          label="Agent group *"
+          actionLabel="Manage user groups"
+          onAction={() => window.open("/agents/groups", "_blank")}
+        >
+          <BasicsSelect
             value={cfg.agentGroup}
-            onChange={(e) => set("agentGroup", e.target.value)}
             placeholder="Select an agent group"
-            className="h-9 text-[13px]"
+            onChange={(v) => set("agentGroup", v)}
+            options={AGENT_GROUPS}
           />
         </FormField>
         <FormField label="Secondary group">
-          <Input
+          <BasicsSelect
             value={cfg.secondaryGroup ?? ""}
-            onChange={(e) => set("secondaryGroup", e.target.value)}
-            placeholder="Optional — used when primary is busy"
-            className="h-9 text-[13px]"
+            placeholder="Optional — used when the primary group is busy"
+            onChange={(v) => set("secondaryGroup", v)}
+            options={AGENT_GROUPS}
+            allowEmpty
           />
         </FormField>
         <FormField label="Dial speed *">
-          <select
+          <BasicsSelect
             value={cfg.dialSpeed}
-            onChange={(e) => set("dialSpeed", e.target.value)}
-            className="h-9 w-full rounded-md border border-input bg-background px-2 text-[13px] outline-none focus-visible:border-ring"
-          >
-            {["1x", "2x", "3x", "4x", "5x", "6x", "7x", "8x", "10x"].map((s) => (
-              <option key={s}>{s}</option>
-            ))}
-          </select>
+            onChange={(v) => set("dialSpeed", v)}
+            options={DIAL_SPEED_OPTIONS}
+          />
         </FormField>
         <FormField label="Priority tier">
-          <select
+          <BasicsSelect
             value={cfg.priorityTier}
-            onChange={(e) =>
-              set(
-                "priorityTier",
-                e.target.value as CampaignConfig["priorityTier"],
-              )
+            onChange={(v) =>
+              set("priorityTier", v as CampaignConfig["priorityTier"])
             }
-            className="h-9 w-full rounded-md border border-input bg-background px-2 text-[13px] outline-none focus-visible:border-ring"
-          >
-            <option value="high">High</option>
-            <option value="medium">Medium</option>
-            <option value="low">Low</option>
-          </select>
+            options={["high", "medium", "low"]}
+          />
         </FormField>
       </div>
     </div>
+  )
+}
+
+function BasicsSelect({
+  value,
+  onChange,
+  options,
+  placeholder,
+  allowEmpty,
+}: {
+  value: string
+  onChange: (v: string) => void
+  options: string[]
+  placeholder?: string
+  allowEmpty?: boolean
+}) {
+  return (
+    <select
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      className={cn(
+        "h-9 w-full rounded-md border border-input bg-background px-2 text-[13px] outline-none focus-visible:border-ring",
+        !value && "text-muted-foreground",
+      )}
+    >
+      {(allowEmpty || !value) && (
+        <option value="">{placeholder ?? "Select…"}</option>
+      )}
+      {options.map((o) => (
+        <option key={o} value={o}>
+          {o}
+        </option>
+      ))}
+    </select>
   )
 }
 
@@ -568,16 +596,31 @@ function Row({ k, v }: { k: string; v: React.ReactNode }) {
 
 function FormField({
   label,
+  actionLabel,
+  onAction,
   children,
 }: {
   label: string
+  actionLabel?: string
+  onAction?: () => void
   children: React.ReactNode
 }) {
   return (
     <div>
-      <Label className="text-[11px] uppercase tracking-wider text-muted-foreground">
-        {label}
-      </Label>
+      <div className="flex items-center justify-between">
+        <Label className="text-[11px] uppercase tracking-wider text-muted-foreground">
+          {label}
+        </Label>
+        {actionLabel && (
+          <button
+            type="button"
+            onClick={onAction}
+            className="text-[11px] font-medium text-primary hover:underline"
+          >
+            {actionLabel}
+          </button>
+        )}
+      </div>
       <div className="mt-1.5">{children}</div>
     </div>
   )

@@ -110,6 +110,38 @@ export interface CampaignSchedule {
   redial: CampaignRedialConfig
 }
 
+export const AGENT_GROUPS: string[] = [
+  "Mashreq Collections",
+  "Mashreq Individual",
+  "Tamara Individual",
+  "ENBD Hardship",
+  "CashNow Settlement",
+  "Final Notice Specialists",
+  "Hardship Care",
+  "Settlement Negotiators",
+  "Basma Individual",
+]
+
+export const DIALER_OPTIONS: string[] = ["Dialer 1", "Dialer 2", "Dialer 3"]
+
+export const GATEWAY_OPTIONS: string[] = [
+  "cleargrid_twilio",
+  "KSA ISCT (966115005390)",
+  "UAE ISCT (971800005390)",
+]
+
+export const DIAL_SPEED_OPTIONS: string[] = [
+  "1x",
+  "2x",
+  "3x",
+  "4x",
+  "5x",
+  "6x",
+  "7x",
+  "8x",
+  "10x",
+]
+
 export const DEFAULT_REDIAL_ROUND_ID = "round-1"
 
 export const DEFAULT_CAMPAIGN_SCHEDULE: CampaignSchedule = {

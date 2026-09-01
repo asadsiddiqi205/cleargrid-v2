@@ -32,6 +32,10 @@ import { cn } from "@/lib/utils"
 import {
   humanCampaigns,
   describeSource,
+  AGENT_GROUPS,
+  DIALER_OPTIONS,
+  GATEWAY_OPTIONS,
+  DIAL_SPEED_OPTIONS,
   type HumanCampaign,
 } from "@/data/campaigns-seed"
 import { TemplateEditor } from "@/components/templates/template-editor"
@@ -224,61 +228,95 @@ function BasicsTab({
         />
       </FormField>
       <div className="grid gap-4 sm:grid-cols-2">
-        <FormField label="Dialer">
-          <Input
+        <FormField label="Dialer *">
+          <Select
             value={draft.dialerName}
-            onChange={(e) => set("dialerName", e.target.value)}
-            className="h-9 text-[13px]"
+            onChange={(v) => set("dialerName", v)}
+            options={DIALER_OPTIONS}
           />
         </FormField>
         <FormField label="Gateway">
-          <Input
+          <Select
             value={draft.gateway}
-            onChange={(e) => set("gateway", e.target.value)}
-            className="h-9 text-[13px]"
+            onChange={(v) => set("gateway", v)}
+            options={GATEWAY_OPTIONS}
           />
         </FormField>
-        <FormField label="Agent group">
-          <Input
+        <FormField
+          label="Agent group *"
+          actionLabel="Manage user groups"
+          onAction={() => window.open("/agents/groups", "_blank")}
+        >
+          <Select
             value={draft.agentGroup}
-            onChange={(e) => set("agentGroup", e.target.value)}
-            className="h-9 text-[13px]"
+            placeholder="Select an agent group"
+            onChange={(v) => set("agentGroup", v)}
+            options={AGENT_GROUPS}
           />
         </FormField>
         <FormField label="Secondary group">
-          <Input
+          <Select
             value={draft.secondaryGroup ?? ""}
-            onChange={(e) => set("secondaryGroup", e.target.value)}
-            placeholder="Optional — used when primary is busy"
-            className="h-9 text-[13px]"
+            placeholder="Optional — used when the primary group is busy"
+            onChange={(v) => set("secondaryGroup", v)}
+            options={AGENT_GROUPS}
+            allowEmpty
           />
         </FormField>
-        <FormField label="Dial speed">
-          <Input
+        <FormField label="Dial speed *">
+          <Select
             value={draft.dialSpeed}
-            onChange={(e) => set("dialSpeed", e.target.value)}
-            placeholder="e.g. 5x"
-            className="h-9 text-[13px]"
+            onChange={(v) => set("dialSpeed", v)}
+            options={DIAL_SPEED_OPTIONS}
           />
         </FormField>
         <FormField label="Priority tier">
-          <select
+          <Select
             value={draft.priorityTier}
-            onChange={(e) =>
-              set(
-                "priorityTier",
-                e.target.value as HumanCampaign["priorityTier"],
-              )
+            onChange={(v) =>
+              set("priorityTier", v as HumanCampaign["priorityTier"])
             }
-            className="h-9 w-full rounded-md border border-input bg-background px-2 text-[13px] outline-none focus-visible:border-ring"
-          >
-            <option value="high">High</option>
-            <option value="medium">Medium</option>
-            <option value="low">Low</option>
-          </select>
+            options={["high", "medium", "low"]}
+          />
         </FormField>
       </div>
     </div>
+  )
+}
+
+/* ─────────── Reusable select ─────────── */
+
+function Select({
+  value,
+  onChange,
+  options,
+  placeholder,
+  allowEmpty,
+}: {
+  value: string
+  onChange: (v: string) => void
+  options: string[]
+  placeholder?: string
+  allowEmpty?: boolean
+}) {
+  return (
+    <select
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      className={cn(
+        "h-9 w-full rounded-md border border-input bg-background px-2 text-[13px] outline-none focus-visible:border-ring",
+        !value && "text-muted-foreground",
+      )}
+    >
+      {(allowEmpty || !value) && (
+        <option value="">{placeholder ?? "Select…"}</option>
+      )}
+      {options.map((o) => (
+        <option key={o} value={o}>
+          {o}
+        </option>
+      ))}
+    </select>
   )
 }
 
@@ -496,16 +534,31 @@ function Row({ k, v }: { k: string; v: React.ReactNode }) {
 
 function FormField({
   label,
+  actionLabel,
+  onAction,
   children,
 }: {
   label: string
+  actionLabel?: string
+  onAction?: () => void
   children: React.ReactNode
 }) {
   return (
     <div>
-      <Label className="text-[11px] uppercase tracking-wider text-muted-foreground">
-        {label}
-      </Label>
+      <div className="flex items-center justify-between">
+        <Label className="text-[11px] uppercase tracking-wider text-muted-foreground">
+          {label}
+        </Label>
+        {actionLabel && (
+          <button
+            type="button"
+            onClick={onAction}
+            className="text-[11px] font-medium text-primary hover:underline"
+          >
+            {actionLabel}
+          </button>
+        )}
+      </div>
       <div className="mt-1.5">{children}</div>
     </div>
   )
