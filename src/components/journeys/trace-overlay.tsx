@@ -3,21 +3,17 @@
 /**
  * TraceOverlay — the "watch this borrower walk the journey" view.
  *
- * Renders when the canvas URL carries `?trace=<borrowerId>`. Combines three
- * things onto the ReactFlow canvas so authors can see what a specific
- * borrower actually did, step by step:
+ * Renders when the canvas URL carries `?trace=<borrowerId>`. Auto-animates
+ * one hop per second — no playback controls, just watch:
  *
- *   1. Progressive playback — hops are revealed one at a time up to a
- *      moving playhead. Play/pause + speed + slider live in the info card;
- *      the playhead auto-advances on mount so you get an animated walk.
- *   2. Path highlighting — nodes visited so far get a coloured pass badge
- *      (1st green / 2nd amber / 3rd blue / 4th+ violet, red for failed),
- *      the node the borrower is at right now gets a pulsing dashed blue
- *      ring, and traversed edges are drawn on top of ReactFlow's edges in
- *      the same green-to-red-to-blue-to-violet pass palette.
- *   3. Analytics — the info card carries a compact profile: total hops,
+ *   1. Path highlighting — nodes reveal one at a time. Each visited node
+ *      gets a coloured pass badge (1st green / 2nd amber / 3rd blue /
+ *      4th+ violet, red for failed), the node the borrower is at right
+ *      now gets a pulsing dashed blue ring, and traversed edges are drawn
+ *      on top of ReactFlow's edges in the same pass palette.
+ *   2. Analytics — the info card carries a compact profile: total hops,
  *      messages sent / opened / clicked, calls, PTPs, recovered AED, plus
- *      a scrollable hop-by-hop timeline you can click to jump the playhead.
+ *      a scrollable hop-by-hop timeline you can click to jump to any hop.
  *
  * The overlay is a pure sibling of ReactFlow — no custom nodes, no schema
  * changes — anchored via `[data-id="<nodeId>"]` inside `.react-flow`.
@@ -29,10 +25,6 @@ import {
   X,
   User,
   ArrowRight,
-  Play,
-  Pause,
-  SkipBack,
-  SkipForward,
   Mail,
   MessageSquare,
   MessageCircle,
@@ -142,64 +134,29 @@ function useNodeAnchors(nodeIds: string[]): Map<string, AnchorRect> {
   return anchors
 }
 
-/* ─────────── Playback engine ─────────── */
+/* ─────────── Auto-walk engine ─────────── */
 
-const SPEED_OPTIONS = [0.5, 1, 2, 4] as const
-type Speed = (typeof SPEED_OPTIONS)[number]
-const BASE_MS_PER_HOP = 1500
+/** How long each hop lingers before advancing. */
+const MS_PER_HOP = 1400
 
-function usePlayback(totalHops: number) {
+function useAutoWalk(totalHops: number) {
   const [playHead, setPlayHead] = React.useState(0)
-  const [playing, setPlaying] = React.useState(true)
-  const [speed, setSpeed] = React.useState<Speed>(1)
 
-  // Reset when trace changes (totalHops mount/change).
+  // Reset when the trace changes.
   React.useEffect(() => {
     setPlayHead(0)
-    setPlaying(totalHops > 0)
   }, [totalHops])
 
-  // Auto-advance.
+  // Auto-advance one hop at a time until the path is fully revealed.
   React.useEffect(() => {
-    if (!playing || playHead >= totalHops) return
+    if (playHead >= totalHops) return
     const t = window.setTimeout(() => {
       setPlayHead((v) => Math.min(totalHops, v + 1))
-    }, BASE_MS_PER_HOP / speed)
+    }, MS_PER_HOP)
     return () => window.clearTimeout(t)
-  }, [playing, playHead, totalHops, speed])
-
-  // Stop at the end.
-  React.useEffect(() => {
-    if (playHead >= totalHops) setPlaying(false)
   }, [playHead, totalHops])
 
-  const rewind = React.useCallback(() => {
-    setPlayHead(0)
-    setPlaying(true)
-  }, [])
-  const skipForward = React.useCallback(() => {
-    setPlayHead(totalHops)
-    setPlaying(false)
-  }, [totalHops])
-  const togglePlay = React.useCallback(() => {
-    if (playHead >= totalHops) {
-      setPlayHead(0)
-      setPlaying(true)
-    } else {
-      setPlaying((p) => !p)
-    }
-  }, [playHead, totalHops])
-
-  return {
-    playHead,
-    setPlayHead,
-    playing,
-    speed,
-    setSpeed,
-    rewind,
-    skipForward,
-    togglePlay,
-  }
+  return { playHead, setPlayHead }
 }
 
 /* ─────────── Hop failure classifier ─────────── */
@@ -283,16 +240,7 @@ export function TraceOverlay({
     [trace],
   )
   const anchors = useNodeAnchors(nodeIds)
-  const {
-    playHead,
-    setPlayHead,
-    playing,
-    speed,
-    setSpeed,
-    rewind,
-    skipForward,
-    togglePlay,
-  } = usePlayback(trace?.hops.length ?? 0)
+  const { playHead, setPlayHead } = useAutoWalk(trace?.hops.length ?? 0)
 
   if (!trace) return null
 
@@ -314,9 +262,8 @@ export function TraceOverlay({
   })
 
   const currentHop = playHead > 0 ? trace.hops[playHead - 1] : null
-  const nextHop = playHead < totalHops ? trace.hops[playHead] : null
   const currentNodeId =
-    playing || playHead > 0
+    playHead > 0
       ? currentHop?.nodeId ?? null
       : trace.status === "active"
         ? trace.currentNodeId
@@ -475,76 +422,6 @@ export function TraceOverlay({
               {trace.status}
             </span>
           </div>
-        </div>
-
-        {/* Playback controls */}
-        <div className="border-b border-info-500/20 bg-info-500/[0.03] px-3 py-2">
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={rewind}
-              title="Restart"
-              className="rounded p-1 text-info-300 hover:bg-info-500/20"
-            >
-              <SkipBack className="h-3 w-3" />
-            </button>
-            <button
-              type="button"
-              onClick={togglePlay}
-              title={playing ? "Pause" : "Play"}
-              className="rounded-full border border-info-500/50 bg-info-500/15 p-1.5 text-info-300 hover:bg-info-500/30"
-            >
-              {playing && playHead < totalHops ? (
-                <Pause className="h-3 w-3" />
-              ) : (
-                <Play className="h-3 w-3" />
-              )}
-            </button>
-            <button
-              type="button"
-              onClick={skipForward}
-              title="Skip to end"
-              className="rounded p-1 text-info-300 hover:bg-info-500/20"
-            >
-              <SkipForward className="h-3 w-3" />
-            </button>
-            <div className="ml-auto flex items-center gap-0.5 rounded border border-info-500/30 bg-info-500/[0.05] p-0.5">
-              {SPEED_OPTIONS.map((s) => (
-                <button
-                  key={s}
-                  type="button"
-                  onClick={() => setSpeed(s)}
-                  className={cn(
-                    "rounded px-1 py-0.5 text-[9px] font-medium tabular-nums transition-colors",
-                    speed === s
-                      ? "bg-info-500/30 text-info-300"
-                      : "text-muted-foreground hover:text-foreground",
-                  )}
-                >
-                  {s}×
-                </button>
-              ))}
-            </div>
-          </div>
-          <div className="mt-2 flex items-center gap-2">
-            <input
-              type="range"
-              min={0}
-              max={totalHops}
-              value={playHead}
-              onChange={(e) => setPlayHead(Number(e.target.value))}
-              className="flex-1 accent-info-300"
-              aria-label="Playback position"
-            />
-            <span className="tabular-nums text-[10px] text-muted-foreground">
-              {playHead}/{totalHops}
-            </span>
-          </div>
-          {nextHop && (
-            <p className="mt-1 truncate text-[9px] text-muted-foreground">
-              Next: <span className="text-foreground">{nextHop.label}</span>
-            </p>
-          )}
         </div>
 
         {/* Analytics tiles */}
