@@ -239,6 +239,88 @@ interface JourneyCanvasProps {
 }
 
 /* ------------------------------------------------------------------ */
+/*  Trace → canvas node remap                                          */
+/* ------------------------------------------------------------------ */
+
+/**
+ * The trace synthesiser in `borrower-traces.ts` uses seed node ids like
+ * `n-email-1` that predate the actual canvas templates. The canvas nodes
+ * have their own ids (`action-email-1`, `condition-1`, …), so the trace's
+ * `hop.nodeId` doesn't match any `[data-id=…]` and the overlay can't
+ * anchor its badges.
+ *
+ * Remap by role: for each hop, pick the next unused canvas node whose
+ * type + action-type matches the hop's kind. Preserves the seeded trace's
+ * storyline (email → wait → sms → call → end) but points at real ids.
+ */
+function remapTraceToCanvas(
+  trace: import("@/data/borrower-traces").BorrowerTrace,
+  canvasNodes: import("@xyflow/react").Node[],
+): import("@/data/borrower-traces").BorrowerTrace {
+  const roleOfCanvasNode = (n: import("@xyflow/react").Node): string | null => {
+    const t = String(n.type ?? "")
+    const d = (n.data ?? {}) as { actionType?: string; blockType?: string }
+    if (t === "trigger") return "trigger"
+    if (t === "wait") return "wait"
+    if (t === "end") return "end"
+    if (t === "condition") return "condition"
+    if (t === "action") {
+      if (d.actionType === "email") return "action-email"
+      if (d.actionType === "sms") return "action-sms"
+      if (d.actionType === "whatsapp") return "action-whatsapp"
+      if (d.actionType === "call") return "action-call"
+      return "action-other"
+    }
+    return null
+  }
+
+  const roleOfHop = (
+    hop: import("@/data/borrower-traces").TraceHop,
+  ): string | null => {
+    if (hop.kind === "trigger") return "trigger"
+    if (hop.kind === "wait") return "wait"
+    if (hop.kind === "end") return "end"
+    if (hop.kind === "condition" || hop.kind === "action_split") return "condition"
+    if (hop.outcome.kind === "message") return `action-${hop.outcome.channel}`
+    if (hop.outcome.kind === "call") return "action-call"
+    if (hop.kind === "human_campaign") return "action-other"
+    return null
+  }
+
+  const nodesByRole = new Map<string, import("@xyflow/react").Node[]>()
+  for (const n of canvasNodes) {
+    const role = roleOfCanvasNode(n)
+    if (!role) continue
+    if (!nodesByRole.has(role)) nodesByRole.set(role, [])
+    nodesByRole.get(role)!.push(n)
+  }
+
+  const roleUseCount = new Map<string, number>()
+  const originalIdToRemapped = new Map<string, string>()
+
+  const remappedHops = trace.hops.map((hop) => {
+    const role = roleOfHop(hop)
+    if (!role) return hop
+    const candidates = nodesByRole.get(role) ?? []
+    if (candidates.length === 0) return hop
+    const used = roleUseCount.get(role) ?? 0
+    const canvasNode = candidates[used % candidates.length]
+    roleUseCount.set(role, used + 1)
+    originalIdToRemapped.set(hop.nodeId, canvasNode.id)
+    const canvasLabel = ((canvasNode.data as { label?: string })?.label) ?? hop.label
+    return { ...hop, nodeId: canvasNode.id, label: canvasLabel }
+  })
+
+  return {
+    ...trace,
+    hops: remappedHops,
+    currentNodeId: trace.currentNodeId
+      ? (originalIdToRemapped.get(trace.currentNodeId) ?? null)
+      : null,
+  }
+}
+
+/* ------------------------------------------------------------------ */
 /*  Main component                                                     */
 /* ------------------------------------------------------------------ */
 
@@ -1336,11 +1418,13 @@ export default function JourneyCanvas({ journeyId }: JourneyCanvasProps) {
     if (!traceQueryId) return null;
     const borrower = borrowers.find((b) => b.id === traceQueryId);
     if (!borrower) return null;
-    return {
-      trace: synthesizeTrace(borrower.id, journeyId),
-      borrower,
-    };
-  }, [traceQueryId, journeyId]);
+    const rawTrace = synthesizeTrace(borrower.id, journeyId);
+    // The synthesised trace uses seeded template ids ("n-email-1" etc.) that
+    // don't match the actual canvas node ids ("action-email-1" etc.).
+    // Remap by role so `data-id` lookups on the canvas hit real nodes.
+    const trace = remapTraceToCanvas(rawTrace, nodes);
+    return { trace, borrower };
+  }, [traceQueryId, journeyId, nodes]);
   const clearTraceParam = useCallback(() => {
     const url = new URL(window.location.href);
     url.searchParams.delete("trace");
