@@ -35,6 +35,7 @@ import {
   type HumanCampaign,
 } from "@/data/campaigns-seed"
 import { TemplateEditor } from "@/components/templates/template-editor"
+import { CampaignScheduleTab } from "@/components/campaigns/campaign-schedule-tab"
 
 const TABS = [
   { id: "basics", label: "Basics", icon: Info },
@@ -77,14 +78,6 @@ export default function CampaignEditPage() {
           }
         : d,
     )
-  const setSched = <K extends keyof HumanCampaign["schedule"]>(
-    k: K,
-    v: HumanCampaign["schedule"][K],
-  ) =>
-    setDraft((d) =>
-      d ? { ...d, schedule: { ...d.schedule, [k]: v } } : d,
-    )
-
   const save = () => {
     // Mutate the in-memory seed so the detail page reflects changes this session.
     const idx = humanCampaigns.findIndex((c) => c.id === draft.id)
@@ -170,7 +163,14 @@ export default function CampaignEditPage() {
               <BasicsTab draft={draft} set={set} />
             )}
             {tab === "audience" && <AudienceTab draft={draft} />}
-            {tab === "schedule" && <ScheduleTab draft={draft} setSched={setSched} />}
+            {tab === "schedule" && (
+              <CampaignScheduleTab
+                schedule={draft.schedule}
+                onChange={(schedule) =>
+                  setDraft((d) => (d ? { ...d, schedule } : d))
+                }
+              />
+            )}
             {tab === "messages" && (
               <MessagesTab
                 draft={draft}
@@ -339,92 +339,6 @@ function AudienceTab({ draft }: { draft: HumanCampaign }) {
           )}
         </ol>
       </div>
-    </div>
-  )
-}
-
-function ScheduleTab({
-  draft,
-  setSched,
-}: {
-  draft: HumanCampaign
-  setSched: <K extends keyof HumanCampaign["schedule"]>(
-    k: K,
-    v: HumanCampaign["schedule"][K],
-  ) => void
-}) {
-  return (
-    <div className="space-y-4">
-      <div>
-        <div className="text-[12px] font-semibold">When to run</div>
-        <div className="mt-2 space-y-2">
-          <label className="flex items-start gap-3 rounded border border-border bg-background/60 p-3 hover:bg-muted/40">
-            <input
-              type="radio"
-              checked={draft.schedule.mode === "immediate"}
-              onChange={() => setSched("mode", "immediate")}
-              className="mt-0.5"
-            />
-            <div>
-              <div className="text-[12px] font-semibold">Start immediately</div>
-              <div className="mt-0.5 text-[10px] text-muted-foreground">
-                Campaign begins as soon as you click Save.
-              </div>
-            </div>
-          </label>
-          <label className="flex items-start gap-3 rounded border border-border bg-background/60 p-3 hover:bg-muted/40">
-            <input
-              type="radio"
-              checked={draft.schedule.mode === "scheduled"}
-              onChange={() => setSched("mode", "scheduled")}
-              className="mt-0.5"
-            />
-            <div>
-              <div className="text-[12px] font-semibold">Schedule for later</div>
-              <div className="mt-0.5 text-[10px] text-muted-foreground">
-                One-time or recurring — configure start/end below.
-              </div>
-            </div>
-          </label>
-        </div>
-      </div>
-      <div className="rounded-lg border border-border bg-background/60 p-4">
-        <div className="text-[12px] font-semibold">Redial settings</div>
-        <p className="mt-0.5 text-[10px] text-muted-foreground">
-          Configure how the dialer handles unanswered and failed calls.
-        </p>
-        <label className="mt-3 flex items-center justify-between rounded border border-border bg-card px-3 py-2">
-          <div>
-            <div className="text-[12px] font-medium">
-              Enable redial / multiple attempts
-            </div>
-            <div className="mt-0.5 text-[10px] text-muted-foreground">
-              After an unanswered call, retry using the rules below.
-            </div>
-          </div>
-          <input
-            type="checkbox"
-            checked={draft.schedule.redialEnabled}
-            onChange={(e) => setSched("redialEnabled", e.target.checked)}
-            className="h-4 w-8"
-          />
-        </label>
-      </div>
-      <label className="flex items-center justify-between rounded border border-border bg-background/60 px-3 py-2">
-        <div>
-          <div className="text-[12px] font-medium">Pause by default</div>
-          <div className="mt-0.5 text-[10px] text-muted-foreground">
-            The campaign starts paused — an operator has to un-pause to begin
-            dialing.
-          </div>
-        </div>
-        <input
-          type="checkbox"
-          checked={draft.schedule.pauseByDefault}
-          onChange={(e) => setSched("pauseByDefault", e.target.checked)}
-          className="h-4 w-8"
-        />
-      </label>
     </div>
   )
 }

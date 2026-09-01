@@ -66,7 +66,7 @@ export default function CampaignsPage() {
       action={{
         label: "Create Campaign",
         icon: Plus,
-        onClick: () => router.push("/campaigns?new=1"),
+        onClick: () => router.push("/campaigns/new"),
       }}
     >
       <div className="space-y-3">

@@ -55,12 +55,82 @@ export interface CampaignCallMessages {
   busy?: string
 }
 
+export type CampaignContactSlot =
+  | "Contact 1"
+  | "Contact 2"
+  | "Contact 3"
+  | "Contact 4"
+  | "Contact 5"
+
+export interface CampaignRedialRound {
+  id: string
+  contacts: CampaignContactSlot[]
+  /** Minutes to wait BEFORE this round starts. Ignored for the first round. */
+  waitBeforeMin: number
+}
+
+export interface CampaignRedialConfig {
+  enabled: boolean
+  maxAttemptsPerContact: number
+  tryMultipleNumbers: boolean
+  rounds: CampaignRedialRound[]
+  repeatLastRound: boolean
+}
+
+export type CampaignWeekday =
+  | "Mon"
+  | "Tue"
+  | "Wed"
+  | "Thu"
+  | "Fri"
+  | "Sat"
+  | "Sun"
+
+export interface CampaignRecurrence {
+  enabled: boolean
+  weekdays: CampaignWeekday[]
+  /** Time of day (HH:MM 24h) the daily instance starts. */
+  dailyTime: string
+  /** ISO date the recurrence stops. Empty means no end. */
+  endDate: string
+}
+
 export interface CampaignSchedule {
   mode: "immediate" | "scheduled"
   startsAt?: string
+  /** When true, the campaign stops after `endsAt` — reveals the end-time picker. */
+  setEndTime: boolean
   endsAt?: string
+  /** Auto-pause outside 9 AM – 6 PM. */
+  callingHoursOnly: boolean
+  recurring: CampaignRecurrence
   pauseByDefault: boolean
+  /** Legacy shorthand — kept in sync with `redial.enabled`. */
   redialEnabled: boolean
+  redial: CampaignRedialConfig
+}
+
+export const DEFAULT_REDIAL_ROUND_ID = "round-1"
+
+export const DEFAULT_CAMPAIGN_SCHEDULE: CampaignSchedule = {
+  mode: "immediate",
+  setEndTime: false,
+  callingHoursOnly: false,
+  recurring: {
+    enabled: false,
+    weekdays: ["Mon", "Tue", "Wed", "Thu", "Fri"],
+    dailyTime: "09:00",
+    endDate: "",
+  },
+  pauseByDefault: false,
+  redialEnabled: true,
+  redial: {
+    enabled: true,
+    maxAttemptsPerContact: 1,
+    tryMultipleNumbers: true,
+    rounds: [{ id: DEFAULT_REDIAL_ROUND_ID, contacts: ["Contact 1"], waitBeforeMin: 30 }],
+    repeatLastRound: true,
+  },
 }
 
 export interface HumanCampaign {
@@ -144,11 +214,7 @@ export const humanCampaigns: HumanCampaign[] = [
       loop: "Please wait while we connect your call to one of our agents.",
       busy: "All agents are busy — we'll call you back shortly. Thank you for your patience.",
     },
-    schedule: {
-      mode: "immediate",
-      pauseByDefault: false,
-      redialEnabled: true,
-    },
+    schedule: { ...DEFAULT_CAMPAIGN_SCHEDULE, mode: "immediate", pauseByDefault: false },
   },
   /* ─── Journey-sourced (Broken Promise → Escalation) ─── */
   {
@@ -190,11 +256,7 @@ export const humanCampaigns: HumanCampaign[] = [
       loop: "Connecting you to a Tamara collections specialist…",
       busy: "Our agents are busy. We'll retry shortly.",
     },
-    schedule: {
-      mode: "immediate",
-      pauseByDefault: false,
-      redialEnabled: true,
-    },
+    schedule: { ...DEFAULT_CAMPAIGN_SCHEDULE, mode: "immediate", pauseByDefault: false },
   },
   /* ─── Journey-sourced (Escalation Auto-Route) ─── */
   {
@@ -236,11 +298,7 @@ export const humanCampaigns: HumanCampaign[] = [
       loop: "Connecting you to a specialist…",
       busy: "All specialists are on other calls. We'll retry shortly.",
     },
-    schedule: {
-      mode: "immediate",
-      pauseByDefault: false,
-      redialEnabled: true,
-    },
+    schedule: { ...DEFAULT_CAMPAIGN_SCHEDULE, mode: "immediate", pauseByDefault: false },
   },
   /* ─── Manually created (from the Campaigns app itself) ─── */
   {
@@ -270,11 +328,7 @@ export const humanCampaigns: HumanCampaign[] = [
     successful: 45,
     failed: 129,
     callMessages: {},
-    schedule: {
-      mode: "immediate",
-      pauseByDefault: false,
-      redialEnabled: true,
-    },
+    schedule: { ...DEFAULT_CAMPAIGN_SCHEDULE, mode: "immediate", pauseByDefault: false },
   },
   {
     id: "camp-tamara-ptp",
@@ -303,11 +357,7 @@ export const humanCampaigns: HumanCampaign[] = [
     successful: 39,
     failed: 126,
     callMessages: {},
-    schedule: {
-      mode: "immediate",
-      pauseByDefault: false,
-      redialEnabled: true,
-    },
+    schedule: { ...DEFAULT_CAMPAIGN_SCHEDULE, mode: "immediate", pauseByDefault: false },
   },
   {
     id: "camp-enbd-hardship",
@@ -336,11 +386,7 @@ export const humanCampaigns: HumanCampaign[] = [
     successful: 42,
     failed: 96,
     callMessages: {},
-    schedule: {
-      mode: "immediate",
-      pauseByDefault: true,
-      redialEnabled: false,
-    },
+    schedule: { ...DEFAULT_CAMPAIGN_SCHEDULE, mode: "immediate", pauseByDefault: true, redialEnabled: false, redial: { ...DEFAULT_CAMPAIGN_SCHEDULE.redial, enabled: false } },
   },
   {
     id: "camp-cashnow-settlement",
@@ -369,11 +415,7 @@ export const humanCampaigns: HumanCampaign[] = [
     successful: 6,
     failed: 22,
     callMessages: {},
-    schedule: {
-      mode: "immediate",
-      pauseByDefault: false,
-      redialEnabled: true,
-    },
+    schedule: { ...DEFAULT_CAMPAIGN_SCHEDULE, mode: "immediate", pauseByDefault: false },
   },
   {
     id: "camp-fab-final",
@@ -402,11 +444,7 @@ export const humanCampaigns: HumanCampaign[] = [
     successful: 292,
     failed: 1945,
     callMessages: {},
-    schedule: {
-      mode: "immediate",
-      pauseByDefault: false,
-      redialEnabled: true,
-    },
+    schedule: { ...DEFAULT_CAMPAIGN_SCHEDULE, mode: "immediate", pauseByDefault: false },
   },
 ]
 

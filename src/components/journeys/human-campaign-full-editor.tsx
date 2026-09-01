@@ -31,6 +31,11 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { cn } from "@/lib/utils"
+import { CampaignScheduleTab } from "@/components/campaigns/campaign-schedule-tab"
+import {
+  DEFAULT_CAMPAIGN_SCHEDULE,
+  type CampaignSchedule,
+} from "@/data/campaigns-seed"
 
 const TABS = [
   { id: "basics", label: "Basics", icon: Info },
@@ -49,16 +54,32 @@ interface CampaignConfig {
   secondaryGroup?: string
   dialSpeed: string
   priorityTier: "high" | "medium" | "low"
-  scheduleMode: "immediate" | "scheduled"
-  pauseByDefault: boolean
-  redialEnabled: boolean
+  schedule: CampaignSchedule
   welcomeMessage: string
   loopMessage: string
   busyMessage: string
 }
 
 function readConfig(data: Record<string, unknown>): CampaignConfig {
-  const c = (data.campaignConfig as Partial<CampaignConfig>) ?? {}
+  const c = (data.campaignConfig as Partial<CampaignConfig> & {
+    scheduleMode?: "immediate" | "scheduled"
+    pauseByDefault?: boolean
+    redialEnabled?: boolean
+  }) ?? {}
+  // Legacy migration — earlier the node stored scheduleMode/pauseByDefault/
+  // redialEnabled at the top level. Fold those into the new schedule shape.
+  const schedule: CampaignSchedule = c.schedule
+    ? { ...DEFAULT_CAMPAIGN_SCHEDULE, ...c.schedule }
+    : {
+        ...DEFAULT_CAMPAIGN_SCHEDULE,
+        mode: c.scheduleMode ?? "immediate",
+        pauseByDefault: c.pauseByDefault ?? false,
+        redialEnabled: c.redialEnabled ?? true,
+        redial: {
+          ...DEFAULT_CAMPAIGN_SCHEDULE.redial,
+          enabled: c.redialEnabled ?? true,
+        },
+      }
   return {
     campaignName: c.campaignName ?? ((data.label as string) ?? "Human Campaign"),
     dialerName: c.dialerName ?? "Dialer 1",
@@ -67,10 +88,7 @@ function readConfig(data: Record<string, unknown>): CampaignConfig {
     secondaryGroup: c.secondaryGroup ?? "",
     dialSpeed: c.dialSpeed ?? "5x",
     priorityTier: (c.priorityTier as CampaignConfig["priorityTier"]) ?? "medium",
-    scheduleMode:
-      (c.scheduleMode as CampaignConfig["scheduleMode"]) ?? "immediate",
-    pauseByDefault: c.pauseByDefault ?? false,
-    redialEnabled: c.redialEnabled ?? true,
+    schedule,
     welcomeMessage: c.welcomeMessage ?? "",
     loopMessage: c.loopMessage ?? "",
     busyMessage: c.busyMessage ?? "",
@@ -188,7 +206,12 @@ export function HumanCampaignNodeFullEditor({
             {tab === "audience" && (
               <AudienceTab journeyId={journeyId} incomingNodeLabel={incomingNodeLabel ?? null} />
             )}
-            {tab === "schedule" && <ScheduleTab cfg={cfg} set={set} />}
+            {tab === "schedule" && (
+              <CampaignScheduleTab
+                schedule={cfg.schedule}
+                onChange={(schedule) => set("schedule", schedule)}
+              />
+            )}
             {tab === "messages" && <MessagesTab cfg={cfg} set={set} />}
           </div>
         </div>
@@ -354,88 +377,6 @@ function AudienceTab({
   )
 }
 
-function ScheduleTab({
-  cfg,
-  set,
-}: {
-  cfg: CampaignConfig
-  set: <K extends keyof CampaignConfig>(k: K, v: CampaignConfig[K]) => void
-}) {
-  return (
-    <div className="space-y-4">
-      <div>
-        <div className="text-[12px] font-semibold">When to run</div>
-        <div className="mt-2 space-y-2">
-          <label className="flex items-start gap-3 rounded border border-border bg-background/60 p-3 hover:bg-muted/40">
-            <input
-              type="radio"
-              checked={cfg.scheduleMode === "immediate"}
-              onChange={() => set("scheduleMode", "immediate")}
-              className="mt-0.5"
-            />
-            <div>
-              <div className="text-[12px] font-semibold">Start immediately</div>
-              <div className="mt-0.5 text-[10px] text-muted-foreground">
-                Dials the borrower as soon as the journey reaches this node.
-              </div>
-            </div>
-          </label>
-          <label className="flex items-start gap-3 rounded border border-border bg-background/60 p-3 hover:bg-muted/40">
-            <input
-              type="radio"
-              checked={cfg.scheduleMode === "scheduled"}
-              onChange={() => set("scheduleMode", "scheduled")}
-              className="mt-0.5"
-            />
-            <div>
-              <div className="text-[12px] font-semibold">Schedule for later</div>
-              <div className="mt-0.5 text-[10px] text-muted-foreground">
-                Queue arrivals into a scheduled window — one-time or recurring.
-              </div>
-            </div>
-          </label>
-        </div>
-      </div>
-      <div className="rounded-lg border border-border bg-background/60 p-4">
-        <div className="text-[12px] font-semibold">Redial settings</div>
-        <p className="mt-0.5 text-[10px] text-muted-foreground">
-          Configure how the dialer handles unanswered and failed calls.
-        </p>
-        <label className="mt-3 flex items-center justify-between rounded border border-border bg-card px-3 py-2">
-          <div>
-            <div className="text-[12px] font-medium">
-              Enable redial / multiple attempts
-            </div>
-            <div className="mt-0.5 text-[10px] text-muted-foreground">
-              After an unanswered call, retry using the rules below.
-            </div>
-          </div>
-          <input
-            type="checkbox"
-            checked={cfg.redialEnabled}
-            onChange={(e) => set("redialEnabled", e.target.checked)}
-            className="h-4 w-8"
-          />
-        </label>
-      </div>
-      <label className="flex items-center justify-between rounded border border-border bg-background/60 px-3 py-2">
-        <div>
-          <div className="text-[12px] font-medium">Pause by default</div>
-          <div className="mt-0.5 text-[10px] text-muted-foreground">
-            The campaign starts paused — an operator has to un-pause it.
-          </div>
-        </div>
-        <input
-          type="checkbox"
-          checked={cfg.pauseByDefault}
-          onChange={(e) => set("pauseByDefault", e.target.checked)}
-          className="h-4 w-8"
-        />
-      </label>
-    </div>
-  )
-}
-
 function MessagesTab({
   cfg,
   set,
@@ -513,15 +454,30 @@ function Preview({
           <Row
             k="Schedule"
             v={
-              cfg.scheduleMode === "immediate"
+              cfg.schedule.mode === "immediate"
                 ? "Start immediately"
-                : "Scheduled"
+                : cfg.schedule.recurring.enabled
+                  ? "Recurring"
+                  : "Scheduled"
             }
           />
-          <Row k="Redial" v={cfg.redialEnabled ? "Enabled" : "Off"} />
+          <Row
+            k="Redial"
+            v={
+              cfg.schedule.redial.enabled
+                ? `${cfg.schedule.redial.rounds.length} round${
+                    cfg.schedule.redial.rounds.length === 1 ? "" : "s"
+                  }`
+                : "Off"
+            }
+          />
+          <Row
+            k="Calling hours"
+            v={cfg.schedule.callingHoursOnly ? "9 AM – 6 PM" : "Any time"}
+          />
           <Row
             k="Pause by default"
-            v={cfg.pauseByDefault ? "Yes" : "No"}
+            v={cfg.schedule.pauseByDefault ? "Yes" : "No"}
           />
         </div>
       </div>
