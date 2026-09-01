@@ -2185,7 +2185,7 @@ function HumanCampaignConfig({
                 <option value="">Select campaign…</option>
                 {campaigns.map((c) => (
                   <option key={c.id} value={c.id}>
-                    {c.name} · {SKILL_GROUP_LABEL[c.skillGroup]} · queue {c.queueDepth}
+                    {c.name} · {SKILL_GROUP_LABEL[c.skillGroup]} · queued {c.queued}
                   </option>
                 ))}
               </NativeSelect>
@@ -2209,7 +2209,7 @@ function HumanCampaignConfig({
               <div className="flex items-center justify-between">
                 <span className="text-muted-foreground">Queue depth</span>
                 <span className="tabular-nums text-foreground">
-                  {activeCampaign.queueDepth.toLocaleString()}
+                  {activeCampaign.queued.toLocaleString()}
                 </span>
               </div>
               <div className="flex items-center justify-between">
@@ -2217,7 +2217,7 @@ function HumanCampaignConfig({
                 <span
                   className={cn(
                     "rounded px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wider",
-                    activeCampaign.status === "active"
+                    activeCampaign.status === "processing_calls"
                       ? "bg-primary-500/20 text-primary-300"
                       : "bg-warning-500/20 text-warning-300",
                   )}
