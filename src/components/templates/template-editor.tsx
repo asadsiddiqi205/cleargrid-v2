@@ -114,9 +114,19 @@ function EmailPreview() {
   );
 }
 
-export function TemplateEditor() {
-  const [templateName, setTemplateName] = useState("Untitled Template");
-  const [activeChannel, setActiveChannel] = useState("email");
+export function TemplateEditor({
+  initialChannel = "email",
+  initialTemplateName,
+}: {
+  initialChannel?: "email" | "sms" | "whatsapp";
+  initialTemplateName?: string;
+} = {}) {
+  const [templateName, setTemplateName] = useState(
+    initialTemplateName ?? "Untitled Template",
+  );
+  const [activeChannel, setActiveChannel] = useState<"email" | "sms" | "whatsapp">(
+    initialChannel,
+  );
   const [subjectLine, setSubjectLine] = useState(
     "Payment Reminder — {{amount_due}} Due"
   );
@@ -161,7 +171,7 @@ export function TemplateEditor() {
             {channels.map((ch) => (
               <button
                 key={ch.id}
-                onClick={() => setActiveChannel(ch.id)}
+                onClick={() => setActiveChannel(ch.id as "email" | "sms" | "whatsapp")}
                 className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
                   activeChannel === ch.id
                     ? "bg-blue-500/10 text-blue-400 border border-blue-500/20"
