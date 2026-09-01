@@ -19,7 +19,6 @@ import {
   MessageSquare,
   MessageCircle,
   Save,
-  Wand2,
   Pencil,
   Trash2,
 } from "lucide-react"
@@ -33,7 +32,6 @@ import {
   type MessageChannel,
 } from "@/components/shared/message-preview"
 import { borrowers, type Borrower } from "@/data/borrowers"
-import { TemplateEditor } from "@/components/templates/template-editor"
 
 type ComposeMode = "template" | "manual"
 
@@ -369,18 +367,6 @@ export function MessageNodeFullEditor({
               </FormField>
             </div>
 
-            <div className="pt-2">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="gap-1.5"
-                onClick={() => setTemplateEditorOpen(true)}
-              >
-                <Wand2 className="h-3.5 w-3.5" />
-                Open composer
-              </Button>
-            </div>
           </div>
         </div>
 
@@ -418,16 +404,40 @@ export function MessageNodeFullEditor({
         </div>
       </div>
 
-      {/* Template editor modal */}
+      {/* Template editor modal — hosts the composer builder route inline so
+          authors get the exact same editing UI without leaving the journey. */}
       <Dialog open={templateEditorOpen} onOpenChange={setTemplateEditorOpen}>
-        <DialogContent className="!max-w-[min(1600px,96vw)] p-0 h-[92vh] overflow-hidden gap-0">
+        <DialogContent className="!max-w-[min(1720px,98vw)] h-[94vh] p-0 overflow-hidden gap-0">
           <div className="flex h-full flex-col">
-            <TemplateEditor />
+            <div className="flex items-center justify-between border-b border-border bg-card px-4 py-2">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                Edit template · {channel} · {template || "Untitled"}
+              </div>
+              <button
+                type="button"
+                onClick={() => setTemplateEditorOpen(false)}
+                className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+                aria-label="Close template editor"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <iframe
+              title="Template editor"
+              src={`/email-generator/builder/${encodeURIComponent(
+                template ? templateSlug(template) : "new",
+              )}?channel=${channel}&name=${encodeURIComponent(template || "")}&embedded=1`}
+              className="min-h-0 flex-1 w-full border-0 bg-background"
+            />
           </div>
         </DialogContent>
       </Dialog>
     </div>
   )
+}
+
+function templateSlug(name: string): string {
+  return "rich-" + name.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "")
 }
 
 function FormField({

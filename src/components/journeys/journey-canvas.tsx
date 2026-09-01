@@ -57,6 +57,7 @@ import {
 import { NodePalette } from "@/components/journeys/node-palette";
 import { NodeConfigPanel } from "@/components/journeys/node-config-panel";
 import { MessageNodeFullEditor } from "@/components/journeys/message-node-full-editor";
+import { HumanCampaignNodeFullEditor } from "@/components/journeys/human-campaign-full-editor";
 import { JourneyGPTPanel } from "@/components/journeys/journey-gpt-panel";
 import { buildBlueprint } from "@/data/journey-blueprints";
 import {
@@ -2796,21 +2797,46 @@ export default function JourneyCanvas({ journeyId }: JourneyCanvasProps) {
               const isMessageAction =
                 selectedNode.type === "action" &&
                 (at === "email" || at === "sms" || at === "whatsapp")
+              const updateField = (id: string, field: string, value: unknown) => {
+                const current = (selectedNode.data ?? {}) as Record<
+                  string,
+                  unknown
+                >
+                onNodeDataUpdate(id, { ...current, [field]: value })
+              }
               if (isMessageAction) {
                 // Full-page editor takes over the viewport — replaces the
                 // right-side panel for these nodes.
                 return (
                   <MessageNodeFullEditor
                     node={selectedNode}
-                    onUpdate={(id, field, value) => {
-                      const current = (selectedNode.data ?? {}) as Record<
-                        string,
-                        unknown
-                      >
-                      onNodeDataUpdate(id, { ...current, [field]: value })
-                    }}
+                    onUpdate={updateField}
                     onDeleteNode={deleteSelectedNode}
                     onClose={() => setSelectedNode(null)}
+                  />
+                )
+              }
+              const isHumanCampaign =
+                selectedNode.type === "action" && at === "human_campaign"
+              if (isHumanCampaign) {
+                // Look up the incoming node's label so the editor can surface
+                // "audience comes from <upstream node>".
+                const incomingEdge = edges.find((e) => e.target === selectedNode.id)
+                const incomingNodeLabel = incomingEdge
+                  ? (
+                      (nodes.find((n) => n.id === incomingEdge.source)
+                        ?.data as { label?: string } | undefined
+                      )?.label ?? null
+                    )
+                  : null
+                return (
+                  <HumanCampaignNodeFullEditor
+                    node={selectedNode}
+                    journeyId={journeyId}
+                    onUpdate={updateField}
+                    onDeleteNode={deleteSelectedNode}
+                    onClose={() => setSelectedNode(null)}
+                    incomingNodeLabel={incomingNodeLabel}
                   />
                 )
               }
