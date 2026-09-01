@@ -56,6 +56,7 @@ import {
 } from "@/data/components";
 import { NodePalette } from "@/components/journeys/node-palette";
 import { NodeConfigPanel } from "@/components/journeys/node-config-panel";
+import { MessageNodeFullEditor } from "@/components/journeys/message-node-full-editor";
 import { JourneyGPTPanel } from "@/components/journeys/journey-gpt-panel";
 import { buildBlueprint } from "@/data/journey-blueprints";
 import {
@@ -2788,21 +2789,49 @@ export default function JourneyCanvas({ journeyId }: JourneyCanvasProps) {
           />
         ) : (
           selectedNode && (
-            <NodeConfigPanel
-              node={selectedNode}
-              onClose={() => setSelectedNode(null)}
-              onUpdate={onNodeDataUpdate}
-              onDeleteNode={deleteSelectedNode}
-              nodes={nodes}
-              edges={edges}
-              journeyId={journeyId}
-              selectedRunId={selectedRunId}
-              focusField={
-                focusFieldToken && focusFieldToken.nodeId === selectedNode.id
-                  ? { field: focusFieldToken.field, ts: focusFieldToken.ts }
-                  : undefined
+            (() => {
+              const at = (
+                (selectedNode.data as { actionType?: string })?.actionType ?? ""
+              ) as string
+              const isMessageAction =
+                selectedNode.type === "action" &&
+                (at === "email" || at === "sms" || at === "whatsapp")
+              if (isMessageAction) {
+                // Full-page editor takes over the viewport — replaces the
+                // right-side panel for these nodes.
+                return (
+                  <MessageNodeFullEditor
+                    node={selectedNode}
+                    onUpdate={(id, field, value) => {
+                      const current = (selectedNode.data ?? {}) as Record<
+                        string,
+                        unknown
+                      >
+                      onNodeDataUpdate(id, { ...current, [field]: value })
+                    }}
+                    onDeleteNode={deleteSelectedNode}
+                    onClose={() => setSelectedNode(null)}
+                  />
+                )
               }
-            />
+              return (
+                <NodeConfigPanel
+                  node={selectedNode}
+                  onClose={() => setSelectedNode(null)}
+                  onUpdate={onNodeDataUpdate}
+                  onDeleteNode={deleteSelectedNode}
+                  nodes={nodes}
+                  edges={edges}
+                  journeyId={journeyId}
+                  selectedRunId={selectedRunId}
+                  focusField={
+                    focusFieldToken && focusFieldToken.nodeId === selectedNode.id
+                      ? { field: focusFieldToken.field, ts: focusFieldToken.ts }
+                      : undefined
+                  }
+                />
+              )
+            })()
           )
         )}
       </div>

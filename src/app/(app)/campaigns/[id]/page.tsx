@@ -723,6 +723,7 @@ function AudienceSection({ campaign }: { campaign: HumanCampaign }) {
 /* ─────────── Call messages ─────────── */
 
 function CallMessages({ campaign }: { campaign: HumanCampaign }) {
+  const router = useRouter()
   const cards: Array<{ label: string; body?: string }> = [
     { label: "Welcome", body: campaign.callMessages.welcome },
     { label: "Loop", body: campaign.callMessages.loop },
@@ -730,7 +731,18 @@ function CallMessages({ campaign }: { campaign: HumanCampaign }) {
   ]
   return (
     <div className="rounded-xl border border-border bg-card/40 p-4">
-      <h2 className="text-[14px] font-semibold">Call messages</h2>
+      <div className="flex items-center justify-between">
+        <h2 className="text-[14px] font-semibold">Call messages</h2>
+        <Button
+          variant="outline"
+          size="sm"
+          className="gap-1.5"
+          onClick={() => router.push(`/campaigns/${campaign.id}/edit`)}
+        >
+          <Pencil className="h-3.5 w-3.5" />
+          Edit messages
+        </Button>
+      </div>
       <div className="mt-3 grid gap-2 lg:grid-cols-3">
         {cards.map((c) => (
           <div key={c.label} className="rounded-lg border border-border bg-background/60 p-3">
