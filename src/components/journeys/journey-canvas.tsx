@@ -1335,7 +1335,7 @@ export default function JourneyCanvas({ journeyId }: JourneyCanvasProps) {
     if (!borrower) return null;
     return {
       trace: synthesizeTrace(borrower.id, journeyId),
-      borrowerName: borrower.name,
+      borrower,
     };
   }, [traceQueryId, journeyId]);
   const clearTraceParam = useCallback(() => {
@@ -2588,9 +2588,11 @@ export default function JourneyCanvas({ journeyId }: JourneyCanvasProps) {
           {traceOverlayData && (
             <TraceOverlay
               trace={traceOverlayData.trace}
-              borrowerName={traceOverlayData.borrowerName}
+              borrower={traceOverlayData.borrower}
               onDismiss={clearTraceParam}
               journeyId={journeyId}
+              edges={edges}
+              nodes={nodes}
             />
           )}
 

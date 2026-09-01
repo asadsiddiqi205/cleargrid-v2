@@ -37,6 +37,7 @@ import { JourneySubNav } from "@/components/journeys/journey-sub-nav"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { cn } from "@/lib/utils"
 import { borrowers, type Borrower } from "@/data/borrowers"
 import { synthesizeTrace } from "@/data/borrower-traces"
 
@@ -52,6 +53,14 @@ interface ValidationRow {
   actual: string[]
   match: boolean
   divergeIndex?: number
+  /** Terminal-state label from the seeded trace — e.g. "End · Converted". */
+  predictedTerminal: string
+  /** Predicted final status — mirrors BorrowerTrace.status. */
+  predictedStatus: "active" | "converted" | "exited" | "errored"
+  /** Sum of amountAED across the trace's attributed conversions. */
+  predictedRecoveredAED: number
+  /** Distinct channels touched during the predicted path. */
+  predictedChannels: string[]
 }
 
 export default function JourneyValidatorPage() {
@@ -88,6 +97,16 @@ export default function JourneyValidatorPage() {
     const rows: ValidationRow[] = (audience ?? []).map((a) => {
       const trace = synthesizeTrace(a.borrower.id, journeyId)
       const predicted = trace.hops.map((h) => h.label)
+      const predictedTerminal = predicted[predicted.length - 1] ?? "—"
+      const predictedChannels = Array.from(
+        new Set(
+          trace.hops
+            .filter((h) => h.outcome.kind === "message" || h.outcome.kind === "call")
+            .map((h) =>
+              h.outcome.kind === "message" ? h.outcome.channel : "call",
+            ),
+        ),
+      )
       const seed = hash(a.borrower.id + journeyId)
       const roll = (seed % 100) / 100
       let actual = predicted.slice()
@@ -101,7 +120,18 @@ export default function JourneyValidatorPage() {
         ]
         match = false
       }
-      return { borrower: a.borrower, dealId: a.dealId, predicted, actual, match, divergeIndex }
+      return {
+        borrower: a.borrower,
+        dealId: a.dealId,
+        predicted,
+        actual,
+        match,
+        divergeIndex,
+        predictedTerminal,
+        predictedStatus: trace.status,
+        predictedRecoveredAED: trace.recoveredAED,
+        predictedChannels,
+      }
     })
     setValidation(rows)
     setValidating(false)
@@ -329,9 +359,50 @@ export default function JourneyValidatorPage() {
                         </td>
                         <td className="px-3 py-1.5 text-[10px]">
                           {r.match ? (
-                            <span className="text-muted-foreground">
-                              same path — {r.predicted.length} hops
-                            </span>
+                            <div className="space-y-0.5">
+                              <div className="flex items-center gap-1">
+                                <span
+                                  className={cn(
+                                    "rounded px-1 py-px text-[9px] font-medium uppercase tracking-wider",
+                                    r.predictedStatus === "converted" &&
+                                      "bg-primary/15 text-primary",
+                                    r.predictedStatus === "exited" &&
+                                      "bg-neutral-500/15 text-neutral-400",
+                                    r.predictedStatus === "errored" &&
+                                      "bg-error-500/15 text-error-300",
+                                    r.predictedStatus === "active" &&
+                                      "bg-info-500/15 text-info-300",
+                                  )}
+                                >
+                                  Predicted: {r.predictedStatus}
+                                </span>
+                                <span className="text-foreground">
+                                  {r.predictedTerminal}
+                                </span>
+                              </div>
+                              <div className="text-[9px] text-muted-foreground">
+                                {r.predicted.length} hop{r.predicted.length === 1 ? "" : "s"}
+                                {r.predictedChannels.length > 0 && (
+                                  <>
+                                    {" · via "}
+                                    {r.predictedChannels.map((c, i) => (
+                                      <span
+                                        key={c}
+                                        className="rounded bg-muted px-1 py-px text-[8px] font-medium uppercase text-neutral-300"
+                                      >
+                                        {i > 0 && " "}
+                                        {c}
+                                      </span>
+                                    ))}
+                                  </>
+                                )}
+                                {r.predictedRecoveredAED > 0 && (
+                                  <span className="ml-1 text-primary">
+                                    · +AED {r.predictedRecoveredAED.toLocaleString()} recovered
+                                  </span>
+                                )}
+                              </div>
+                            </div>
                           ) : (
                             <div className="space-y-0.5">
                               <div>
@@ -340,6 +411,13 @@ export default function JourneyValidatorPage() {
                                 </span>{" "}
                                 <span className="text-foreground">
                                   {r.predicted[r.divergeIndex ?? 0]}
+                                </span>
+                                <span className="ml-1 text-[9px] text-muted-foreground">
+                                  → ends at{" "}
+                                  <span className="text-foreground font-medium">
+                                    {r.predictedTerminal}
+                                  </span>{" "}
+                                  ({r.predictedStatus})
                                 </span>
                               </div>
                               <div>
