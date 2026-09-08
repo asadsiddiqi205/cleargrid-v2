@@ -353,9 +353,10 @@ export function buildInstanceCanvasPayload(
   childNodes: import("@xyflow/react").Node[]
   childEdges: import("@xyflow/react").Edge[]
 } {
-  const HEADER_H = 56
-  const PAD_X = 24
-  const PAD_Y = 20
+  // Compact frame — enough room for the header + a slim border, no extra.
+  const HEADER_H = 34
+  const PAD_X = 12
+  const PAD_Y = 10
 
   // Bounds of the master's node positions so we can size the group.
   let minX = Infinity,

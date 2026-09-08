@@ -2939,6 +2939,9 @@ export default function JourneyCanvas({ journeyId }: JourneyCanvasProps) {
                 return {
                   ...e,
                   source: r.rewriteSource ?? e.source,
+                  // Preserve branch semantics — outgoing edges get the specific
+                  // output-port handle on the group so YES/NO etc. stay wired.
+                  sourceHandle: r.rewriteSourceHandle ?? e.sourceHandle,
                   target: r.rewriteTarget ?? e.target,
                 };
               });

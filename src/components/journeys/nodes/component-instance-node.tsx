@@ -34,48 +34,51 @@ export function ComponentInstanceNode({ data, selected, id }: NodeProps) {
   return (
     <div
       className={cn(
-        "relative h-full w-full rounded-2xl border-2 border-dashed transition-all",
+        "relative h-full w-full rounded-lg border border-dashed transition-all",
         selected
-          ? "border-violet-300 bg-violet-500/[0.05] shadow-lg shadow-violet-500/20"
-          : "border-violet-500/60 bg-violet-500/[0.03] hover:border-violet-400",
+          ? "border-violet-300 bg-violet-500/[0.04] shadow-md shadow-violet-500/15"
+          : "border-violet-500/50 bg-violet-500/[0.02] hover:border-violet-400",
       )}
     >
-      {/* Header bar */}
-      <div className="pointer-events-auto absolute left-3 right-3 top-3 flex items-center gap-2 rounded-lg border border-violet-500/40 bg-canvas/95 px-3 py-1.5 shadow-sm backdrop-blur-sm">
-        <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-violet-500/20 ring-1 ring-violet-400/40">
-          <Boxes className="h-3 w-3 text-violet-200" />
+      {/* Header bar — slim so the frame doesn't crowd child nodes */}
+      <div className="pointer-events-auto absolute left-1.5 right-1.5 top-1.5 flex h-6 items-center gap-1.5 rounded-md border border-violet-500/40 bg-canvas/95 px-2 shadow-sm backdrop-blur-sm">
+        <div className="flex h-4 w-4 shrink-0 items-center justify-center rounded bg-violet-500/20 ring-1 ring-violet-400/40">
+          <Boxes className="h-2.5 w-2.5 text-violet-200" />
         </div>
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-1.5">
-            <span className="truncate text-[12px] font-semibold text-foreground">{d.name}</span>
+          <div className="flex items-center gap-1">
+            <span className="truncate text-[11px] font-semibold text-foreground">{d.name}</span>
             {master && (
-              <span className="shrink-0 rounded bg-violet-500/20 px-1 py-px text-[9px] font-medium text-violet-100">
+              <span className="shrink-0 rounded bg-violet-500/20 px-1 text-[8px] font-medium text-violet-100">
                 v{master.version}
               </span>
             )}
             {overrideCount > 0 && (
-              <span className="shrink-0 rounded bg-violet-500/15 px-1 py-px text-[9px] font-medium text-violet-200">
-                {overrideCount} override{overrideCount === 1 ? "" : "s"}
+              <span
+                title={`${overrideCount} override${overrideCount === 1 ? "" : "s"}`}
+                className="shrink-0 rounded bg-violet-500/15 px-1 text-[8px] font-medium text-violet-200"
+              >
+                {overrideCount}·o
               </span>
             )}
             {masterDrift && (
-              <span className="relative flex h-2 w-2 shrink-0 items-center justify-center" title={`Master updated to v${master?.version}. Your overrides are preserved.`}>
+              <span
+                className="relative flex h-1.5 w-1.5 shrink-0 items-center justify-center"
+                title={`Master updated to v${master?.version}. Your overrides are preserved.`}
+              >
                 <span className="absolute h-full w-full animate-ping rounded-full bg-violet-400/70" />
-                <span className="relative h-1.5 w-1.5 rounded-full bg-violet-300" />
+                <span className="relative h-1 w-1 rounded-full bg-violet-300" />
               </span>
             )}
-          </div>
-          <div className="text-[9px] uppercase tracking-[0.14em] text-violet-300/90">
-            Component · {d.category}
           </div>
         </div>
         <Link
           href={`/components/${d.componentId}/edit`}
           onClick={(e) => e.stopPropagation()}
-          className="inline-flex shrink-0 items-center gap-1 rounded-md border border-violet-500/40 bg-violet-500/10 px-1.5 py-1 text-[10px] font-medium text-violet-200 hover:bg-violet-500/20"
+          className="inline-flex shrink-0 items-center gap-0.5 rounded border border-violet-500/40 bg-violet-500/10 px-1 py-0.5 text-[9px] font-medium text-violet-200 hover:bg-violet-500/20"
           title="Open master"
         >
-          <ExternalLink className="h-2.5 w-2.5" />
+          <ExternalLink className="h-2 w-2" />
           Master
         </Link>
       </div>

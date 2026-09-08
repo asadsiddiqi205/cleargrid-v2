@@ -122,12 +122,23 @@ function validateSelection(nodes: Node[], edges: Edge[], selectedIds: string[]):
   return { ok: true, entryNodeId: entries[0].id, outputPorts }
 }
 
-/** Compute the centroid of a set of nodes — used to place the instance. */
-function centroidOf(nodes: Node[]): { x: number; y: number } {
+/**
+ * Anchor the group at the top-left of the selection's bounding box so the
+ * space the new frame occupies matches the space the selected nodes used
+ * to occupy. Placing at the centroid pushes the frame down-and-right,
+ * which visually shifts every downstream node.
+ *
+ * `pad` mirrors PAD_X/PAD_Y + HEADER_H used by buildInstanceCanvasPayload
+ * so child nodes stay in roughly the same absolute canvas positions.
+ */
+function selectionTopLeft(nodes: Node[]): { x: number; y: number } {
   if (nodes.length === 0) return { x: 320, y: 200 }
-  const sx = nodes.reduce((s, n) => s + n.position.x, 0)
-  const sy = nodes.reduce((s, n) => s + n.position.y, 0)
-  return { x: Math.round(sx / nodes.length), y: Math.round(sy / nodes.length) }
+  const minX = nodes.reduce((m, n) => Math.min(m, n.position.x), Infinity)
+  const minY = nodes.reduce((m, n) => Math.min(m, n.position.y), Infinity)
+  const HEADER_H = 34
+  const PAD_X = 12
+  const PAD_Y = 10
+  return { x: Math.round(minX - PAD_X), y: Math.round(minY - PAD_Y - HEADER_H) }
 }
 
 export function SaveAsComponentModal({
@@ -156,7 +167,13 @@ export function SaveAsComponentModal({
     nodesToRemove: Set<string>
     /** External edges to rewire: incoming ones point at the group, outgoing
      *  ones source from the group; internal edges get dropped. */
-    edgesToRewire: Array<{ edgeId: string; rewriteSource?: string; rewriteTarget?: string; drop?: boolean }>
+    edgesToRewire: Array<{
+      edgeId: string
+      rewriteSource?: string
+      rewriteSourceHandle?: string
+      rewriteTarget?: string
+      drop?: boolean
+    }>
   }) => void
 }) {
   const [name, setName] = React.useState("")
@@ -210,27 +227,48 @@ export function SaveAsComponentModal({
     }
     saveMaster(master)
 
-    // Build the group + child nodes at the selection centroid.
-    const centroid = centroidOf(selectedNodes)
+    // Build the group + child nodes anchored at the selection's top-left so
+    // downstream nodes don't visually shift when the frame appears.
+    const groupPos = selectionTopLeft(selectedNodes)
     const groupId = `cmp-${Date.now()}`
     const { groupNode, childNodes, childEdges } = buildInstanceCanvasPayload(
       master,
-      centroid,
+      groupPos,
       groupId,
+    )
+
+    // Map each edge that leaves the selection to a specific output port on
+    // the new group. This preserves branch semantics (YES/NO from a
+    // condition, message-result branches, etc.) instead of collapsing every
+    // outgoing edge onto the group's default handle.
+    const outsideEdgesInOrder = edges.filter(
+      (e) => selectedIds.includes(e.source) && !selectedIds.includes(e.target),
     )
 
     // Edges to rewire:
     //   - internal (both ends in selection) → dropped (they live inside master's own edges)
     //   - incoming (target in selection)   → retarget to the group node
-    //   - outgoing (source in selection)   → resource from the group node
-    const rewires: Array<{ edgeId: string; rewriteSource?: string; rewriteTarget?: string; drop?: boolean }> = []
+    //   - outgoing (source in selection)   → source from the group node + the matching output-port handle
+    const rewires: Array<{
+      edgeId: string
+      rewriteSource?: string
+      rewriteSourceHandle?: string
+      rewriteTarget?: string
+      drop?: boolean
+    }> = []
     for (const e of edges) {
       const sIn = selectedIds.includes(e.source)
       const tIn = selectedIds.includes(e.target)
       if (sIn && tIn) {
         rewires.push({ edgeId: e.id, drop: true })
       } else if (sIn && !tIn) {
-        rewires.push({ edgeId: e.id, rewriteSource: groupId })
+        const portIdx = outsideEdgesInOrder.findIndex((oe) => oe.id === e.id)
+        const port = outputPorts[portIdx]
+        rewires.push({
+          edgeId: e.id,
+          rewriteSource: groupId,
+          rewriteSourceHandle: port?.id,
+        })
       } else if (!sIn && tIn) {
         rewires.push({ edgeId: e.id, rewriteTarget: groupId })
       }
