@@ -24,6 +24,7 @@ import {
   type ReactFlowInstance,
   BackgroundVariant,
   MarkerType,
+  SelectionMode,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { toast } from "sonner";
@@ -2480,12 +2481,24 @@ export default function JourneyCanvas({ journeyId }: JourneyCanvasProps) {
             snapToGrid
             snapGrid={[16, 16]}
             connectOnClick
-            /* Selection: Shift+click adds/removes a node from the current
-               selection; Shift+drag on empty canvas draws a marquee.
-               Default multiSelectionKeyCode is Meta/Ctrl, which is
-               non-obvious — expose Shift explicitly for both actions. */
-            selectionKeyCode="Shift"
+            /* Selection ergonomics — the goal is that clicking + dragging on
+               empty canvas draws a marquee (no modifier needed), and left-
+               dragging a node still moves it. To do this:
+                 - `selectionOnDrag` turns a plain left-drag on the pane into
+                   a marquee (starts only outside a node).
+                 - `panOnDrag={[1, 2]}` reserves left-click for the marquee
+                   and pans on middle/right-drag (or Space + drag). Trackpad
+                   scroll + pinch-zoom still work because `panOnScroll` and
+                   the default `zoomOnScroll` are on.
+                 - `SelectionMode.Partial` selects any node touched by the
+                   marquee (rather than fully contained).
+                 - Shift+click still adds/removes from the current selection. */
+            selectionOnDrag
+            selectionMode={SelectionMode.Partial}
+            panOnDrag={[1, 2]}
+            panOnScroll
             multiSelectionKeyCode="Shift"
+            selectionKeyCode={null}
             className="journey-canvas"
             proOptions={{ hideAttribution: true }}
           >
