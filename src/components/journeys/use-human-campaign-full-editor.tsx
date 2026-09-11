@@ -55,6 +55,8 @@ interface UseHumanCampaignNodeConfig {
 interface Props {
   node: Node
   journeyId: string
+  journeyName?: string
+  nodes: Node[]
   edges: Edge[]
   onUpdate: (nodeId: string, field: string, value: unknown) => void
   onDeleteNode: () => void
@@ -73,6 +75,8 @@ type TabId = (typeof TABS)[number]["id"]
 export function UseHumanCampaignFullEditor({
   node,
   journeyId,
+  journeyName,
+  nodes,
   onUpdate,
   onDeleteNode,
   onClose,
@@ -81,19 +85,32 @@ export function UseHumanCampaignFullEditor({
   const d = (node.data ?? {}) as Record<string, unknown>
   const cfg = (d.useCampaignConfig as UseHumanCampaignNodeConfig) ?? {}
 
-  // Only campaigns whose source is this journey are eligible — this node
-  // reuses campaigns *created* inside the journey.
-  const eligible = React.useMemo(
-    () =>
-      humanCampaigns.filter(
-        (c) => c.source.kind === "journey" && c.source.journeyId === journeyId,
-      ),
-    [journeyId],
-  )
+  // Eligible campaigns = campaigns already saved to the humanCampaigns store
+  // for this journey PLUS every "Create Human Campaign" node currently on
+  // this canvas. Node-based ones get virtualised into a HumanCampaign shape
+  // so the rest of the picker doesn't need to care where they came from.
+  const eligible = React.useMemo<HumanCampaign[]>(() => {
+    const fromSeed = humanCampaigns.filter(
+      (c) => c.source.kind === "journey" && c.source.journeyId === journeyId,
+    )
+    const fromNodes = nodes
+      .filter(
+        (n) =>
+          n.id !== node.id &&
+          n.type === "action" &&
+          (n.data as { actionType?: string })?.actionType === "human_campaign" &&
+          ((n.data as { campaignMode?: string })?.campaignMode ?? "create") ===
+            "create",
+      )
+      .map((n) =>
+        virtualCampaignFromNode(n, journeyId, journeyName ?? journeyId),
+      )
+    return [...fromNodes, ...fromSeed]
+  }, [journeyId, journeyName, nodes, node.id])
 
   const [tab, setTab] = React.useState<TabId>("campaign")
   const source = cfg.sourceCampaignId
-    ? humanCampaigns.find((c) => c.id === cfg.sourceCampaignId)
+    ? eligible.find((c) => c.id === cfg.sourceCampaignId) ?? null
     : null
   const redial = cfg.hasRedialOverride && cfg.redialOverride
     ? cfg.redialOverride
@@ -105,7 +122,7 @@ export function UseHumanCampaignFullEditor({
   }
 
   const pickCampaign = (id: string) => {
-    const chosen = humanCampaigns.find((c) => c.id === id)
+    const chosen = eligible.find((c) => c.id === id)
     setCfg({
       sourceCampaignId: id,
       hasRedialOverride: false,
@@ -318,13 +335,19 @@ function CampaignPickerTab({
                   {CAMPAIGN_STATUS_LABEL[source.status]}
                 </span>
               </div>
-              <Link
-                href={`/campaigns/${source.id}`}
-                className="inline-flex items-center gap-1 rounded border border-info-500/40 bg-info-500/10 px-1.5 py-0.5 text-[10px] font-medium text-info-300 hover:bg-info-500/20"
-              >
-                Open campaign
-                <ExternalLink className="h-2.5 w-2.5" />
-              </Link>
+              {source.id.startsWith("node:") ? (
+                <span className="inline-flex items-center gap-1 rounded border border-info-500/40 bg-info-500/10 px-1.5 py-0.5 text-[10px] font-medium text-info-300">
+                  In this journey
+                </span>
+              ) : (
+                <Link
+                  href={`/campaigns/${source.id}`}
+                  className="inline-flex items-center gap-1 rounded border border-info-500/40 bg-info-500/10 px-1.5 py-0.5 text-[10px] font-medium text-info-300 hover:bg-info-500/20"
+                >
+                  Open campaign
+                  <ExternalLink className="h-2.5 w-2.5" />
+                </Link>
+              )}
             </div>
             <div className="grid gap-x-6 gap-y-2 text-[11px] sm:grid-cols-2">
               <LockedRow k="Dialer" v={source.dialerName} />
@@ -351,16 +374,21 @@ function CampaignPickerTab({
           <div className="flex items-start gap-2 rounded-lg border border-border/60 bg-muted/[0.04] px-3 py-2 text-[10px] text-muted-foreground">
             <Lock className="mt-0.5 h-3 w-3 shrink-0" />
             <span>
-              These fields are read-only — to change them, open the source
-              campaign or edit its{" "}
-              <Link
-                href={`/campaigns/${source.id}/edit`}
-                className="text-primary hover:underline"
-              >
-                Create Human Campaign
-              </Link>{" "}
-              node inside this journey. Redial settings can be adjusted
-              per-enrollment in the{" "}
+              These fields are read-only — to change them,{" "}
+              {source.id.startsWith("node:") ? (
+                <>edit the source Create Human Campaign node inside this journey</>
+              ) : (
+                <>
+                  edit the source campaign at{" "}
+                  <Link
+                    href={`/campaigns/${source.id}/edit`}
+                    className="text-primary hover:underline"
+                  >
+                    /campaigns/{source.id}
+                  </Link>
+                </>
+              )}
+              . Redial settings can be adjusted per-enrollment in the{" "}
               <span className="text-foreground font-semibold">Redial</span>{" "}
               tab.
             </span>
@@ -453,12 +481,16 @@ function RedialOverrideTab({
           <p className="mt-0.5 text-[11px] text-muted-foreground">
             The only slice you can adjust on this node. Everything else is
             inherited from{" "}
-            <Link
-              href={`/campaigns/${source.id}`}
-              className="text-primary hover:underline"
-            >
-              {source.name}
-            </Link>
+            {source.id.startsWith("node:") ? (
+              <span className="text-foreground font-medium">{source.name}</span>
+            ) : (
+              <Link
+                href={`/campaigns/${source.id}`}
+                className="text-primary hover:underline"
+              >
+                {source.name}
+              </Link>
+            )}
             .
           </p>
         </div>
@@ -546,3 +578,74 @@ function Label_({ children }: { children: React.ReactNode }) {
 }
 // Silence unused import warning while keeping Label available for future edits.
 void Label_
+
+/**
+ * Turn a Create Human Campaign node's `campaignConfig` into a HumanCampaign
+ * shape so the picker can list it alongside seeded campaigns. The synthetic
+ * id `node:<nodeId>` is what tells later helpers to link back to the node
+ * on the canvas rather than to `/campaigns/[id]`.
+ */
+function virtualCampaignFromNode(
+  n: Node,
+  journeyId: string,
+  journeyName: string,
+): HumanCampaign {
+  const d = (n.data ?? {}) as Record<string, unknown>
+  const cfg =
+    (d.campaignConfig as Partial<{
+      campaignName: string
+      dialerName: string
+      gateway: string
+      agentGroup: string
+      secondaryGroup: string
+      dialSpeed: string
+      priorityTier: "high" | "medium" | "low"
+      schedule: HumanCampaign["schedule"]
+      welcomeMessage: string
+      loopMessage: string
+      busyMessage: string
+    }>) ?? {}
+  const name = cfg.campaignName ?? (d.label as string) ?? "Untitled campaign"
+  const schedule = cfg.schedule ?? DEFAULT_CAMPAIGN_SCHEDULE
+  return {
+    id: `node:${n.id}`,
+    name,
+    listTimestamp: "In this journey",
+    lenderId: "general",
+    skillGroup: "collections_uae_en",
+    priorityTier: cfg.priorityTier ?? "medium",
+    urgency: "normal",
+    status: "initial_queueing",
+    scriptId: "",
+    scriptName: "",
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    source: {
+      kind: "journey",
+      journeyId,
+      journeyName,
+      nodeId: n.id,
+      nodeLabel: (d.label as string) ?? name,
+      createdBy: "You",
+    },
+    dialerName: cfg.dialerName ?? "Dialer 1",
+    gateway: cfg.gateway ?? "cleargrid_twilio",
+    agentGroup: cfg.agentGroup ?? "",
+    secondaryGroup: cfg.secondaryGroup ?? undefined,
+    dialSpeed: cfg.dialSpeed ?? "5x",
+    mode: "journey_stream",
+    type: "Campaign Human Call",
+    totalContacts: 0,
+    initialQueued: 0,
+    queued: 0,
+    completed: 0,
+    successful: 0,
+    failed: 0,
+    callMessages: {
+      welcome: cfg.welcomeMessage,
+      loop: cfg.loopMessage,
+      busy: cfg.busyMessage,
+    },
+    schedule,
+  }
+}

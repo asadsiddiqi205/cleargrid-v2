@@ -2845,6 +2845,8 @@ export default function JourneyCanvas({ journeyId }: JourneyCanvasProps) {
                     <UseHumanCampaignFullEditor
                       node={selectedNode}
                       journeyId={journeyId}
+                      journeyName={nameValue}
+                      nodes={nodes}
                       edges={edges}
                       onUpdate={updateField}
                       onDeleteNode={deleteSelectedNode}
