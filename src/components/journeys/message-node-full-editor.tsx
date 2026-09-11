@@ -27,6 +27,11 @@ import {
   BadgeCheck,
   Braces,
   Sparkles,
+  Send as SendIcon,
+  Filter,
+  BarChart3,
+  Info,
+  ShieldAlert,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -39,6 +44,7 @@ import {
 } from "@/components/shared/message-preview"
 import { borrowers, type Borrower } from "@/data/borrowers"
 import { TemplateEditor } from "@/components/templates/template-editor"
+import { NodeAnalyticsTab } from "@/components/journeys/node-analytics-tab"
 
 type ComposeMode = "template" | "manual"
 
@@ -191,13 +197,28 @@ interface MessageNodeFullEditorProps {
   onUpdate: (nodeId: string, field: string, value: unknown) => void
   onDeleteNode: () => void
   onClose: () => void
+  /** Journey id — required to render the Analytics tab. */
+  journeyId?: string
+  /** Currently-selected run id from the canvas Analytics chip. */
+  selectedRunId?: string | null
 }
+
+type EditorTab = "compose" | "delivery" | "logic" | "analytics"
+
+const EDITOR_TABS: Array<{ id: EditorTab; label: string; icon: React.ComponentType<{ className?: string }> }> = [
+  { id: "compose", label: "Compose", icon: Sparkles },
+  { id: "delivery", label: "Delivery", icon: SendIcon },
+  { id: "logic", label: "Logic", icon: Filter },
+  { id: "analytics", label: "Analytics", icon: BarChart3 },
+]
 
 export function MessageNodeFullEditor({
   node,
   onUpdate,
   onDeleteNode,
   onClose,
+  journeyId,
+  selectedRunId,
 }: MessageNodeFullEditorProps) {
   const d = (node.data ?? {}) as Record<string, unknown>
   const actionType = (d.actionType as string) ?? "email"
@@ -220,6 +241,7 @@ export function MessageNodeFullEditor({
   const replyTo = (d.replyTo as string) ?? "replies@cleargrid.ae"
   const provider = (d.provider as string) ?? "default"
 
+  const [tab, setTab] = React.useState<EditorTab>("compose")
   const [templateEditorOpen, setTemplateEditorOpen] = React.useState(false)
   const [htmlBuilderOpen, setHtmlBuilderOpen] = React.useState(false)
   const [previewBorrowerId, setPreviewBorrowerId] = React.useState<string>(
@@ -309,7 +331,58 @@ export function MessageNodeFullEditor({
         </div>
       </div>
 
+      {/* Tab bar */}
+      <div className="border-b border-border bg-card px-6">
+        <div className="flex">
+          {EDITOR_TABS.map((t) => {
+            const Icon = t.icon
+            const active = tab === t.id
+            const disabled = t.id === "analytics" && !journeyId
+            return (
+              <button
+                key={t.id}
+                type="button"
+                disabled={disabled}
+                onClick={() => !disabled && setTab(t.id)}
+                className={cn(
+                  "-mb-px flex items-center gap-1.5 border-b-2 px-3 py-2 text-[12px] font-medium transition-colors",
+                  active
+                    ? "border-primary text-primary"
+                    : "border-transparent text-muted-foreground hover:text-foreground",
+                  disabled && "opacity-40 cursor-not-allowed",
+                )}
+              >
+                <Icon className="h-3.5 w-3.5" />
+                {t.label}
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
+      {tab !== "compose" && (
+        <div className="min-h-0 flex-1 overflow-hidden">
+          {tab === "delivery" && (
+            <DeliveryPanel d={d} set={set} channel={channel} />
+          )}
+          {tab === "logic" && (
+            <LogicPanel d={d} set={set} channel={channel} />
+          )}
+          {tab === "analytics" && journeyId && (
+            <NodeAnalyticsTab
+              journeyId={journeyId}
+              runId={selectedRunId ?? null}
+              nodeId={node.id}
+              nodeLabel={(d.label as string) ?? node.id}
+              nodeType={node.type ?? "action"}
+              blockType={d.blockType as string | undefined}
+            />
+          )}
+        </div>
+      )}
+
       {/* Body */}
+      {tab === "compose" && (
       <div className="grid flex-1 min-h-0 grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,540px)]">
         {/* Left — form */}
         <div className="overflow-y-auto border-r border-border bg-background p-6">
@@ -591,6 +664,7 @@ export function MessageNodeFullEditor({
           </div>
         </div>
       </div>
+      )}
 
       {/* Template editor modal — the standalone TemplateEditor lives inside
           the Dialog so authors edit the template without leaving the node.
@@ -803,6 +877,240 @@ function TemplatePicker({
           </div>
         </>
       )}
+    </div>
+  )
+}
+
+/* ─────────── Delivery / Logic panels ─────────── */
+
+function DeliveryPanel({
+  d,
+  set,
+  channel,
+}: {
+  d: Record<string, unknown>
+  set: (field: string, value: unknown) => void
+  channel: MessageChannel
+}) {
+  const sendWindow = (d.sendWindow as string) ?? "anytime"
+  const maxAttempts = (d.maxAttempts as number) ?? 3
+  const retryIntervalMin = (d.retryIntervalMin as number) ?? 30
+  const bypassFrequencyCap = (d.bypassFrequencyCap as boolean) ?? false
+  return (
+    <div className="mx-auto flex h-full max-w-3xl flex-col gap-4 overflow-y-auto p-6">
+      <PanelHeader
+        title="Delivery"
+        subtitle={`How this ${channel} step actually gets to the borrower — when it can send, how it retries, and whether it respects the journey's frequency cap.`}
+      />
+
+      <SectionCard title="Send window">
+        <select
+          value={sendWindow}
+          onChange={(e) => set("sendWindow", e.target.value)}
+          className="h-9 w-full rounded-md border border-input bg-background px-2 text-[13px] outline-none focus-visible:border-ring"
+        >
+          <option value="anytime">Anytime (default)</option>
+          <option value="business">Business hours (09:00–18:00)</option>
+          <option value="morning">Morning (09:00–12:00)</option>
+          <option value="afternoon">Afternoon (12:00–17:00)</option>
+          <option value="evening">Evening (17:00–20:00)</option>
+        </select>
+        <p className="mt-1 text-[10px] text-muted-foreground">
+          Messages outside this window queue until the next allowed slot.
+        </p>
+      </SectionCard>
+
+      <SectionCard title="Retry policy">
+        <div className="grid gap-3 sm:grid-cols-2">
+          <FieldBlock label="Max attempts">
+            <Input
+              type="number"
+              value={maxAttempts}
+              onChange={(e) => set("maxAttempts", Number(e.target.value))}
+              min={1}
+              max={10}
+              className="h-9 text-[13px]"
+            />
+          </FieldBlock>
+          <FieldBlock label="Retry interval (min)">
+            <Input
+              type="number"
+              value={retryIntervalMin}
+              onChange={(e) => set("retryIntervalMin", Number(e.target.value))}
+              min={1}
+              className="h-9 text-[13px]"
+            />
+          </FieldBlock>
+        </div>
+        <p className="mt-2 text-[10px] text-muted-foreground">
+          After a soft failure (rate-limit, transient error) the send retries
+          every {retryIntervalMin} min up to {maxAttempts} total attempts.
+        </p>
+      </SectionCard>
+
+      <SectionCard
+        title="Frequency cap override"
+        titleIcon={<ShieldAlert className="h-3 w-3 text-warning-300" />}
+      >
+        <label className="flex cursor-pointer items-center justify-between rounded-md border border-border bg-background/60 px-3 py-2">
+          <span className="text-[12px] text-foreground">
+            Bypass journey-level frequency cap
+          </span>
+          <input
+            type="checkbox"
+            checked={bypassFrequencyCap}
+            onChange={(e) => set("bypassFrequencyCap", e.target.checked)}
+            className="h-4 w-8"
+          />
+        </label>
+        <p className="mt-1 text-[10px] text-muted-foreground">
+          Use only for critical compliance messages (e.g. final notices).
+        </p>
+      </SectionCard>
+    </div>
+  )
+}
+
+function LogicPanel({
+  d,
+  set,
+  channel,
+}: {
+  d: Record<string, unknown>
+  set: (field: string, value: unknown) => void
+  channel: MessageChannel
+}) {
+  const language = (d.language as string) ?? "auto"
+  const sendCondition = (d.sendCondition as string) ?? ""
+  const suppressIf = (d.suppressIf as string) ?? ""
+  const branchOnDelivery = (d.branchOnDelivery as boolean) ?? true
+  return (
+    <div className="mx-auto flex h-full max-w-3xl flex-col gap-4 overflow-y-auto p-6">
+      <PanelHeader
+        title="Logic"
+        subtitle="Guardrails and routing that apply before and after the borrower actually receives this message."
+      />
+
+      <SectionCard title="Language">
+        <select
+          value={language}
+          onChange={(e) => set("language", e.target.value)}
+          className="h-9 w-full rounded-md border border-input bg-background px-2 text-[13px] outline-none focus-visible:border-ring"
+        >
+          <option value="auto">Auto — from borrower.language</option>
+          <option value="en">English</option>
+          <option value="ar">Arabic</option>
+          <option value="ur">Urdu</option>
+          <option value="hi">Hindi</option>
+        </select>
+        <p className="mt-1 text-[10px] text-muted-foreground">
+          Templates rendered in the borrower&apos;s preferred language when
+          available.
+        </p>
+      </SectionCard>
+
+      <SectionCard title="Send only if">
+        <Input
+          value={sendCondition}
+          onChange={(e) => set("sendCondition", e.target.value)}
+          placeholder="e.g. borrower.consent_status = Granted AND borrower.dpd > 30"
+          className="h-9 text-[12px] font-mono"
+        />
+        <p className="mt-1 text-[10px] text-muted-foreground">
+          Optional pre-send guard. If the expression evaluates to false the
+          send is skipped and the borrower moves to the next node.
+        </p>
+      </SectionCard>
+
+      <SectionCard title="Suppress if">
+        <Input
+          value={suppressIf}
+          onChange={(e) => set("suppressIf", e.target.value)}
+          placeholder="e.g. borrower.do_not_contact = true"
+          className="h-9 text-[12px] font-mono"
+        />
+        <p className="mt-1 text-[10px] text-muted-foreground">
+          Hard-suppress rule. Overrides everything else — no send, no retry,
+          no attempt logged as delivery.
+        </p>
+      </SectionCard>
+
+      <SectionCard title="Route on delivery outcome">
+        <label className="flex cursor-pointer items-center justify-between rounded-md border border-border bg-background/60 px-3 py-2">
+          <div>
+            <div className="text-[12px] font-medium text-foreground">
+              Branch by delivery event
+            </div>
+            <div className="mt-0.5 text-[10px] text-muted-foreground">
+              Expose outgoing edges for{" "}
+              {channel === "sms"
+                ? "delivered / bounced"
+                : "delivered / opened / clicked / bounced"}{" "}
+              so downstream steps can react.
+            </div>
+          </div>
+          <input
+            type="checkbox"
+            checked={branchOnDelivery}
+            onChange={(e) => set("branchOnDelivery", e.target.checked)}
+            className="h-4 w-8"
+          />
+        </label>
+      </SectionCard>
+    </div>
+  )
+}
+
+function PanelHeader({
+  title,
+  subtitle,
+}: {
+  title: string
+  subtitle: string
+}) {
+  return (
+    <div>
+      <div className="text-[16px] font-semibold text-foreground">{title}</div>
+      <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">
+        {subtitle}
+      </p>
+    </div>
+  )
+}
+
+function SectionCard({
+  title,
+  titleIcon,
+  children,
+}: {
+  title: string
+  titleIcon?: React.ReactNode
+  children: React.ReactNode
+}) {
+  return (
+    <div className="rounded-xl border border-border bg-card/40 p-4">
+      <div className="mb-2 flex items-center gap-1.5">
+        {titleIcon}
+        <div className="text-[12px] font-semibold text-foreground">{title}</div>
+      </div>
+      {children}
+    </div>
+  )
+}
+
+function FieldBlock({
+  label,
+  children,
+}: {
+  label: string
+  children: React.ReactNode
+}) {
+  return (
+    <div>
+      <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">
+        {label}
+      </Label>
+      <div className="mt-1">{children}</div>
     </div>
   )
 }

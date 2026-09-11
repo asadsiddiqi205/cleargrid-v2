@@ -26,12 +26,17 @@ import {
   Route,
   Play,
   Trash2,
+  Send as SendIcon,
+  Filter,
+  BarChart3,
+  ShieldAlert,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { cn } from "@/lib/utils"
 import { CampaignScheduleTab } from "@/components/campaigns/campaign-schedule-tab"
+import { NodeAnalyticsTab } from "@/components/journeys/node-analytics-tab"
 import {
   DEFAULT_CAMPAIGN_SCHEDULE,
   AGENT_GROUPS,
@@ -46,6 +51,9 @@ const TABS = [
   { id: "audience", label: "Audience", icon: Users },
   { id: "schedule", label: "Schedule", icon: Calendar },
   { id: "messages", label: "Messages", icon: MessageSquare },
+  { id: "delivery", label: "Delivery", icon: SendIcon },
+  { id: "logic", label: "Logic", icon: Filter },
+  { id: "analytics", label: "Analytics", icon: BarChart3 },
 ] as const
 
 type TabId = (typeof TABS)[number]["id"]
@@ -62,6 +70,15 @@ interface CampaignConfig {
   welcomeMessage: string
   loopMessage: string
   busyMessage: string
+  /** Delivery / Logic tab fields */
+  sendWindow?: string
+  maxAttempts?: number
+  retryIntervalMin?: number
+  bypassFrequencyCap?: boolean
+  language?: string
+  sendCondition?: string
+  suppressIf?: string
+  branchOnDelivery?: boolean
 }
 
 function readConfig(data: Record<string, unknown>): CampaignConfig {
@@ -96,6 +113,14 @@ function readConfig(data: Record<string, unknown>): CampaignConfig {
     welcomeMessage: c.welcomeMessage ?? "",
     loopMessage: c.loopMessage ?? "",
     busyMessage: c.busyMessage ?? "",
+    sendWindow: c.sendWindow ?? "anytime",
+    maxAttempts: c.maxAttempts ?? 3,
+    retryIntervalMin: c.retryIntervalMin ?? 30,
+    bypassFrequencyCap: c.bypassFrequencyCap ?? false,
+    language: c.language ?? "auto",
+    sendCondition: c.sendCondition ?? "",
+    suppressIf: c.suppressIf ?? "",
+    branchOnDelivery: c.branchOnDelivery ?? true,
   }
 }
 
@@ -104,6 +129,7 @@ interface HumanCampaignNodeFullEditorProps {
   journeyId: string
   onUpdate: (nodeId: string, field: string, value: unknown) => void
   onDeleteNode: () => void
+  selectedRunId?: string | null
   onClose: () => void
   incomingNodeLabel?: string | null
 }
@@ -115,6 +141,7 @@ export function HumanCampaignNodeFullEditor({
   onDeleteNode,
   onClose,
   incomingNodeLabel,
+  selectedRunId,
 }: HumanCampaignNodeFullEditorProps) {
   const d = (node.data ?? {}) as Record<string, unknown>
   const cfg = readConfig(d)
@@ -173,8 +200,18 @@ export function HumanCampaignNodeFullEditor({
         </div>
       </div>
 
-      {/* Body */}
-      <div className="grid flex-1 min-h-0 grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,540px)]">
+      {/* Body — right preview only exists for editing tabs; Analytics /
+          Delivery / Logic get the full width. */}
+      <div
+        className={cn(
+          "grid flex-1 min-h-0 grid-cols-1",
+          (tab === "basics" ||
+            tab === "audience" ||
+            tab === "schedule" ||
+            tab === "messages") &&
+            "lg:grid-cols-[minmax(0,1fr)_minmax(0,540px)]",
+        )}
+      >
         {/* Left — tabs + form */}
         <div className="min-h-0 overflow-y-auto border-r border-border bg-background">
           <div className="mx-auto max-w-3xl px-6 py-5">
@@ -217,18 +254,38 @@ export function HumanCampaignNodeFullEditor({
               />
             )}
             {tab === "messages" && <MessagesTab cfg={cfg} set={set} />}
+            {tab === "delivery" && <DeliveryTab cfg={cfg} set={set} />}
+            {tab === "logic" && <LogicTab cfg={cfg} set={set} />}
+            {tab === "analytics" && (
+              <div className="-mx-6 -mb-5 min-h-[60vh]">
+                <NodeAnalyticsTab
+                  journeyId={journeyId}
+                  runId={selectedRunId ?? null}
+                  nodeId={node.id}
+                  nodeLabel={(node.data as { label?: string })?.label ?? node.id}
+                  nodeType={node.type ?? "action"}
+                  blockType={(node.data as { blockType?: string })?.blockType}
+                />
+              </div>
+            )}
           </div>
         </div>
 
-        {/* Right — live preview */}
-        <div className="min-h-0 overflow-y-auto bg-muted/30">
-          <div className="sticky top-0 p-6">
-            <div className="mb-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-              Live preview
+        {/* Right — live preview (only for editing tabs; hidden on Analytics /
+            Delivery / Logic since those don't need a config preview). */}
+        {(tab === "basics" ||
+          tab === "audience" ||
+          tab === "schedule" ||
+          tab === "messages") && (
+          <div className="min-h-0 overflow-y-auto bg-muted/30">
+            <div className="sticky top-0 p-6">
+              <div className="mb-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                Live preview
+              </div>
+              <Preview cfg={cfg} tab={tab} journeyId={journeyId} incomingNodeLabel={incomingNodeLabel ?? null} />
             </div>
-            <Preview cfg={cfg} tab={tab} journeyId={journeyId} incomingNodeLabel={incomingNodeLabel ?? null} />
           </div>
-        </div>
+        )}
       </div>
     </div>
   )
@@ -400,6 +457,184 @@ function AudienceTab({
             ),
           )}
         </ol>
+      </div>
+    </div>
+  )
+}
+
+function DeliveryTab({
+  cfg,
+  set,
+}: {
+  cfg: CampaignConfig
+  set: <K extends keyof CampaignConfig>(k: K, v: CampaignConfig[K]) => void
+}) {
+  return (
+    <div className="space-y-4">
+      <div>
+        <div className="text-[13px] font-semibold">Delivery</div>
+        <p className="mt-0.5 text-[11px] text-muted-foreground">
+          Fine controls on top of what the Schedule tab configures — send
+          window, per-borrower retry policy, and journey-cap overrides.
+        </p>
+      </div>
+
+      <div className="rounded-xl border border-border bg-card/40 p-4">
+        <div className="text-[12px] font-semibold">Send window</div>
+        <select
+          value={cfg.sendWindow ?? "anytime"}
+          onChange={(e) => set("sendWindow", e.target.value)}
+          className="mt-2 h-9 w-full rounded-md border border-input bg-background px-2 text-[13px] outline-none focus-visible:border-ring"
+        >
+          <option value="anytime">Anytime (default)</option>
+          <option value="business">Business hours (09:00–18:00)</option>
+          <option value="morning">Morning (09:00–12:00)</option>
+          <option value="afternoon">Afternoon (12:00–17:00)</option>
+          <option value="evening">Evening (17:00–20:00)</option>
+        </select>
+        <p className="mt-1 text-[10px] text-muted-foreground">
+          Overlays the Schedule tab&apos;s Calling hours toggle — narrows,
+          never widens.
+        </p>
+      </div>
+
+      <div className="rounded-xl border border-border bg-card/40 p-4">
+        <div className="text-[12px] font-semibold">Retry policy</div>
+        <div className="mt-2 grid gap-3 sm:grid-cols-2">
+          <FormField label="Max attempts">
+            <Input
+              type="number"
+              min={1}
+              max={10}
+              value={cfg.maxAttempts ?? 3}
+              onChange={(e) => set("maxAttempts", Number(e.target.value))}
+              className="h-9 text-[13px]"
+            />
+          </FormField>
+          <FormField label="Retry interval (min)">
+            <Input
+              type="number"
+              min={1}
+              value={cfg.retryIntervalMin ?? 30}
+              onChange={(e) => set("retryIntervalMin", Number(e.target.value))}
+              className="h-9 text-[13px]"
+            />
+          </FormField>
+        </div>
+        <p className="mt-2 text-[10px] text-muted-foreground">
+          Sits above the Schedule tab&apos;s Round sequence — per-borrower
+          hard cap on total attempts regardless of round configuration.
+        </p>
+      </div>
+
+      <div className="rounded-xl border border-border bg-card/40 p-4">
+        <div className="flex items-center gap-1.5">
+          <ShieldAlert className="h-3 w-3 text-warning-300" />
+          <div className="text-[12px] font-semibold">
+            Frequency cap override
+          </div>
+        </div>
+        <label className="mt-2 flex cursor-pointer items-center justify-between rounded-md border border-border bg-background/60 px-3 py-2">
+          <span className="text-[12px] text-foreground">
+            Bypass journey-level frequency cap
+          </span>
+          <input
+            type="checkbox"
+            checked={cfg.bypassFrequencyCap ?? false}
+            onChange={(e) => set("bypassFrequencyCap", e.target.checked)}
+            className="h-4 w-8"
+          />
+        </label>
+        <p className="mt-1 text-[10px] text-muted-foreground">
+          Use only for critical compliance calls (final notice, legal escalation).
+        </p>
+      </div>
+    </div>
+  )
+}
+
+function LogicTab({
+  cfg,
+  set,
+}: {
+  cfg: CampaignConfig
+  set: <K extends keyof CampaignConfig>(k: K, v: CampaignConfig[K]) => void
+}) {
+  return (
+    <div className="space-y-4">
+      <div>
+        <div className="text-[13px] font-semibold">Logic</div>
+        <p className="mt-0.5 text-[11px] text-muted-foreground">
+          Guardrails around the enrollment. Runs before the borrower is
+          handed to the dialer.
+        </p>
+      </div>
+
+      <div className="rounded-xl border border-border bg-card/40 p-4">
+        <div className="text-[12px] font-semibold">Preferred language</div>
+        <select
+          value={cfg.language ?? "auto"}
+          onChange={(e) => set("language", e.target.value)}
+          className="mt-2 h-9 w-full rounded-md border border-input bg-background px-2 text-[13px] outline-none focus-visible:border-ring"
+        >
+          <option value="auto">Auto — from borrower.language</option>
+          <option value="en">English</option>
+          <option value="ar">Arabic</option>
+          <option value="ur">Urdu</option>
+          <option value="hi">Hindi</option>
+        </select>
+        <p className="mt-1 text-[10px] text-muted-foreground">
+          Router falls back to the primary agent group if no matching-
+          language agent is available.
+        </p>
+      </div>
+
+      <div className="rounded-xl border border-border bg-card/40 p-4">
+        <div className="text-[12px] font-semibold">Enroll only if</div>
+        <Input
+          value={cfg.sendCondition ?? ""}
+          onChange={(e) => set("sendCondition", e.target.value)}
+          placeholder="e.g. borrower.consent_status = Granted AND borrower.dpd > 60"
+          className="mt-2 h-9 text-[12px] font-mono"
+        />
+        <p className="mt-1 text-[10px] text-muted-foreground">
+          Pre-enrollment guard. If it evaluates to false the borrower skips
+          this node.
+        </p>
+      </div>
+
+      <div className="rounded-xl border border-border bg-card/40 p-4">
+        <div className="text-[12px] font-semibold">Suppress if</div>
+        <Input
+          value={cfg.suppressIf ?? ""}
+          onChange={(e) => set("suppressIf", e.target.value)}
+          placeholder="e.g. borrower.do_not_contact = true"
+          className="mt-2 h-9 text-[12px] font-mono"
+        />
+        <p className="mt-1 text-[10px] text-muted-foreground">
+          Hard-suppress rule — no enrollment, no retry, no dial logged.
+        </p>
+      </div>
+
+      <div className="rounded-xl border border-border bg-card/40 p-4">
+        <div className="text-[12px] font-semibold">Route on call outcome</div>
+        <label className="mt-2 flex cursor-pointer items-center justify-between rounded-md border border-border bg-background/60 px-3 py-2">
+          <div>
+            <div className="text-[12px] font-medium text-foreground">
+              Branch by call disposition
+            </div>
+            <div className="mt-0.5 text-[10px] text-muted-foreground">
+              Expose outgoing edges for connected / voicemail / no-answer /
+              PTP captured so downstream steps can react.
+            </div>
+          </div>
+          <input
+            type="checkbox"
+            checked={cfg.branchOnDelivery ?? true}
+            onChange={(e) => set("branchOnDelivery", e.target.checked)}
+            className="h-4 w-8"
+          />
+        </label>
       </div>
     </div>
   )

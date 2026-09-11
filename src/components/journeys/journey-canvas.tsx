@@ -2826,6 +2826,8 @@ export default function JourneyCanvas({ journeyId }: JourneyCanvasProps) {
                     onUpdate={updateField}
                     onDeleteNode={deleteSelectedNode}
                     onClose={() => setSelectedNode(null)}
+                    journeyId={journeyId}
+                    selectedRunId={selectedRunId}
                   />
                 )
               }
@@ -2850,6 +2852,7 @@ export default function JourneyCanvas({ journeyId }: JourneyCanvasProps) {
                     onDeleteNode={deleteSelectedNode}
                     onClose={() => setSelectedNode(null)}
                     incomingNodeLabel={incomingNodeLabel}
+                    selectedRunId={selectedRunId}
                   />
                 )
               }
