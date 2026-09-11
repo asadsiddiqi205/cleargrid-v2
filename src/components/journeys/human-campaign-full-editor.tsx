@@ -48,11 +48,7 @@ import {
 
 const TABS = [
   { id: "basics", label: "Basics", icon: Info },
-  { id: "audience", label: "Audience", icon: Users },
-  { id: "schedule", label: "Schedule", icon: Calendar },
   { id: "messages", label: "Messages", icon: MessageSquare },
-  { id: "delivery", label: "Delivery", icon: SendIcon },
-  { id: "logic", label: "Logic", icon: Filter },
   { id: "analytics", label: "Analytics", icon: BarChart3 },
 ] as const
 
@@ -200,15 +196,12 @@ export function HumanCampaignNodeFullEditor({
         </div>
       </div>
 
-      {/* Body — right preview only exists for editing tabs; Analytics /
-          Delivery / Logic get the full width. */}
+      {/* Body — right preview only exists for editing tabs; Analytics gets
+          the full canvas width. */}
       <div
         className={cn(
           "grid flex-1 min-h-0 grid-cols-1",
-          (tab === "basics" ||
-            tab === "audience" ||
-            tab === "schedule" ||
-            tab === "messages") &&
+          (tab === "basics" || tab === "messages") &&
             "lg:grid-cols-[minmax(0,1fr)_minmax(0,540px)]",
         )}
       >
@@ -244,18 +237,7 @@ export function HumanCampaignNodeFullEditor({
             </div>
 
             {tab === "basics" && <BasicsTab cfg={cfg} set={set} />}
-            {tab === "audience" && (
-              <AudienceTab journeyId={journeyId} incomingNodeLabel={incomingNodeLabel ?? null} />
-            )}
-            {tab === "schedule" && (
-              <CampaignScheduleTab
-                schedule={cfg.schedule}
-                onChange={(schedule) => set("schedule", schedule)}
-              />
-            )}
             {tab === "messages" && <MessagesTab cfg={cfg} set={set} />}
-            {tab === "delivery" && <DeliveryTab cfg={cfg} set={set} />}
-            {tab === "logic" && <LogicTab cfg={cfg} set={set} />}
             {tab === "analytics" && (
               <div className="-mx-6 -mb-5 min-h-[60vh]">
                 <NodeAnalyticsTab
@@ -271,12 +253,9 @@ export function HumanCampaignNodeFullEditor({
           </div>
         </div>
 
-        {/* Right — live preview (only for editing tabs; hidden on Analytics /
-            Delivery / Logic since those don't need a config preview). */}
-        {(tab === "basics" ||
-          tab === "audience" ||
-          tab === "schedule" ||
-          tab === "messages") && (
+        {/* Right — live preview (only for editing tabs; Analytics gets full
+            width since it renders its own list). */}
+        {(tab === "basics" || tab === "messages") && (
           <div className="min-h-0 overflow-y-auto bg-muted/30">
             <div className="sticky top-0 p-6">
               <div className="mb-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
@@ -745,7 +724,7 @@ function Preview({
         </div>
       </div>
 
-      {(tab === "audience" || tab === "basics") && (
+      {tab === "basics" && (
         <div className="rounded-xl border border-info-500/40 bg-info-500/[0.06] p-4">
           <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-wider text-info-300">
             <Route className="h-3 w-3" />

@@ -59,6 +59,7 @@ import { NodePalette } from "@/components/journeys/node-palette";
 import { NodeConfigPanel } from "@/components/journeys/node-config-panel";
 import { MessageNodeFullEditor } from "@/components/journeys/message-node-full-editor";
 import { HumanCampaignNodeFullEditor } from "@/components/journeys/human-campaign-full-editor";
+import { UseHumanCampaignFullEditor } from "@/components/journeys/use-human-campaign-full-editor";
 import { JourneyGPTPanel } from "@/components/journeys/journey-gpt-panel";
 import { buildBlueprint } from "@/data/journey-blueprints";
 import {
@@ -2834,6 +2835,24 @@ export default function JourneyCanvas({ journeyId }: JourneyCanvasProps) {
               const isHumanCampaign =
                 selectedNode.type === "action" && at === "human_campaign"
               if (isHumanCampaign) {
+                // Two flavors: `create` opens the full builder;
+                // `existing` opens the picker-only editor.
+                const campaignMode =
+                  ((selectedNode.data as { campaignMode?: string })
+                    ?.campaignMode) ?? "create"
+                if (campaignMode === "existing") {
+                  return (
+                    <UseHumanCampaignFullEditor
+                      node={selectedNode}
+                      journeyId={journeyId}
+                      edges={edges}
+                      onUpdate={updateField}
+                      onDeleteNode={deleteSelectedNode}
+                      onClose={() => setSelectedNode(null)}
+                      selectedRunId={selectedRunId}
+                    />
+                  )
+                }
                 // Look up the incoming node's label so the editor can surface
                 // "audience comes from <upstream node>".
                 const incomingEdge = edges.find((e) => e.target === selectedNode.id)

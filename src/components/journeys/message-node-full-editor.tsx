@@ -900,7 +900,13 @@ function DeliveryPanel({
     <div className="mx-auto flex h-full max-w-3xl flex-col gap-4 overflow-y-auto p-6">
       <PanelHeader
         title="Delivery"
-        subtitle={`How this ${channel} step actually gets to the borrower — when it can send, how it retries, and whether it respects the journey's frequency cap.`}
+        subtitle={
+          channel === "email"
+            ? "Send-window, retry, and the email-specific plumbing your ESP cares about."
+            : channel === "sms"
+              ? "Send-window, retry, and SMS-carrier plumbing — encoding, sender ID and opt-out handling."
+              : "Send-window, retry, and Meta Cloud API plumbing — session windows and template category."
+        }
       />
 
       <SectionCard title="Send window">
@@ -916,7 +922,11 @@ function DeliveryPanel({
           <option value="evening">Evening (17:00–20:00)</option>
         </select>
         <p className="mt-1 text-[10px] text-muted-foreground">
-          Messages outside this window queue until the next allowed slot.
+          {channel === "sms"
+            ? "TRAI / TDRA compliance windows apply on top of this setting."
+            : channel === "whatsapp"
+              ? "Session-window messages are exempt; template messages queue if outside the window."
+              : "Messages outside this window queue until the next allowed slot."}
         </p>
       </SectionCard>
 
@@ -942,11 +952,11 @@ function DeliveryPanel({
             />
           </FieldBlock>
         </div>
-        <p className="mt-2 text-[10px] text-muted-foreground">
-          After a soft failure (rate-limit, transient error) the send retries
-          every {retryIntervalMin} min up to {maxAttempts} total attempts.
-        </p>
       </SectionCard>
+
+      {channel === "email" && <EmailDeliveryFields d={d} set={set} />}
+      {channel === "sms" && <SmsDeliveryFields d={d} set={set} />}
+      {channel === "whatsapp" && <WhatsappDeliveryFields d={d} set={set} />}
 
       <SectionCard
         title="Frequency cap override"
@@ -971,6 +981,223 @@ function DeliveryPanel({
   )
 }
 
+function EmailDeliveryFields({
+  d,
+  set,
+}: {
+  d: Record<string, unknown>
+  set: (field: string, value: unknown) => void
+}) {
+  const warmupPool = (d.emailWarmupPool as string) ?? "shared"
+  const dkim = (d.emailDkimStatus as string) ?? "verified"
+  const unsubPos = (d.emailUnsubPosition as string) ?? "footer"
+  const trackOpens = (d.emailTrackOpens as boolean) ?? true
+  const trackClicks = (d.emailTrackClicks as boolean) ?? true
+  return (
+    <SectionCard title="Email plumbing">
+      <div className="grid gap-3 sm:grid-cols-2">
+        <FieldBlock label="Sending pool">
+          <select
+            value={warmupPool}
+            onChange={(e) => set("emailWarmupPool", e.target.value)}
+            className="h-9 w-full rounded-md border border-input bg-background px-2 text-[13px] outline-none focus-visible:border-ring"
+          >
+            <option value="shared">Shared warm pool</option>
+            <option value="dedicated">Dedicated IP</option>
+            <option value="transactional">Transactional only</option>
+          </select>
+        </FieldBlock>
+        <FieldBlock label="DKIM / SPF">
+          <select
+            value={dkim}
+            onChange={(e) => set("emailDkimStatus", e.target.value)}
+            className="h-9 w-full rounded-md border border-input bg-background px-2 text-[13px] outline-none focus-visible:border-ring"
+          >
+            <option value="verified">Verified · sender.cleargrid.co</option>
+            <option value="pending">Pending verification</option>
+            <option value="none">Not configured</option>
+          </select>
+        </FieldBlock>
+        <FieldBlock label="Unsubscribe link">
+          <select
+            value={unsubPos}
+            onChange={(e) => set("emailUnsubPosition", e.target.value)}
+            className="h-9 w-full rounded-md border border-input bg-background px-2 text-[13px] outline-none focus-visible:border-ring"
+          >
+            <option value="footer">Footer (required for marketing)</option>
+            <option value="header">List-Unsubscribe header only</option>
+            <option value="none">None (transactional)</option>
+          </select>
+        </FieldBlock>
+      </div>
+      <div className="mt-3 grid gap-2 sm:grid-cols-2">
+        <ToggleRow
+          label="Track opens"
+          checked={trackOpens}
+          onChange={(v) => set("emailTrackOpens", v)}
+        />
+        <ToggleRow
+          label="Track link clicks"
+          checked={trackClicks}
+          onChange={(v) => set("emailTrackClicks", v)}
+        />
+      </div>
+    </SectionCard>
+  )
+}
+
+function SmsDeliveryFields({
+  d,
+  set,
+}: {
+  d: Record<string, unknown>
+  set: (field: string, value: unknown) => void
+}) {
+  const encoding = (d.smsEncoding as string) ?? "auto"
+  const senderFallback = (d.smsSenderFallback as string) ?? "long_code"
+  const optOutKeywords = (d.smsOptOutKeywords as string) ?? "STOP, UNSUBSCRIBE"
+  const throughputPerSec = (d.smsThroughputPerSec as number) ?? 10
+  const shortenLinks = (d.smsShortenLinks as boolean) ?? true
+  return (
+    <SectionCard title="SMS plumbing">
+      <div className="grid gap-3 sm:grid-cols-2">
+        <FieldBlock label="Encoding">
+          <select
+            value={encoding}
+            onChange={(e) => set("smsEncoding", e.target.value)}
+            className="h-9 w-full rounded-md border border-input bg-background px-2 text-[13px] outline-none focus-visible:border-ring"
+          >
+            <option value="auto">Auto (GSM-7 if possible)</option>
+            <option value="gsm7">Force GSM-7 (strip Arabic / emoji)</option>
+            <option value="ucs2">Force UCS-2 (Arabic / multilingual)</option>
+          </select>
+        </FieldBlock>
+        <FieldBlock label="Sender-ID fallback">
+          <select
+            value={senderFallback}
+            onChange={(e) => set("smsSenderFallback", e.target.value)}
+            className="h-9 w-full rounded-md border border-input bg-background px-2 text-[13px] outline-none focus-visible:border-ring"
+          >
+            <option value="long_code">Long code</option>
+            <option value="shared_pool">Shared short code</option>
+            <option value="drop">Drop (don&apos;t send)</option>
+          </select>
+        </FieldBlock>
+        <FieldBlock label="Opt-out keywords">
+          <Input
+            value={optOutKeywords}
+            onChange={(e) => set("smsOptOutKeywords", e.target.value)}
+            placeholder="STOP, UNSUBSCRIBE"
+            className="h-9 text-[13px]"
+          />
+        </FieldBlock>
+        <FieldBlock label="Throughput (msgs/sec)">
+          <Input
+            type="number"
+            value={throughputPerSec}
+            onChange={(e) => set("smsThroughputPerSec", Number(e.target.value))}
+            min={1}
+            max={100}
+            className="h-9 text-[13px]"
+          />
+        </FieldBlock>
+      </div>
+      <div className="mt-3">
+        <ToggleRow
+          label="Shorten outbound links via cg.co"
+          checked={shortenLinks}
+          onChange={(v) => set("smsShortenLinks", v)}
+        />
+      </div>
+    </SectionCard>
+  )
+}
+
+function WhatsappDeliveryFields({
+  d,
+  set,
+}: {
+  d: Record<string, unknown>
+  set: (field: string, value: unknown) => void
+}) {
+  const templateCategory = (d.waTemplateCategory as string) ?? "utility"
+  const sessionWindow = (d.waSessionWindow as string) ?? "template_first"
+  const languageCode = (d.waLanguageCode as string) ?? "en"
+  const bufferMinutes = (d.waBufferMinutes as number) ?? 5
+  return (
+    <SectionCard title="WhatsApp plumbing">
+      <div className="grid gap-3 sm:grid-cols-2">
+        <FieldBlock label="Template category">
+          <select
+            value={templateCategory}
+            onChange={(e) => set("waTemplateCategory", e.target.value)}
+            className="h-9 w-full rounded-md border border-input bg-background px-2 text-[13px] outline-none focus-visible:border-ring"
+          >
+            <option value="utility">Utility</option>
+            <option value="marketing">Marketing</option>
+            <option value="authentication">Authentication</option>
+          </select>
+        </FieldBlock>
+        <FieldBlock label="Session window">
+          <select
+            value={sessionWindow}
+            onChange={(e) => set("waSessionWindow", e.target.value)}
+            className="h-9 w-full rounded-md border border-input bg-background px-2 text-[13px] outline-none focus-visible:border-ring"
+          >
+            <option value="template_first">Template first, then free-form</option>
+            <option value="strict_template">Template only</option>
+            <option value="free_form_only">Free-form only (24-hour window)</option>
+          </select>
+        </FieldBlock>
+        <FieldBlock label="Language code">
+          <select
+            value={languageCode}
+            onChange={(e) => set("waLanguageCode", e.target.value)}
+            className="h-9 w-full rounded-md border border-input bg-background px-2 text-[13px] outline-none focus-visible:border-ring"
+          >
+            <option value="en">en · English</option>
+            <option value="ar">ar · Arabic</option>
+            <option value="ur">ur · Urdu</option>
+            <option value="hi">hi · Hindi</option>
+          </select>
+        </FieldBlock>
+        <FieldBlock label="Buffer before send (min)">
+          <Input
+            type="number"
+            value={bufferMinutes}
+            onChange={(e) => set("waBufferMinutes", Number(e.target.value))}
+            min={0}
+            max={60}
+            className="h-9 text-[13px]"
+          />
+        </FieldBlock>
+      </div>
+    </SectionCard>
+  )
+}
+
+function ToggleRow({
+  label,
+  checked,
+  onChange,
+}: {
+  label: string
+  checked: boolean
+  onChange: (v: boolean) => void
+}) {
+  return (
+    <label className="flex cursor-pointer items-center justify-between rounded-md border border-border bg-background/60 px-3 py-2">
+      <span className="text-[12px] text-foreground">{label}</span>
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(e) => onChange(e.target.checked)}
+        className="h-4 w-8"
+      />
+    </label>
+  )
+}
+
 function LogicPanel({
   d,
   set,
@@ -983,12 +1210,17 @@ function LogicPanel({
   const language = (d.language as string) ?? "auto"
   const sendCondition = (d.sendCondition as string) ?? ""
   const suppressIf = (d.suppressIf as string) ?? ""
-  const branchOnDelivery = (d.branchOnDelivery as boolean) ?? true
   return (
     <div className="mx-auto flex h-full max-w-3xl flex-col gap-4 overflow-y-auto p-6">
       <PanelHeader
         title="Logic"
-        subtitle="Guardrails and routing that apply before and after the borrower actually receives this message."
+        subtitle={
+          channel === "email"
+            ? "Pre-send guards and how the journey should react to delivery / open / click / bounce."
+            : channel === "sms"
+              ? "Pre-send guards and how the journey should react to delivery / STOP / hard-bounce."
+              : "Pre-send guards and how the journey should react to WhatsApp delivery / read / reply / template rejection."
+        }
       />
 
       <SectionCard title="Language">
@@ -1003,22 +1235,24 @@ function LogicPanel({
           <option value="ur">Urdu</option>
           <option value="hi">Hindi</option>
         </select>
-        <p className="mt-1 text-[10px] text-muted-foreground">
-          Templates rendered in the borrower&apos;s preferred language when
-          available.
-        </p>
       </SectionCard>
 
       <SectionCard title="Send only if">
         <Input
           value={sendCondition}
           onChange={(e) => set("sendCondition", e.target.value)}
-          placeholder="e.g. borrower.consent_status = Granted AND borrower.dpd > 30"
+          placeholder={
+            channel === "email"
+              ? "e.g. borrower.email_valid = true AND borrower.dpd > 30"
+              : channel === "sms"
+                ? "e.g. borrower.phone_valid = true AND borrower.sms_opted_in = true"
+                : "e.g. borrower.whatsapp_reachable = true"
+          }
           className="h-9 text-[12px] font-mono"
         />
         <p className="mt-1 text-[10px] text-muted-foreground">
-          Optional pre-send guard. If the expression evaluates to false the
-          send is skipped and the borrower moves to the next node.
+          Optional pre-send guard. If it evaluates to false the send is
+          skipped and the borrower moves to the next node.
         </p>
       </SectionCard>
 
@@ -1026,38 +1260,170 @@ function LogicPanel({
         <Input
           value={suppressIf}
           onChange={(e) => set("suppressIf", e.target.value)}
-          placeholder="e.g. borrower.do_not_contact = true"
+          placeholder={
+            channel === "email"
+              ? "e.g. borrower.email_bounced_recently = true"
+              : channel === "sms"
+                ? "e.g. borrower.sms_opted_out = true"
+                : "e.g. borrower.whatsapp_blocked = true"
+          }
           className="h-9 text-[12px] font-mono"
         />
-        <p className="mt-1 text-[10px] text-muted-foreground">
-          Hard-suppress rule. Overrides everything else — no send, no retry,
-          no attempt logged as delivery.
-        </p>
       </SectionCard>
 
-      <SectionCard title="Route on delivery outcome">
-        <label className="flex cursor-pointer items-center justify-between rounded-md border border-border bg-background/60 px-3 py-2">
-          <div>
-            <div className="text-[12px] font-medium text-foreground">
-              Branch by delivery event
-            </div>
-            <div className="mt-0.5 text-[10px] text-muted-foreground">
-              Expose outgoing edges for{" "}
-              {channel === "sms"
-                ? "delivered / bounced"
-                : "delivered / opened / clicked / bounced"}{" "}
-              so downstream steps can react.
-            </div>
-          </div>
-          <input
-            type="checkbox"
-            checked={branchOnDelivery}
-            onChange={(e) => set("branchOnDelivery", e.target.checked)}
-            className="h-4 w-8"
-          />
-        </label>
-      </SectionCard>
+      {channel === "email" && <EmailLogicFields d={d} set={set} />}
+      {channel === "sms" && <SmsLogicFields d={d} set={set} />}
+      {channel === "whatsapp" && <WhatsappLogicFields d={d} set={set} />}
     </div>
+  )
+}
+
+function EmailLogicFields({
+  d,
+  set,
+}: {
+  d: Record<string, unknown>
+  set: (field: string, value: unknown) => void
+}) {
+  const branchOnDelivery = (d.branchOnDelivery as boolean) ?? true
+  const bounceHandling = (d.emailBounceHandling as string) ?? "mark_invalid"
+  const subjectMax = (d.emailSubjectMaxLen as number) ?? 78
+  return (
+    <SectionCard title="Route on email outcome">
+      <ToggleRow
+        label="Branch by delivered / opened / clicked / bounced"
+        checked={branchOnDelivery}
+        onChange={(v) => set("branchOnDelivery", v)}
+      />
+      <div className="mt-3 grid gap-3 sm:grid-cols-2">
+        <FieldBlock label="Hard-bounce handling">
+          <select
+            value={bounceHandling}
+            onChange={(e) => set("emailBounceHandling", e.target.value)}
+            className="h-9 w-full rounded-md border border-input bg-background px-2 text-[13px] outline-none focus-visible:border-ring"
+          >
+            <option value="mark_invalid">Mark address invalid</option>
+            <option value="retry_later">Retry after 24h</option>
+            <option value="quarantine">Quarantine for review</option>
+          </select>
+        </FieldBlock>
+        <FieldBlock label="Subject max length (chars)">
+          <Input
+            type="number"
+            value={subjectMax}
+            onChange={(e) => set("emailSubjectMaxLen", Number(e.target.value))}
+            min={20}
+            max={140}
+            className="h-9 text-[13px]"
+          />
+        </FieldBlock>
+      </div>
+    </SectionCard>
+  )
+}
+
+function SmsLogicFields({
+  d,
+  set,
+}: {
+  d: Record<string, unknown>
+  set: (field: string, value: unknown) => void
+}) {
+  const branchOnDelivery = (d.branchOnDelivery as boolean) ?? true
+  const stopHandling = (d.smsStopHandling as string) ?? "auto_unsubscribe"
+  const respectDnc = (d.smsRespectDnc as boolean) ?? true
+  const maxSegments = (d.smsMaxSegments as number) ?? 3
+  return (
+    <SectionCard title="Route on SMS outcome">
+      <ToggleRow
+        label="Branch by delivered / bounced / STOP received"
+        checked={branchOnDelivery}
+        onChange={(v) => set("branchOnDelivery", v)}
+      />
+      <div className="mt-3 grid gap-3 sm:grid-cols-2">
+        <FieldBlock label="STOP-keyword handling">
+          <select
+            value={stopHandling}
+            onChange={(e) => set("smsStopHandling", e.target.value)}
+            className="h-9 w-full rounded-md border border-input bg-background px-2 text-[13px] outline-none focus-visible:border-ring"
+          >
+            <option value="auto_unsubscribe">Auto-unsubscribe + exit</option>
+            <option value="flag_only">Flag for review</option>
+            <option value="ignore">Ignore (compliance risk)</option>
+          </select>
+        </FieldBlock>
+        <FieldBlock label="Max segments per send">
+          <Input
+            type="number"
+            value={maxSegments}
+            onChange={(e) => set("smsMaxSegments", Number(e.target.value))}
+            min={1}
+            max={10}
+            className="h-9 text-[13px]"
+          />
+        </FieldBlock>
+      </div>
+      <div className="mt-3">
+        <ToggleRow
+          label="Respect ClearVoice DNC list before send"
+          checked={respectDnc}
+          onChange={(v) => set("smsRespectDnc", v)}
+        />
+      </div>
+    </SectionCard>
+  )
+}
+
+function WhatsappLogicFields({
+  d,
+  set,
+}: {
+  d: Record<string, unknown>
+  set: (field: string, value: unknown) => void
+}) {
+  const branchOnDelivery = (d.branchOnDelivery as boolean) ?? true
+  const templateStatus = (d.waTemplateStatus as string) ?? "approved"
+  const onRejectedTemplate = (d.waOnRejectedTemplate as string) ?? "fallback_sms"
+  const enforceSessionWindow = (d.waEnforceSessionWindow as boolean) ?? true
+  return (
+    <SectionCard title="Route on WhatsApp outcome">
+      <ToggleRow
+        label="Branch by delivered / read / replied / rejected"
+        checked={branchOnDelivery}
+        onChange={(v) => set("branchOnDelivery", v)}
+      />
+      <div className="mt-3 grid gap-3 sm:grid-cols-2">
+        <FieldBlock label="Template approval status">
+          <select
+            value={templateStatus}
+            onChange={(e) => set("waTemplateStatus", e.target.value)}
+            className="h-9 w-full rounded-md border border-input bg-background px-2 text-[13px] outline-none focus-visible:border-ring"
+          >
+            <option value="approved">Approved by Meta</option>
+            <option value="pending">Pending review</option>
+            <option value="rejected">Rejected</option>
+          </select>
+        </FieldBlock>
+        <FieldBlock label="If template rejected">
+          <select
+            value={onRejectedTemplate}
+            onChange={(e) => set("waOnRejectedTemplate", e.target.value)}
+            className="h-9 w-full rounded-md border border-input bg-background px-2 text-[13px] outline-none focus-visible:border-ring"
+          >
+            <option value="fallback_sms">Fall back to SMS</option>
+            <option value="skip">Skip node</option>
+            <option value="pause_journey">Pause the journey</option>
+          </select>
+        </FieldBlock>
+      </div>
+      <div className="mt-3">
+        <ToggleRow
+          label="Enforce 24-hour session window"
+          checked={enforceSessionWindow}
+          onChange={(v) => set("waEnforceSessionWindow", v)}
+        />
+      </div>
+    </SectionCard>
   )
 }
 
