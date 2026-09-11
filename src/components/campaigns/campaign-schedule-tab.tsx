@@ -65,11 +65,21 @@ const WAIT_OPTIONS: Array<{ min: number; label: string }> = [
 interface CampaignScheduleTabProps {
   schedule: CampaignSchedule
   onChange: (next: CampaignSchedule) => void
+  /**
+   * "full" (default) renders every section — When-to-run, calling hours,
+   * recurring, pause-by-default, redial. "redial-only" hides all the
+   * scheduling controls and shows just the redial section — used by the
+   * Create Human Campaign + Use Existing Human Campaign node editors
+   * where schedule sits on the campaign itself (not the node) but
+   * redial can be adjusted per enrollment.
+   */
+  mode?: "full" | "redial-only"
 }
 
 export function CampaignScheduleTab({
   schedule,
   onChange,
+  mode = "full",
 }: CampaignScheduleTabProps) {
   const s = mergeSchedule(schedule)
   const set = <K extends keyof CampaignSchedule>(k: K, v: CampaignSchedule[K]) =>
@@ -92,6 +102,7 @@ export function CampaignScheduleTab({
 
   return (
     <div className="space-y-4">
+      {mode === "full" && <>
       {/* When to run */}
       <Section title="When to run">
         <div className="space-y-2">
@@ -215,6 +226,8 @@ export function CampaignScheduleTab({
         checked={s.pauseByDefault}
         onChange={(v) => set("pauseByDefault", v)}
       />
+
+      </>}
 
       {/* Redial settings */}
       <Section title="Redial settings" description="Configure how the dialer handles unanswered and failed calls.">

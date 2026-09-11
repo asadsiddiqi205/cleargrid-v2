@@ -164,19 +164,16 @@ export function UseHumanCampaignFullEditor({
             {TABS.map((t) => {
               const Icon = t.icon
               const active = tab === t.id
-              const disabled = t.id !== "campaign" && !source
               return (
                 <button
                   key={t.id}
                   type="button"
-                  disabled={disabled}
-                  onClick={() => !disabled && setTab(t.id)}
+                  onClick={() => setTab(t.id)}
                   className={cn(
                     "-mb-px flex items-center gap-1.5 border-b-2 px-3 py-2 text-[12px] font-medium",
                     active
                       ? "border-primary text-primary"
                       : "border-transparent text-muted-foreground hover:text-foreground",
-                    disabled && "opacity-40 cursor-not-allowed",
                   )}
                 >
                   <Icon className="h-3.5 w-3.5" />
@@ -195,33 +192,47 @@ export function UseHumanCampaignFullEditor({
               journeyId={journeyId}
             />
           )}
-          {tab === "redial" && source && (
-            <RedialOverrideTab
-              source={source}
-              redial={redial}
-              hasOverride={!!cfg.hasRedialOverride}
-              onChange={(next) =>
-                setCfg({ hasRedialOverride: true, redialOverride: next })
-              }
-              onReset={() =>
-                setCfg({
-                  hasRedialOverride: false,
-                  redialOverride: source.schedule.redial,
-                })
-              }
-            />
-          )}
-          {tab === "analytics" && source && (
-            <div className="-mx-6 -mb-5 min-h-[60vh]">
-              <NodeAnalyticsTab
-                journeyId={journeyId}
-                runId={selectedRunId ?? null}
-                nodeId={node.id}
-                nodeLabel={(node.data as { label?: string })?.label ?? node.id}
-                nodeType={node.type ?? "action"}
-                blockType={(node.data as { blockType?: string })?.blockType}
+          {tab === "redial" && (
+            source ? (
+              <RedialOverrideTab
+                source={source}
+                redial={redial}
+                hasOverride={!!cfg.hasRedialOverride}
+                onChange={(next) =>
+                  setCfg({ hasRedialOverride: true, redialOverride: next })
+                }
+                onReset={() =>
+                  setCfg({
+                    hasRedialOverride: false,
+                    redialOverride: source.schedule.redial,
+                  })
+                }
               />
-            </div>
+            ) : (
+              <NeedsCampaignEmpty
+                onGo={() => setTab("campaign")}
+                what="redial overrides"
+              />
+            )
+          )}
+          {tab === "analytics" && (
+            source ? (
+              <div className="-mx-6 -mb-5 min-h-[60vh]">
+                <NodeAnalyticsTab
+                  journeyId={journeyId}
+                  runId={selectedRunId ?? null}
+                  nodeId={node.id}
+                  nodeLabel={(node.data as { label?: string })?.label ?? node.id}
+                  nodeType={node.type ?? "action"}
+                  blockType={(node.data as { blockType?: string })?.blockType}
+                />
+              </div>
+            ) : (
+              <NeedsCampaignEmpty
+                onGo={() => setTab("campaign")}
+                what="analytics"
+              />
+            )
           )}
         </div>
       </div>
@@ -481,10 +492,11 @@ function RedialOverrideTab({
         </div>
       )}
 
-      {/* Reuse the full CampaignScheduleTab but only expose its redial section
-          by passing a minimal schedule with everything else defaulted. We
-          write back just the redial slice via `onChange` below. */}
+      {/* Reuse CampaignScheduleTab in redial-only mode — only the redial
+          section is exposed since schedule fields belong to the source
+          campaign, not this enrollment node. */}
       <CampaignScheduleTab
+        mode="redial-only"
         schedule={{
           ...source.schedule,
           redial,
@@ -494,6 +506,33 @@ function RedialOverrideTab({
           onChange({ ...next.redial, enabled: next.redialEnabled })
         }}
       />
+    </div>
+  )
+}
+
+function NeedsCampaignEmpty({
+  onGo,
+  what,
+}: {
+  onGo: () => void
+  what: string
+}) {
+  return (
+    <div className="rounded-lg border border-dashed border-border bg-muted/[0.04] p-8 text-center">
+      <p className="text-[12px] font-medium text-foreground">
+        Pick a campaign first
+      </p>
+      <p className="mt-1 text-[10px] text-muted-foreground">
+        {what.charAt(0).toUpperCase() + what.slice(1)} appear once a source
+        campaign is selected — everything else is derived from it.
+      </p>
+      <button
+        type="button"
+        onClick={onGo}
+        className="mt-3 inline-flex items-center gap-1 rounded border border-primary/40 bg-primary/10 px-2 py-1 text-[11px] font-medium text-primary hover:bg-primary/20"
+      >
+        Go to Campaign tab →
+      </button>
     </div>
   )
 }

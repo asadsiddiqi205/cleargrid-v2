@@ -49,6 +49,7 @@ import {
 const TABS = [
   { id: "basics", label: "Basics", icon: Info },
   { id: "messages", label: "Messages", icon: MessageSquare },
+  { id: "redial", label: "Redial", icon: Phone },
   { id: "analytics", label: "Analytics", icon: BarChart3 },
 ] as const
 
@@ -196,17 +197,9 @@ export function HumanCampaignNodeFullEditor({
         </div>
       </div>
 
-      {/* Body — right preview only exists for editing tabs; Analytics gets
-          the full canvas width. */}
-      <div
-        className={cn(
-          "grid flex-1 min-h-0 grid-cols-1",
-          (tab === "basics" || tab === "messages") &&
-            "lg:grid-cols-[minmax(0,1fr)_minmax(0,540px)]",
-        )}
-      >
-        {/* Left — tabs + form */}
-        <div className="min-h-0 overflow-y-auto border-r border-border bg-background">
+      {/* Body — single column, no preview. All tabs render full-width. */}
+      <div className="flex flex-1 min-h-0">
+        <div className="min-h-0 flex-1 overflow-y-auto bg-background">
           <div className="mx-auto max-w-3xl px-6 py-5">
             <div className="mb-4 flex border-b border-border">
               {TABS.map((t) => {
@@ -238,6 +231,22 @@ export function HumanCampaignNodeFullEditor({
 
             {tab === "basics" && <BasicsTab cfg={cfg} set={set} />}
             {tab === "messages" && <MessagesTab cfg={cfg} set={set} />}
+            {tab === "redial" && (
+              <div className="space-y-3">
+                <div>
+                  <div className="text-[13px] font-semibold">Redial</div>
+                  <p className="mt-0.5 text-[11px] text-muted-foreground">
+                    How the dialer retries unanswered and failed calls for
+                    borrowers enrolled by this node.
+                  </p>
+                </div>
+                <CampaignScheduleTab
+                  mode="redial-only"
+                  schedule={cfg.schedule}
+                  onChange={(schedule) => set("schedule", schedule)}
+                />
+              </div>
+            )}
             {tab === "analytics" && (
               <div className="-mx-6 -mb-5 min-h-[60vh]">
                 <NodeAnalyticsTab
@@ -253,18 +262,6 @@ export function HumanCampaignNodeFullEditor({
           </div>
         </div>
 
-        {/* Right — live preview (only for editing tabs; Analytics gets full
-            width since it renders its own list). */}
-        {(tab === "basics" || tab === "messages") && (
-          <div className="min-h-0 overflow-y-auto bg-muted/30">
-            <div className="sticky top-0 p-6">
-              <div className="mb-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                Live preview
-              </div>
-              <Preview cfg={cfg} tab={tab} journeyId={journeyId} incomingNodeLabel={incomingNodeLabel ?? null} />
-            </div>
-          </div>
-        )}
       </div>
     </div>
   )
