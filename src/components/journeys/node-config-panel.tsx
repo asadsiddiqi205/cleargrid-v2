@@ -1061,6 +1061,7 @@ export function NodeConfigPanel({ node, onClose, onUpdate, onDeleteNode, nodes =
                   <>
                     <Section title="Subject">
                       <Input
+                        dir="auto"
                         value={(d.manualSubject as string) ?? ""}
                         onChange={(e) => update("manualSubject", e.target.value)}
                         placeholder="Use {{borrower.first_name}} for personalization"
@@ -1069,6 +1070,7 @@ export function NodeConfigPanel({ node, onClose, onUpdate, onDeleteNode, nodes =
                     </Section>
                     <Section title="HTML body">
                       <textarea
+                        dir="auto"
                         value={(d.manualBodyHtml as string) ?? ""}
                         onChange={(e) => update("manualBodyHtml", e.target.value)}
                         placeholder="<p>Hi {{borrower.first_name}},</p>"
@@ -1077,6 +1079,7 @@ export function NodeConfigPanel({ node, onClose, onUpdate, onDeleteNode, nodes =
                     </Section>
                     <Section title="Plain-text fallback">
                       <textarea
+                        dir="auto"
                         value={(d.manualBodyText as string) ?? ""}
                         onChange={(e) => update("manualBodyText", e.target.value)}
                         placeholder="Hi {{borrower.first_name}}, ..."
@@ -1147,6 +1150,7 @@ export function NodeConfigPanel({ node, onClose, onUpdate, onDeleteNode, nodes =
                 ) : (
                   <Section title="SMS body">
                     <textarea
+                      dir="auto"
                       value={(d.manualBodyText as string) ?? ""}
                       onChange={(e) => update("manualBodyText", e.target.value)}
                       placeholder="Hi {{borrower.first_name}}, your payment of {{borrower.outstanding}} is due..."

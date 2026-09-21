@@ -541,12 +541,14 @@ export function EditorPanel({ state, update }: EditorPanelProps) {
                 <div className="flex items-start gap-4">
                   <div className="flex-1 min-w-0 space-y-3">
                     <input
+                      dir="auto"
                       value={state.subject}
                       onChange={(e) => update("subject", e.target.value)}
                       placeholder="Subject line..."
                       className="w-full bg-transparent font-heading text-2xl font-semibold text-foreground outline-none placeholder:text-muted-foreground"
                     />
                     <input
+                      dir="auto"
                       value={state.previewText}
                       onChange={(e) => update("previewText", e.target.value)}
                       placeholder="Preview text appears in inbox preview"
@@ -583,6 +585,7 @@ export function EditorPanel({ state, update }: EditorPanelProps) {
                     <div className="relative">
                       <Textarea
                         ref={bodyRef}
+                        dir="auto"
                         value={state.body}
                         onChange={(e) => update("body", e.target.value)}
                         onSelect={handleSelect("body")}
@@ -640,6 +643,7 @@ export function EditorPanel({ state, update }: EditorPanelProps) {
               <div className="relative">
                 <Textarea
                   ref={smsRef}
+                  dir="auto"
                   value={state.smsBody}
                   onChange={(e) => update("smsBody", e.target.value)}
                   onSelect={handleSelect("smsBody")}

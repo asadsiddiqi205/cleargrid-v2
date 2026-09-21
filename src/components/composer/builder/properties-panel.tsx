@@ -161,6 +161,7 @@ function KindFields({
       return (
         <Field label="HTML">
           <Textarea
+            dir="auto"
             value={block.html}
             onChange={(e) => onUpdateBlock(block.id, { html: e.target.value } as Partial<BuilderBlock>)}
             className="min-h-[120px] font-mono text-[11px]"

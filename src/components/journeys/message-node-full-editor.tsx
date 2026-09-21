@@ -459,6 +459,7 @@ export function MessageNodeFullEditor({
                       </div>
                       <Input
                         ref={subjectRef}
+                        dir="auto"
                         value={manualSubject}
                         onChange={(e) => set("manualSubject", e.target.value)}
                         placeholder="Use {{borrower.first_name}} for personalization"
@@ -490,6 +491,7 @@ export function MessageNodeFullEditor({
                       </div>
                       <textarea
                         ref={htmlBodyRef}
+                        dir="auto"
                         value={manualBodyHtml}
                         onChange={(e) => set("manualBodyHtml", e.target.value)}
                         placeholder="<p>Hi {{borrower.first_name}},</p>"
@@ -513,6 +515,7 @@ export function MessageNodeFullEditor({
                       </div>
                       <textarea
                         ref={plainBodyRef}
+                        dir="auto"
                         value={manualBodyText}
                         onChange={(e) => set("manualBodyText", e.target.value)}
                         placeholder="Hi {{borrower.first_name}}, ..."
@@ -535,6 +538,7 @@ export function MessageNodeFullEditor({
                     </div>
                     <textarea
                       ref={plainBodyRef}
+                      dir="auto"
                       value={manualBodyText}
                       onChange={(e) => set("manualBodyText", e.target.value)}
                       placeholder="Hi {{borrower.first_name}}, your payment of {{borrower.outstanding}} is due..."

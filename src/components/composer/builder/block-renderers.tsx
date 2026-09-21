@@ -133,8 +133,9 @@ function InnerBlock({ block, previewMode }: { block: BuilderBlock; previewMode: 
     case "text":
       return (
         <div
+          dir="auto"
           style={{
-            textAlign: block.align ?? "left",
+            textAlign: block.align ?? "start",
             fontSize: block.fontSize ?? 15,
           }}
           dangerouslySetInnerHTML={{ __html: block.html }}
@@ -305,6 +306,7 @@ function InnerBlock({ block, previewMode }: { block: BuilderBlock; previewMode: 
     case "custom_html":
       return (
         <div
+          dir="auto"
           dangerouslySetInnerHTML={{ __html: block.html }}
           // Visual chip in canvas non-preview to flag advanced block.
           style={{ position: "relative" }}

@@ -241,6 +241,7 @@ export function TemplateEditor({
                     Subject Line
                   </label>
                   <Input
+                    dir="auto"
                     value={subjectLine}
                     onChange={(e) => setSubjectLine(e.target.value)}
                     className="text-xs"
@@ -251,6 +252,7 @@ export function TemplateEditor({
                     Preview Text
                   </label>
                   <Input
+                    dir="auto"
                     value={previewText}
                     onChange={(e) => setPreviewText(e.target.value)}
                     className="text-xs"
@@ -261,6 +263,7 @@ export function TemplateEditor({
                     From Name
                   </label>
                   <Input
+                    dir="auto"
                     value={fromName}
                     onChange={(e) => setFromName(e.target.value)}
                     className="text-xs"

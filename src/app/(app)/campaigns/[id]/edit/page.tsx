@@ -411,6 +411,7 @@ function MessagesTab({
       </div>
       <FormField label="Welcome message">
         <textarea
+          dir="auto"
           value={draft.callMessages.welcome ?? ""}
           onChange={(e) => setMsg("welcome", e.target.value)}
           placeholder="This is an important call regarding your account. Please stay on the line."
@@ -419,6 +420,7 @@ function MessagesTab({
       </FormField>
       <FormField label="Loop message">
         <textarea
+          dir="auto"
           value={draft.callMessages.loop ?? ""}
           onChange={(e) => setMsg("loop", e.target.value)}
           placeholder="Please wait while we connect your call to one of our agents."
@@ -427,6 +429,7 @@ function MessagesTab({
       </FormField>
       <FormField label="Busy message">
         <textarea
+          dir="auto"
           value={draft.callMessages.busy ?? ""}
           onChange={(e) => setMsg("busy", e.target.value)}
           placeholder="We're sorry, all of our agents are currently unavailable. We'll call you back."

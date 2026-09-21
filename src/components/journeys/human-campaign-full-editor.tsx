@@ -633,6 +633,7 @@ function MessagesTab({
       </div>
       <FormField label="Welcome message">
         <textarea
+          dir="auto"
           value={cfg.welcomeMessage}
           onChange={(e) => set("welcomeMessage", e.target.value)}
           placeholder="This is an important call regarding your account. Please stay on the line."
@@ -641,6 +642,7 @@ function MessagesTab({
       </FormField>
       <FormField label="Loop message">
         <textarea
+          dir="auto"
           value={cfg.loopMessage}
           onChange={(e) => set("loopMessage", e.target.value)}
           placeholder="Please wait while we connect your call to one of our agents."
@@ -649,6 +651,7 @@ function MessagesTab({
       </FormField>
       <FormField label="Busy message">
         <textarea
+          dir="auto"
           value={cfg.busyMessage}
           onChange={(e) => set("busyMessage", e.target.value)}
           placeholder="We're sorry, all of our agents are currently unavailable. We'll call you back."
