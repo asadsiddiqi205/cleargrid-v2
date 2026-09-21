@@ -40,6 +40,7 @@ import {
 } from "@/data/campaigns-seed"
 import { TemplateEditor } from "@/components/templates/template-editor"
 import { CampaignScheduleTab } from "@/components/campaigns/campaign-schedule-tab"
+import { DirectionToggle, type TextDir } from "@/components/shared/direction-toggle"
 
 const TABS = [
   { id: "basics", label: "Basics", icon: Info },
@@ -390,28 +391,32 @@ function MessagesTab({
   setMsg: (k: "welcome" | "loop" | "busy", v: string) => void
   onOpenTemplateEditor: () => void
 }) {
+  const [textDir, setTextDir] = React.useState<TextDir>("auto")
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3">
         <div>
           <div className="text-[12px] font-semibold">Call messages</div>
           <p className="mt-0.5 text-[10px] text-muted-foreground">
             What the borrower hears at each phase of the call.
           </p>
         </div>
-        <Button
-          variant="outline"
-          size="sm"
-          className="gap-1.5"
-          onClick={onOpenTemplateEditor}
-        >
-          <Wand2 className="h-3.5 w-3.5" />
-          Open template editor
-        </Button>
+        <div className="flex items-center gap-2">
+          <DirectionToggle value={textDir} onChange={setTextDir} label="Direction" />
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-1.5"
+            onClick={onOpenTemplateEditor}
+          >
+            <Wand2 className="h-3.5 w-3.5" />
+            Open template editor
+          </Button>
+        </div>
       </div>
       <FormField label="Welcome message">
         <textarea
-          dir="auto"
+          dir={textDir}
           value={draft.callMessages.welcome ?? ""}
           onChange={(e) => setMsg("welcome", e.target.value)}
           placeholder="This is an important call regarding your account. Please stay on the line."
@@ -420,7 +425,7 @@ function MessagesTab({
       </FormField>
       <FormField label="Loop message">
         <textarea
-          dir="auto"
+          dir={textDir}
           value={draft.callMessages.loop ?? ""}
           onChange={(e) => setMsg("loop", e.target.value)}
           placeholder="Please wait while we connect your call to one of our agents."
@@ -429,7 +434,7 @@ function MessagesTab({
       </FormField>
       <FormField label="Busy message">
         <textarea
-          dir="auto"
+          dir={textDir}
           value={draft.callMessages.busy ?? ""}
           onChange={(e) => setMsg("busy", e.target.value)}
           placeholder="We're sorry, all of our agents are currently unavailable. We'll call you back."

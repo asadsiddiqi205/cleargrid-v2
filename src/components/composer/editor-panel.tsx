@@ -85,6 +85,7 @@ import { EmailAiGenerateMode } from "@/components/composer/email-ai-generate-mod
 import { AiAssistPanel, AI_ASSIST_ACTIONS } from "@/components/composer/ai-assist-panel"
 import { SenderProfilePicker } from "@/components/composer/sender-profile-picker"
 import { VariationsPanel } from "@/components/composer/variations-panel"
+import { DirectionToggle, type TextDir } from "@/components/shared/direction-toggle"
 import { richEmailTemplates } from "@/data/rich-email-templates"
 import { playbooks, type Playbook } from "@/data/playbooks"
 
@@ -117,6 +118,7 @@ export function EditorPanel({ state, update }: EditorPanelProps) {
   const [draftSavedAt, setDraftSavedAt] = React.useState<string | null>(null)
   const [activePlaybook, setActivePlaybook] = React.useState<Playbook | null>(null)
   const [playbookDropdownOpen, setPlaybookDropdownOpen] = React.useState(false)
+  const [textDir, setTextDir] = React.useState<TextDir>("auto")
 
   // Update draft timestamp 2s after any content change
   const contentSignature = `${state.body}|${state.smsBody}|${state.subject}`
@@ -540,15 +542,22 @@ export function EditorPanel({ state, update }: EditorPanelProps) {
               {state.emailMode === "inline" && (
                 <div className="flex items-start gap-4">
                   <div className="flex-1 min-w-0 space-y-3">
+                    <div className="flex justify-end">
+                      <DirectionToggle
+                        value={textDir}
+                        onChange={setTextDir}
+                        label="Direction"
+                      />
+                    </div>
                     <input
-                      dir="auto"
+                      dir={textDir}
                       value={state.subject}
                       onChange={(e) => update("subject", e.target.value)}
                       placeholder="Subject line..."
                       className="w-full bg-transparent font-heading text-2xl font-semibold text-foreground outline-none placeholder:text-muted-foreground"
                     />
                     <input
-                      dir="auto"
+                      dir={textDir}
                       value={state.previewText}
                       onChange={(e) => update("previewText", e.target.value)}
                       placeholder="Preview text appears in inbox preview"
@@ -585,7 +594,7 @@ export function EditorPanel({ state, update }: EditorPanelProps) {
                     <div className="relative">
                       <Textarea
                         ref={bodyRef}
-                        dir="auto"
+                        dir={textDir}
                         value={state.body}
                         onChange={(e) => update("body", e.target.value)}
                         onSelect={handleSelect("body")}
@@ -637,13 +646,14 @@ export function EditorPanel({ state, update }: EditorPanelProps) {
           {/* ---- SMS ---- */}
           {state.channel === "sms" && (
             <div className="space-y-3">
-              <div className="flex items-center justify-end">
+              <div className="flex items-center justify-end gap-2">
+                <DirectionToggle value={textDir} onChange={setTextDir} label="Direction" />
                 <CreateJourneyDropdown channel="sms" templateName="Composer SMS Draft" />
               </div>
               <div className="relative">
                 <Textarea
                   ref={smsRef}
-                  dir="auto"
+                  dir={textDir}
                   value={state.smsBody}
                   onChange={(e) => update("smsBody", e.target.value)}
                   onSelect={handleSelect("smsBody")}

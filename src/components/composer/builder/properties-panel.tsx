@@ -16,6 +16,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
+import { DirectionToggle, type TextDir } from "@/components/shared/direction-toggle"
 import type { BuilderBlock, BuilderDocument } from "@/data/builder-blocks"
 import { cn } from "@/lib/utils"
 
@@ -48,6 +49,48 @@ export function PropertiesPanel(props: PropertiesPanelProps) {
           <DocumentProperties doc={props.doc} onUpdateDoc={props.onUpdateDoc} />
         )}
       </div>
+    </div>
+  )
+}
+
+function TextBlockEditor({
+  block,
+  onUpdateBlock,
+}: {
+  block: Extract<BuilderBlock, { kind: "text" }>
+  onUpdateBlock: (id: string, patch: Partial<BuilderBlock>) => void
+}) {
+  const [textDir, setTextDir] = React.useState<TextDir>("auto")
+  return (
+    <div className="space-y-2">
+      <TextDirRow textDir={textDir} setTextDir={setTextDir} />
+      <Field label="HTML">
+        <Textarea
+          dir={textDir}
+          value={block.html}
+          onChange={(e) =>
+            onUpdateBlock(block.id, { html: e.target.value } as Partial<BuilderBlock>)
+          }
+          className="min-h-[120px] font-mono text-[11px]"
+        />
+      </Field>
+    </div>
+  )
+}
+
+function TextDirRow({
+  textDir,
+  setTextDir,
+}: {
+  textDir: TextDir
+  setTextDir: (d: TextDir) => void
+}) {
+  return (
+    <div className="flex items-center justify-between">
+      <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
+        Direction
+      </span>
+      <DirectionToggle value={textDir} onChange={setTextDir} />
     </div>
   )
 }
@@ -158,16 +201,7 @@ function KindFields({
 }) {
   switch (block.kind) {
     case "text":
-      return (
-        <Field label="HTML">
-          <Textarea
-            dir="auto"
-            value={block.html}
-            onChange={(e) => onUpdateBlock(block.id, { html: e.target.value } as Partial<BuilderBlock>)}
-            className="min-h-[120px] font-mono text-[11px]"
-          />
-        </Field>
-      )
+      return <TextBlockEditor block={block} onUpdateBlock={onUpdateBlock} />
     case "image":
       return (
         <div className="space-y-3">

@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
+import { DirectionToggle, type TextDir } from "@/components/shared/direction-toggle";
 import {
   ArrowLeft,
   Type,
@@ -136,6 +137,7 @@ export function TemplateEditor({
   const [fromName, setFromName] = useState("ClearGrid Collections");
   const [replyTo, setReplyTo] = useState("collections@cleargrid.co");
   const [copiedVar, setCopiedVar] = useState<string | null>(null);
+  const [textDir, setTextDir] = useState<TextDir>("auto");
 
   const handleCopy = (token: string) => {
     if (typeof navigator !== "undefined" && navigator.clipboard) {
@@ -232,16 +234,19 @@ export function TemplateEditor({
           {/* Template Settings */}
           <div className="space-y-4">
             <div>
-              <h4 className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                Template Settings
-              </h4>
+              <div className="mb-3 flex items-center justify-between">
+                <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Template Settings
+                </h4>
+                <DirectionToggle value={textDir} onChange={setTextDir} />
+              </div>
               <div className="space-y-3">
                 <div>
                   <label className="mb-1 block text-xs text-muted-foreground">
                     Subject Line
                   </label>
                   <Input
-                    dir="auto"
+                    dir={textDir}
                     value={subjectLine}
                     onChange={(e) => setSubjectLine(e.target.value)}
                     className="text-xs"
@@ -252,7 +257,7 @@ export function TemplateEditor({
                     Preview Text
                   </label>
                   <Input
-                    dir="auto"
+                    dir={textDir}
                     value={previewText}
                     onChange={(e) => setPreviewText(e.target.value)}
                     className="text-xs"
@@ -263,7 +268,7 @@ export function TemplateEditor({
                     From Name
                   </label>
                   <Input
-                    dir="auto"
+                    dir={textDir}
                     value={fromName}
                     onChange={(e) => setFromName(e.target.value)}
                     className="text-xs"

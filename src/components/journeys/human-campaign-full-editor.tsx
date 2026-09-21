@@ -37,6 +37,7 @@ import { Label } from "@/components/ui/label"
 import { cn } from "@/lib/utils"
 import { CampaignScheduleTab } from "@/components/campaigns/campaign-schedule-tab"
 import { NodeAnalyticsTab } from "@/components/journeys/node-analytics-tab"
+import { DirectionToggle, type TextDir } from "@/components/shared/direction-toggle"
 import {
   DEFAULT_CAMPAIGN_SCHEDULE,
   AGENT_GROUPS,
@@ -623,17 +624,21 @@ function MessagesTab({
   cfg: CampaignConfig
   set: <K extends keyof CampaignConfig>(k: K, v: CampaignConfig[K]) => void
 }) {
+  const [textDir, setTextDir] = React.useState<TextDir>("auto")
   return (
     <div className="space-y-4">
-      <div>
-        <div className="text-[12px] font-semibold">Call messages</div>
-        <p className="mt-0.5 text-[10px] text-muted-foreground">
-          What the borrower hears at each phase of the call. Optional.
-        </p>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <div className="text-[12px] font-semibold">Call messages</div>
+          <p className="mt-0.5 text-[10px] text-muted-foreground">
+            What the borrower hears at each phase of the call. Optional.
+          </p>
+        </div>
+        <DirectionToggle value={textDir} onChange={setTextDir} label="Direction" />
       </div>
       <FormField label="Welcome message">
         <textarea
-          dir="auto"
+          dir={textDir}
           value={cfg.welcomeMessage}
           onChange={(e) => set("welcomeMessage", e.target.value)}
           placeholder="This is an important call regarding your account. Please stay on the line."
@@ -642,7 +647,7 @@ function MessagesTab({
       </FormField>
       <FormField label="Loop message">
         <textarea
-          dir="auto"
+          dir={textDir}
           value={cfg.loopMessage}
           onChange={(e) => set("loopMessage", e.target.value)}
           placeholder="Please wait while we connect your call to one of our agents."
@@ -651,7 +656,7 @@ function MessagesTab({
       </FormField>
       <FormField label="Busy message">
         <textarea
-          dir="auto"
+          dir={textDir}
           value={cfg.busyMessage}
           onChange={(e) => set("busyMessage", e.target.value)}
           placeholder="We're sorry, all of our agents are currently unavailable. We'll call you back."

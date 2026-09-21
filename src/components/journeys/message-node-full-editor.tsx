@@ -45,6 +45,7 @@ import {
 import { borrowers, type Borrower } from "@/data/borrowers"
 import { TemplateEditor } from "@/components/templates/template-editor"
 import { NodeAnalyticsTab } from "@/components/journeys/node-analytics-tab"
+import { DirectionToggle, type TextDir } from "@/components/shared/direction-toggle"
 
 type ComposeMode = "template" | "manual"
 
@@ -242,6 +243,7 @@ export function MessageNodeFullEditor({
   const provider = (d.provider as string) ?? "default"
 
   const [tab, setTab] = React.useState<EditorTab>("compose")
+  const [textDir, setTextDir] = React.useState<TextDir>("auto")
   const [templateEditorOpen, setTemplateEditorOpen] = React.useState(false)
   const [htmlBuilderOpen, setHtmlBuilderOpen] = React.useState(false)
   const [previewBorrowerId, setPreviewBorrowerId] = React.useState<string>(
@@ -411,6 +413,16 @@ export function MessageNodeFullEditor({
               </div>
             </div>
 
+            {composeMode === "manual" && (
+              <div className="flex items-center justify-end">
+                <DirectionToggle
+                  value={textDir}
+                  onChange={setTextDir}
+                  label="Direction"
+                />
+              </div>
+            )}
+
             {composeMode === "template" ? (
               <FormField
                 label={
@@ -459,7 +471,7 @@ export function MessageNodeFullEditor({
                       </div>
                       <Input
                         ref={subjectRef}
-                        dir="auto"
+                        dir={textDir}
                         value={manualSubject}
                         onChange={(e) => set("manualSubject", e.target.value)}
                         placeholder="Use {{borrower.first_name}} for personalization"
@@ -491,7 +503,7 @@ export function MessageNodeFullEditor({
                       </div>
                       <textarea
                         ref={htmlBodyRef}
-                        dir="auto"
+                        dir={textDir}
                         value={manualBodyHtml}
                         onChange={(e) => set("manualBodyHtml", e.target.value)}
                         placeholder="<p>Hi {{borrower.first_name}},</p>"
@@ -515,7 +527,7 @@ export function MessageNodeFullEditor({
                       </div>
                       <textarea
                         ref={plainBodyRef}
-                        dir="auto"
+                        dir={textDir}
                         value={manualBodyText}
                         onChange={(e) => set("manualBodyText", e.target.value)}
                         placeholder="Hi {{borrower.first_name}}, ..."
@@ -538,7 +550,7 @@ export function MessageNodeFullEditor({
                     </div>
                     <textarea
                       ref={plainBodyRef}
-                      dir="auto"
+                      dir={textDir}
                       value={manualBodyText}
                       onChange={(e) => set("manualBodyText", e.target.value)}
                       placeholder="Hi {{borrower.first_name}}, your payment of {{borrower.outstanding}} is due..."
