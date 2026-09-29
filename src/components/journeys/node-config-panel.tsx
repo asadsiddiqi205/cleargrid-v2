@@ -32,8 +32,11 @@ import {
   Lock,
   Blocks,
 } from "lucide-react";
-import { getBlockType, getBlockCategory } from "@/data/journeys";
+import { getBlockType, getBlockCategory, getJourneyById } from "@/data/journeys";
 import { cn } from "@/lib/utils";
+import { ContactSelector } from "@/components/shared/contact-selector";
+import { getLenderById, lenderFlag } from "@/data/lenders";
+import { DEFAULT_RECIPIENT_RULE, type RecipientRule } from "@/data/contacts";
 import { getBlockConfigForm } from "@/components/journeys/block-configs";
 import { CallbackHandlingSection } from "@/components/journeys/callback-handling";
 /* Part 4 — real Composer registry, replacing the old hardcoded EMAIL_TEMPLATES / SMS_TEMPLATES arrays */
@@ -1248,7 +1251,10 @@ export function NodeConfigPanel({ node, onClose, onUpdate, onDeleteNode, nodes =
               (d.actionType as "email" | "sms" | "whatsapp"),
             ) && <NodeMessagePreview data={d} />}
 
-            {/* ---- Start AI Call — ClearVoice project picker ---- */}
+            {/* ---- Start AI Call — Recipients + ClearVoice project picker ---- */}
+            {(d.actionType as string) === "call" && (
+              <AICallRecipientsBlock d={d} update={update} journeyId={journeyId} />
+            )}
             {(d.actionType as string) === "call" && (
               <div className="space-y-3">
                 <Section title="Select a ClearVoice Project">
@@ -3278,6 +3284,85 @@ function BorrowerSearchPicker({
 }
 
 /** Minimal mustache-style variable renderer, used only for the preview. */
+/* ─────────── AI Call · Recipients + retry-target rotation (B2B) ─────────── */
+
+function AICallRecipientsBlock({
+  d,
+  update,
+  journeyId,
+}: {
+  d: Record<string, unknown>;
+  update: (field: string, value: unknown) => void;
+  journeyId?: string;
+}) {
+  const lender = getLenderById(getJourneyById(journeyId ?? "")?.lenderId ?? "");
+  const isB2B = lenderFlag(lender, "tamara_b2b_contacts");
+  if (!isB2B) return null;
+  const rule: RecipientRule =
+    (d.recipientRule as RecipientRule) ?? DEFAULT_RECIPIENT_RULE;
+  const retryTarget = (d.retryTarget as string) ?? "same_contact";
+  const options: Array<{ id: string; label: string; hint: string }> = [
+    { id: "same_contact", label: "Same contact", hint: "Retry the same person on the same number." },
+    { id: "next_number_same_contact", label: "Next number of same contact", hint: "Move to that contact's next phone before giving up." },
+    { id: "next_contact_priority_order", label: "Next contact — priority order", hint: "Advance to the next contact in the account by priority rank." },
+    { id: "next_contact_same_designation", label: "Next contact — same designation", hint: "Only advance to another contact whose designation matches this run." },
+  ];
+  const requiresByDesignation = retryTarget === "next_contact_same_designation";
+  const compatible =
+    !requiresByDesignation || rule.mode === "by_designation";
+
+  return (
+    <div className="mt-2 mb-4 rounded-xl border border-primary/40 bg-primary/[0.03] p-4 space-y-3">
+      <ContactSelector
+        value={rule}
+        onChange={(next) => update("recipientRule", next)}
+      />
+      <div className="rounded-md border border-border/60 bg-background/60 p-3">
+        <div className="text-[11px] font-semibold text-foreground">
+          Retry target
+        </div>
+        <p className="mt-0.5 text-[10px] text-muted-foreground">
+          When an attempt does not succeed, who gets the retry.
+        </p>
+        <div className="mt-2 space-y-1">
+          {options.map((o) => (
+            <label
+              key={o.id}
+              className="flex cursor-pointer items-start gap-2 rounded-md border border-border bg-background/60 px-2 py-1.5 text-[11px]"
+            >
+              <input
+                type="radio"
+                checked={retryTarget === o.id}
+                onChange={() => update("retryTarget", o.id)}
+                className="mt-0.5 h-3.5 w-3.5 accent-primary"
+              />
+              <div>
+                <div className="font-medium text-foreground">{o.label}</div>
+                <div className="mt-0.5 text-[9px] text-muted-foreground">
+                  {o.hint}
+                </div>
+              </div>
+            </label>
+          ))}
+        </div>
+        {!compatible && (
+          <div className="mt-2 rounded-md border border-warning-500/40 bg-warning-500/[0.06] px-2 py-1.5 text-[10px] text-warning-300">
+            Rule mode is <span className="font-semibold">{rule.mode.replace("_", " ")}</span>.
+            &quot;Next contact — same designation&quot; only applies when the
+            Recipients rule uses{" "}
+            <span className="font-semibold">By designation</span>.
+          </div>
+        )}
+        <p className="mt-2 text-[10px] text-muted-foreground">
+          Attempts run <span className="text-foreground font-medium">sequentially</span> —
+          the next contact is dialled only after this one&apos;s retries
+          exhaust or its outcome triggers rotation.
+        </p>
+      </div>
+    </div>
+  );
+}
+
 function renderVars(text: string, b: { name: string; phone: string; outstanding: number; product: string }): string {
   if (!text) return ""
   const first = b.name.split(" ")[0] ?? b.name

@@ -55,16 +55,16 @@ export interface CampaignCallMessages {
   busy?: string
 }
 
-export type CampaignContactSlot =
-  | "Contact 1"
-  | "Contact 2"
-  | "Contact 3"
-  | "Contact 4"
-  | "Contact 5"
+/**
+ * Legacy shorthand for consumer phone slots (Contact 1..5). The type is
+ * widened to `string` so B2B campaigns can substitute designation labels
+ * (CEO Office, Finance, …) via CampaignScheduleTab's `contactSlots` prop.
+ */
+export type CampaignContactSlot = string
 
 export interface CampaignRedialRound {
   id: string
-  contacts: CampaignContactSlot[]
+  contacts: string[]
   /** Minutes to wait BEFORE this round starts. Ignored for the first round. */
   waitBeforeMin: number
 }

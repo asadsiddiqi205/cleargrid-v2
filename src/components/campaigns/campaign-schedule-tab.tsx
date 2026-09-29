@@ -44,12 +44,21 @@ const WEEKDAYS: CampaignWeekday[] = [
   "Sun",
 ]
 
-const ALL_CONTACT_SLOTS: CampaignContactSlot[] = [
+const DEFAULT_CONTACT_SLOTS: CampaignContactSlot[] = [
   "Contact 1",
   "Contact 2",
   "Contact 3",
   "Contact 4",
   "Contact 5",
+]
+
+/** Designation-based slots for Tamara B2B campaigns. */
+export const B2B_CONTACT_SLOTS: string[] = [
+  "CEO Office",
+  "Finance",
+  "Admin",
+  "Accounts Payable",
+  "Procurement",
 ]
 
 const WAIT_OPTIONS: Array<{ min: number; label: string }> = [
@@ -66,6 +75,12 @@ interface CampaignScheduleTabProps {
   schedule: CampaignSchedule
   onChange: (next: CampaignSchedule) => void
   /**
+   * Override the contact-slot labels. Defaults to Contact 1..5; the Tamara
+   * B2B path passes designation names (`B2B_CONTACT_SLOTS`) so the redial
+   * builder addresses roles, not numbered phone slots.
+   */
+  contactSlots?: string[]
+  /**
    * "full" (default) renders every section — When-to-run, calling hours,
    * recurring, pause-by-default, redial. "redial-only" hides all the
    * scheduling controls and shows just the redial section — used by the
@@ -80,6 +95,7 @@ export function CampaignScheduleTab({
   schedule,
   onChange,
   mode = "full",
+  contactSlots = DEFAULT_CONTACT_SLOTS,
 }: CampaignScheduleTabProps) {
   const s = mergeSchedule(schedule)
   const set = <K extends keyof CampaignSchedule>(k: K, v: CampaignSchedule[K]) =>
@@ -273,6 +289,7 @@ export function CampaignScheduleTab({
             <RoundSequenceBuilder
               rounds={s.redial.rounds}
               onChange={(rounds) => setRedial("rounds", rounds)}
+              slots={contactSlots}
             />
             <ToggleRow
               className="mt-3"
@@ -303,9 +320,11 @@ export function CampaignScheduleTab({
 function RoundSequenceBuilder({
   rounds,
   onChange,
+  slots,
 }: {
   rounds: CampaignRedialRound[]
   onChange: (next: CampaignRedialRound[]) => void
+  slots: string[]
 }) {
   const nextRoundId = () =>
     `round-${Date.now().toString(36)}-${Math.floor(Math.random() * 999)}`
@@ -358,6 +377,7 @@ function RoundSequenceBuilder({
             key={round.id}
             index={i}
             round={round}
+            slots={slots}
             onRemove={rounds.length > 1 ? () => removeRound(round.id) : undefined}
             onUpdate={(patch) => updateRound(round.id, patch)}
             onReorderContacts={(from, to) =>
@@ -381,17 +401,19 @@ function RoundSequenceBuilder({
 function RoundCard({
   index,
   round,
+  slots,
   onRemove,
   onUpdate,
   onReorderContacts,
 }: {
   index: number
   round: CampaignRedialRound
+  slots: string[]
   onRemove?: () => void
   onUpdate: (patch: Partial<CampaignRedialRound>) => void
   onReorderContacts: (from: number, to: number) => void
 }) {
-  const available = ALL_CONTACT_SLOTS.filter((s) => !round.contacts.includes(s))
+  const available = slots.filter((s) => !round.contacts.includes(s as CampaignContactSlot))
   return (
     <div className="rounded-lg border border-border bg-background/60 p-3">
       <div className="flex items-start justify-between gap-2">
@@ -512,8 +534,8 @@ function AddContactButton({
   available,
   onPick,
 }: {
-  available: CampaignContactSlot[]
-  onPick: (c: CampaignContactSlot) => void
+  available: string[]
+  onPick: (c: string) => void
 }) {
   const [open, setOpen] = React.useState(false)
   if (available.length === 0) return null

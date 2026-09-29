@@ -35,9 +35,16 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { cn } from "@/lib/utils"
-import { CampaignScheduleTab } from "@/components/campaigns/campaign-schedule-tab"
+import {
+  CampaignScheduleTab,
+  B2B_CONTACT_SLOTS,
+} from "@/components/campaigns/campaign-schedule-tab"
 import { NodeAnalyticsTab } from "@/components/journeys/node-analytics-tab"
 import { DirectionToggle, type TextDir } from "@/components/shared/direction-toggle"
+import { ContactSelector } from "@/components/shared/contact-selector"
+import { getLenderById, lenderFlag } from "@/data/lenders"
+import { DEFAULT_RECIPIENT_RULE, type RecipientRule } from "@/data/contacts"
+import { getJourneyById } from "@/data/journeys"
 import {
   DEFAULT_CAMPAIGN_SCHEDULE,
   AGENT_GROUPS,
@@ -77,6 +84,10 @@ interface CampaignConfig {
   sendCondition?: string
   suppressIf?: string
   branchOnDelivery?: boolean
+  /** B2B recipient rule + within-account dial order. Only surfaced when the
+   *  owning lender has `tamara_b2b_contacts` on. */
+  recipientRule?: RecipientRule
+  withinAccountOrder?: "priority_rank" | "designation" | "last_outcome_recency"
 }
 
 function readConfig(data: Record<string, unknown>): CampaignConfig {
@@ -144,6 +155,8 @@ export function HumanCampaignNodeFullEditor({
   const d = (node.data ?? {}) as Record<string, unknown>
   const cfg = readConfig(d)
   const [tab, setTab] = React.useState<TabId>("basics")
+  const outerLender = getLenderById(getJourneyById(journeyId)?.lenderId ?? "")
+  const isB2B = lenderFlag(outerLender, "tamara_b2b_contacts")
 
   const set = <K extends keyof CampaignConfig>(k: K, v: CampaignConfig[K]) => {
     const next: CampaignConfig = { ...cfg, [k]: v }
@@ -230,7 +243,9 @@ export function HumanCampaignNodeFullEditor({
               })}
             </div>
 
-            {tab === "basics" && <BasicsTab cfg={cfg} set={set} />}
+            {tab === "basics" && (
+              <BasicsTab cfg={cfg} set={set} journeyId={journeyId} />
+            )}
             {tab === "messages" && <MessagesTab cfg={cfg} set={set} />}
             {tab === "redial" && (
               <div className="space-y-3">
@@ -245,6 +260,7 @@ export function HumanCampaignNodeFullEditor({
                   mode="redial-only"
                   schedule={cfg.schedule}
                   onChange={(schedule) => set("schedule", schedule)}
+                  contactSlots={isB2B ? B2B_CONTACT_SLOTS : undefined}
                 />
               </div>
             )}
@@ -273,12 +289,49 @@ export function HumanCampaignNodeFullEditor({
 function BasicsTab({
   cfg,
   set,
+  journeyId,
 }: {
   cfg: CampaignConfig
   set: <K extends keyof CampaignConfig>(k: K, v: CampaignConfig[K]) => void
+  journeyId: string
 }) {
+  const lender = getLenderById(getJourneyById(journeyId)?.lenderId ?? "")
+  const isB2B = lenderFlag(lender, "tamara_b2b_contacts")
   return (
     <div className="space-y-4">
+      {isB2B && (
+        <div className="rounded-xl border border-primary/40 bg-primary/[0.03] p-4">
+          <ContactSelector
+            value={cfg.recipientRule ?? DEFAULT_RECIPIENT_RULE}
+            onChange={(next) => set("recipientRule", next)}
+          />
+          <div className="mt-3 border-t border-border/60 pt-3">
+            <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">
+              Within-account dial order
+            </Label>
+            <div className="mt-1.5">
+              <BasicsSelect
+                value={cfg.withinAccountOrder ?? "priority_rank"}
+                onChange={(v) =>
+                  set(
+                    "withinAccountOrder",
+                    v as CampaignConfig["withinAccountOrder"],
+                  )
+                }
+                options={[
+                  "priority_rank",
+                  "designation",
+                  "last_outcome_recency",
+                ]}
+              />
+            </div>
+            <div className="mt-1 text-[10px] text-muted-foreground">
+              Sets how contacts are ordered inside one account before the
+              dialer picks the next one after retries exhaust.
+            </div>
+          </div>
+        </div>
+      )}
       <FormField label="Campaign name">
         <Input
           value={cfg.campaignName}

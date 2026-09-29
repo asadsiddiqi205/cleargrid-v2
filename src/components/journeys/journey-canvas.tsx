@@ -60,6 +60,7 @@ import { NodeConfigPanel } from "@/components/journeys/node-config-panel";
 import { MessageNodeFullEditor } from "@/components/journeys/message-node-full-editor";
 import { HumanCampaignNodeFullEditor } from "@/components/journeys/human-campaign-full-editor";
 import { UseHumanCampaignFullEditor } from "@/components/journeys/use-human-campaign-full-editor";
+import { getLenderById, lenderFlag } from "@/data/lenders";
 import { JourneyGPTPanel } from "@/components/journeys/journey-gpt-panel";
 import { buildBlueprint } from "@/data/journey-blueprints";
 import {
@@ -624,6 +625,11 @@ export default function JourneyCanvas({ journeyId }: JourneyCanvasProps) {
     commandProcessing: false,
     /** Default AI-Call retry policy — overridable per Trigger AI Call node */
     aiCallRetryOnFail: false,
+    /** Tamara B2B — per-contact frequency accounting + caps. */
+    perContactFrequencyCaps: true,
+    perContactCapDay: 2,
+    perContactCapWeek: 5,
+    perAccountCeilingDay: 8,
   });
 
   // Journey-level Exit Triggers (separate from canvas Exit Journey nodes)
@@ -2000,6 +2006,102 @@ export default function JourneyCanvas({ journeyId }: JourneyCanvasProps) {
               />
             </SettingsSection>
 
+            {/* ====== B2B multi-contact rules — Tamara B2B only ====== */}
+            {(() => {
+              const lender = journeyMeta ? getLenderById(journeyMeta.lenderId ?? "") : undefined;
+              const isB2B = lenderFlag(lender, "tamara_b2b_contacts");
+              if (!isB2B) return null;
+              return (
+                <SettingsSection
+                  title="Multi-contact rules · Tamara B2B"
+                  helper="Governs how outreach traverses the contacts on an account. These rules replace the single-contact defaults for this lender."
+                >
+                  <SettingToggle
+                    label="Per-contact frequency caps"
+                    helper="Frequency caps count against each contact independently. When on, the cap you set below applies per contact; when off, the journey falls back to account-wide counting."
+                    checked={journeySettings.perContactFrequencyCaps !== false}
+                    onChange={(val) =>
+                      setJourneySettings({
+                        ...journeySettings,
+                        perContactFrequencyCaps: val,
+                      })
+                    }
+                  />
+                  <div className="mt-3 grid gap-2 sm:grid-cols-3">
+                    <div>
+                      <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                        Max per contact / day
+                      </Label>
+                      <Input
+                        type="number"
+                        min={1}
+                        value={(journeySettings.perContactCapDay as number | undefined) ?? 2}
+                        onChange={(e) =>
+                          setJourneySettings({
+                            ...journeySettings,
+                            perContactCapDay: Number(e.target.value),
+                          })
+                        }
+                        className="mt-1 h-8 text-center text-[12px] tabular-nums"
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                        Max per contact / week
+                      </Label>
+                      <Input
+                        type="number"
+                        min={1}
+                        value={(journeySettings.perContactCapWeek as number | undefined) ?? 5}
+                        onChange={(e) =>
+                          setJourneySettings({
+                            ...journeySettings,
+                            perContactCapWeek: Number(e.target.value),
+                          })
+                        }
+                        className="mt-1 h-8 text-center text-[12px] tabular-nums"
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                        Account ceiling / day
+                      </Label>
+                      <Input
+                        type="number"
+                        min={1}
+                        value={(journeySettings.perAccountCeilingDay as number | undefined) ?? 8}
+                        onChange={(e) =>
+                          setJourneySettings({
+                            ...journeySettings,
+                            perAccountCeilingDay: Number(e.target.value),
+                          })
+                        }
+                        className="mt-1 h-8 text-center text-[12px] tabular-nums"
+                      />
+                    </div>
+                  </div>
+                  <p className="mt-2 text-[10px] text-muted-foreground">
+                    The account ceiling caps the sum across all contacts —
+                    the stricter of per-contact and account applies.
+                  </p>
+                  <div className="mt-4 rounded-md border border-info-500/40 bg-info-500/[0.05] px-3 py-2 text-[10px]">
+                    <div className="font-semibold text-info-300">
+                      Account-level committing-outcome stop
+                    </div>
+                    <p className="mt-1 leading-relaxed text-foreground">
+                      When any contact on an account reaches{" "}
+                      <span className="font-semibold">PTP</span>,{" "}
+                      <span className="font-semibold">Paid</span>, or{" "}
+                      <span className="font-semibold">Dispute raised</span>,
+                      all further outreach across every journey and campaign
+                      stops for that account. Not configurable —
+                      re-activation is a manual admin action.
+                    </p>
+                  </div>
+                </SettingsSection>
+              );
+            })()}
+
             {/* ====== Part 1.6 — Notification settings ====== */}
             <NotificationSettingsSection settings={alertSettings} onChange={setAlertSettings} />
 
@@ -2829,6 +2931,7 @@ export default function JourneyCanvas({ journeyId }: JourneyCanvasProps) {
                     onClose={() => setSelectedNode(null)}
                     journeyId={journeyId}
                     selectedRunId={selectedRunId}
+                    lenderId={journeyMeta?.lenderId}
                   />
                 )
               }

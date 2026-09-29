@@ -46,6 +46,19 @@ import { borrowers, type Borrower } from "@/data/borrowers"
 import { TemplateEditor } from "@/components/templates/template-editor"
 import { NodeAnalyticsTab } from "@/components/journeys/node-analytics-tab"
 import { DirectionToggle, type TextDir } from "@/components/shared/direction-toggle"
+import { ContactSelector } from "@/components/shared/contact-selector"
+import { getLenderById, lenderFlag } from "@/data/lenders"
+import {
+  B2B_ACCOUNTS,
+  DEFAULT_RECIPIENT_RULE,
+  DESIGNATION_LABEL,
+  getAccountContacts,
+  getBusinessName,
+  isB2BAccount,
+  resolveRecipients,
+  type Contact,
+  type RecipientRule,
+} from "@/data/contacts"
 
 type ComposeMode = "template" | "manual"
 
@@ -202,6 +215,8 @@ interface MessageNodeFullEditorProps {
   journeyId?: string
   /** Currently-selected run id from the canvas Analytics chip. */
   selectedRunId?: string | null
+  /** Owning lender — used to gate multi-contact recipient rules. */
+  lenderId?: string
 }
 
 type EditorTab = "compose" | "delivery" | "logic" | "analytics"
@@ -220,6 +235,7 @@ export function MessageNodeFullEditor({
   onClose,
   journeyId,
   selectedRunId,
+  lenderId,
 }: MessageNodeFullEditorProps) {
   const d = (node.data ?? {}) as Record<string, unknown>
   const actionType = (d.actionType as string) ?? "email"
@@ -246,14 +262,42 @@ export function MessageNodeFullEditor({
   const [textDir, setTextDir] = React.useState<TextDir>("auto")
   const [templateEditorOpen, setTemplateEditorOpen] = React.useState(false)
   const [htmlBuilderOpen, setHtmlBuilderOpen] = React.useState(false)
+
+  // B2B multi-contact — hidden unless the owning lender has the flag on.
+  const isB2B = lenderFlag(getLenderById(lenderId ?? ""), "tamara_b2b_contacts")
+  const recipientRule: RecipientRule =
+    (d.recipientRule as RecipientRule) ?? DEFAULT_RECIPIENT_RULE
+  const emailSendMode = (d.emailSendMode as string) ?? "one_per_contact"
+  const contactNameFallback =
+    (d.contactNameFallback as string) ?? "Dear Finance Team"
   const [previewBorrowerId, setPreviewBorrowerId] = React.useState<string>(
-    borrowers[0].id,
+    isB2B ? (B2B_ACCOUNTS[0] ?? borrowers[0].id) : borrowers[0].id,
   )
   const subjectRef = React.useRef<HTMLInputElement>(null!)
   const htmlBodyRef = React.useRef<HTMLTextAreaElement>(null!)
   const plainBodyRef = React.useRef<HTMLTextAreaElement>(null!)
   const previewBorrower =
     borrowers.find((b) => b.id === previewBorrowerId) ?? borrowers[0]
+
+  // Per-contact preview — only relevant when the previewed borrower is a
+  // B2B account. Defaults to the first resolved contact under the current
+  // recipient rule.
+  const previewContacts = React.useMemo<Contact[]>(() => {
+    if (!isB2B || !isB2BAccount(previewBorrower.id)) return []
+    const resolved = resolveRecipients(previewBorrower.id, recipientRule)
+    return resolved.length > 0
+      ? resolved.map((r) => r.contact)
+      : getAccountContacts(previewBorrower.id)
+  }, [isB2B, previewBorrower.id, recipientRule])
+  const [previewContactId, setPreviewContactId] = React.useState<string>("")
+  React.useEffect(() => {
+    if (previewContacts.length === 0) {
+      setPreviewContactId("")
+    } else if (!previewContacts.some((c) => c.id === previewContactId)) {
+      setPreviewContactId(previewContacts[0].id)
+    }
+  }, [previewContacts, previewContactId])
+  const previewContact = previewContacts.find((c) => c.id === previewContactId)
 
   const bodySource =
     composeMode === "manual"
@@ -271,8 +315,13 @@ export function MessageNodeFullEditor({
         ? `Reminder — ${template}`
         : ""
 
-  const renderedBody = renderVars(bodySource, previewBorrower)
-  const renderedSubject = renderVars(subjectSource, previewBorrower)
+  const renderCtx = {
+    contact: previewContact ?? null,
+    contactNameFallback,
+    isB2B: !!isB2B,
+  }
+  const renderedBody = renderVars(bodySource, previewBorrower, renderCtx)
+  const renderedSubject = renderVars(subjectSource, previewBorrower, renderCtx)
 
   const ChannelIcon =
     channel === "email" ? Mail : channel === "sms" ? MessageSquare : MessageCircle
@@ -389,6 +438,73 @@ export function MessageNodeFullEditor({
         {/* Left — form */}
         <div className="overflow-y-auto border-r border-border bg-background p-6">
           <div className="mx-auto max-w-2xl space-y-5">
+            {/* B2B Recipients — only when the owning lender has the flag on */}
+            {isB2B && (
+              <div className="rounded-xl border border-primary/40 bg-primary/[0.03] p-4">
+                <ContactSelector
+                  value={recipientRule}
+                  onChange={(next) => set("recipientRule", next)}
+                />
+                {channel === "email" && (
+                  <div className="mt-3 border-t border-border/60 pt-3">
+                    <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                      Send mode
+                    </div>
+                    <div className="mt-1.5 space-y-1.5">
+                      <label className="flex cursor-pointer items-start gap-2 rounded-md border border-border bg-background/60 px-2 py-1.5 text-[11px]">
+                        <input
+                          type="radio"
+                          checked={emailSendMode === "one_per_contact"}
+                          onChange={() => set("emailSendMode", "one_per_contact")}
+                          className="mt-0.5 h-3.5 w-3.5 accent-primary"
+                        />
+                        <div>
+                          <div className="font-medium text-foreground">
+                            One message per contact
+                          </div>
+                          <div className="mt-0.5 text-[9px] text-muted-foreground">
+                            Personalised per recipient — separate delivery events.
+                          </div>
+                        </div>
+                      </label>
+                      <label className="flex cursor-pointer items-start gap-2 rounded-md border border-border bg-background/60 px-2 py-1.5 text-[11px]">
+                        <input
+                          type="radio"
+                          checked={emailSendMode === "one_with_cc"}
+                          onChange={() => set("emailSendMode", "one_with_cc")}
+                          className="mt-0.5 h-3.5 w-3.5 accent-primary"
+                        />
+                        <div>
+                          <div className="font-medium text-foreground">
+                            One message with additional contacts in CC
+                          </div>
+                          <div className="mt-0.5 text-[9px] text-muted-foreground">
+                            Primary in To, others in CC. Duplicate addresses de-duplicated.
+                          </div>
+                        </div>
+                      </label>
+                    </div>
+                  </div>
+                )}
+                <div className="mt-3 border-t border-border/60 pt-3">
+                  <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                    Fallback for missing contact name
+                  </Label>
+                  <Input
+                    value={contactNameFallback}
+                    onChange={(e) => set("contactNameFallback", e.target.value)}
+                    placeholder="Dear Finance Team"
+                    className="mt-1 h-8 text-[12px]"
+                  />
+                  <div className="mt-1 text-[9px] text-muted-foreground">
+                    Substitutes for{" "}
+                    <span className="font-mono">{"{{contact.first_name}}"}</span>{" "}
+                    when a contact has no known name.
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Mode toggle */}
             <div>
               <Label className="text-[11px] uppercase tracking-wider text-muted-foreground">
@@ -652,20 +768,45 @@ export function MessageNodeFullEditor({
           <div className="sticky top-0">
             <div className="mb-3 flex items-center justify-between">
               <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                Preview · as the borrower received it
+                Preview · as the {isB2B ? "contact" : "borrower"} received it
               </div>
               <select
                 value={previewBorrowerId}
                 onChange={(e) => setPreviewBorrowerId(e.target.value)}
                 className="h-7 rounded border border-input bg-background px-2 text-[11px] outline-none focus-visible:border-ring"
               >
-                {borrowers.slice(0, 20).map((b) => (
-                  <option key={b.id} value={b.id}>
-                    {b.name} — {b.dpdBucket} DPD
-                  </option>
-                ))}
+                {isB2B
+                  ? B2B_ACCOUNTS.map((id) => (
+                      <option key={id} value={id}>
+                        {getBusinessName(id)}
+                      </option>
+                    ))
+                  : borrowers.slice(0, 20).map((b) => (
+                      <option key={b.id} value={b.id}>
+                        {b.name} — {b.dpdBucket} DPD
+                      </option>
+                    ))}
               </select>
             </div>
+            {isB2B && previewContacts.length > 0 && (
+              <div className="mb-3 flex items-center justify-between gap-2 rounded-md border border-border/60 bg-background/60 px-2.5 py-1.5">
+                <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                  Contact
+                </div>
+                <select
+                  value={previewContactId}
+                  onChange={(e) => setPreviewContactId(e.target.value)}
+                  className="h-7 flex-1 rounded border border-input bg-background px-2 text-[11px] outline-none focus-visible:border-ring"
+                >
+                  {previewContacts.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name} · {DESIGNATION_LABEL[c.designation]}
+                      {c.isPrimary ? " · primary" : ""}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
             <MessagePreview
               channel={channel}
               subject={renderedSubject}
@@ -1654,6 +1795,15 @@ const VARIABLES: Array<{ token: string; label: string; group: string }> = [
   { token: "{{ptp_date}}", label: "PTP date", group: "Follow-up" },
   { token: "{{last_agent}}", label: "Last agent", group: "Follow-up" },
   { token: "{{lender.name}}", label: "Lender name", group: "Lender" },
+  // B2B multi-contact — only resolve when the account has a matching contact.
+  { token: "{{contact.first_name}}", label: "First name", group: "Contact" },
+  { token: "{{contact.last_name}}", label: "Last name", group: "Contact" },
+  { token: "{{contact.full_name}}", label: "Full name", group: "Contact" },
+  { token: "{{contact.designation}}", label: "Designation", group: "Contact" },
+  { token: "{{contact.phone}}", label: "Phone", group: "Contact" },
+  { token: "{{contact.email}}", label: "Email", group: "Contact" },
+  { token: "{{business.name}}", label: "Business name", group: "Business" },
+  { token: "{{business.cr_number}}", label: "CR number", group: "Business" },
 ]
 
 export function AddVariableButton({
@@ -1778,10 +1928,18 @@ export function AddVariableButton({
   )
 }
 
-function renderVars(text: string, b: Borrower): string {
+function renderVars(
+  text: string,
+  b: Borrower,
+  ctx?: {
+    contact?: Contact | null
+    contactNameFallback?: string
+    isB2B?: boolean
+  },
+): string {
   if (!text) return ""
   const first = b.name.split(" ")[0] ?? b.name
-  return text
+  let out = text
     .replace(/\{\{\s*borrower\.first_name\s*\}\}/g, first)
     .replace(/\{\{\s*borrower\.name\s*\}\}/g, b.name)
     .replace(/\{\{\s*borrower\.phone\s*\}\}/g, b.phone)
@@ -1789,4 +1947,32 @@ function renderVars(text: string, b: Borrower): string {
     .replace(/\{\{\s*borrower\.product\s*\}\}/g, b.product)
     .replace(/\{\{\s*first_name\s*\}\}/g, first)
     .replace(/\{\{\s*amount\s*\}\}/g, `AED ${b.outstanding.toLocaleString()}`)
+
+  // Contact / business tokens (Tamara B2B). Missing contact falls back to
+  // the configured group greeting string.
+  const c = ctx?.contact ?? null
+  const fallback = ctx?.contactNameFallback ?? "there"
+  const fullName = c?.name ?? fallback
+  const contactFirst = c?.name?.split(" ")[0] ?? fallback
+  const contactLast = c?.name?.split(" ").slice(1).join(" ") ?? ""
+  out = out
+    .replace(/\{\{\s*contact\.first_name\s*\}\}/g, contactFirst)
+    .replace(/\{\{\s*contact\.last_name\s*\}\}/g, contactLast)
+    .replace(/\{\{\s*contact\.full_name\s*\}\}/g, fullName)
+    .replace(
+      /\{\{\s*contact\.designation\s*\}\}/g,
+      c ? DESIGNATION_LABEL[c.designation] : "",
+    )
+    .replace(/\{\{\s*contact\.phone\s*\}\}/g, c?.phones[0]?.e164 ?? "")
+    .replace(/\{\{\s*contact\.email\s*\}\}/g, c?.email ?? "")
+
+  if (ctx?.isB2B) {
+    out = out
+      .replace(/\{\{\s*business\.name\s*\}\}/g, getBusinessName(b.id))
+      .replace(
+        /\{\{\s*business\.cr_number\s*\}\}/g,
+        `CR-${b.id.slice(-6).toUpperCase()}`,
+      )
+  }
+  return out
 }
