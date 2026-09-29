@@ -60,7 +60,7 @@ import { NodeConfigPanel } from "@/components/journeys/node-config-panel";
 import { MessageNodeFullEditor } from "@/components/journeys/message-node-full-editor";
 import { HumanCampaignNodeFullEditor } from "@/components/journeys/human-campaign-full-editor";
 import { UseHumanCampaignFullEditor } from "@/components/journeys/use-human-campaign-full-editor";
-import { getLenderById, lenderFlag } from "@/data/lenders";
+import { useLenderFlag } from "@/hooks/use-lender-flag";
 import { JourneyGPTPanel } from "@/components/journeys/journey-gpt-panel";
 import { buildBlueprint } from "@/data/journey-blueprints";
 import {
@@ -335,6 +335,7 @@ const HISTORY_LIMIT = 50;
 export default function JourneyCanvas({ journeyId }: JourneyCanvasProps) {
   const flow = getJourneyFlow(journeyId);
   const journeyMeta = getJourneyById(journeyId);
+  const journeyIsB2B = useLenderFlag(journeyMeta?.lenderId, "tamara_b2b_contacts");
   const journeyName = journeyMeta?.name ?? "New Journey";
 
   const [nodes, setNodes, onNodesChange] = useNodesState(flow.nodes);
@@ -2007,11 +2008,7 @@ export default function JourneyCanvas({ journeyId }: JourneyCanvasProps) {
             </SettingsSection>
 
             {/* ====== B2B multi-contact rules — Tamara B2B only ====== */}
-            {(() => {
-              const lender = journeyMeta ? getLenderById(journeyMeta.lenderId ?? "") : undefined;
-              const isB2B = lenderFlag(lender, "tamara_b2b_contacts");
-              if (!isB2B) return null;
-              return (
+            {journeyIsB2B && (
                 <SettingsSection
                   title="Multi-contact rules · Tamara B2B"
                   helper="Governs how outreach traverses the contacts on an account. These rules replace the single-contact defaults for this lender."
@@ -2099,8 +2096,7 @@ export default function JourneyCanvas({ journeyId }: JourneyCanvasProps) {
                     </p>
                   </div>
                 </SettingsSection>
-              );
-            })()}
+            )}
 
             {/* ====== Part 1.6 — Notification settings ====== */}
             <NotificationSettingsSection settings={alertSettings} onChange={setAlertSettings} />

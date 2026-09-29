@@ -40,6 +40,15 @@ import { Label } from "@/components/ui/label"
 import { cn } from "@/lib/utils"
 import { borrowers, type Borrower } from "@/data/borrowers"
 import { synthesizeTrace } from "@/data/borrower-traces"
+import { getJourneyFlow, getJourneyById } from "@/data/journeys"
+import {
+  DEFAULT_RECIPIENT_RULE,
+  resolveRecipients,
+  B2B_ACCOUNTS,
+  type RecipientRule,
+} from "@/data/contacts"
+import { useLenderFlag } from "@/hooks/use-lender-flag"
+import { AlertTriangle } from "lucide-react"
 
 interface AudienceRow {
   borrower: Borrower
@@ -157,6 +166,15 @@ export default function JourneyValidatorPage() {
     router.push(`/journeys/${journeyId}?trace=${borrowerId}`)
   }
 
+  const isB2B = useLenderFlag(
+    getJourneyById(journeyId)?.lenderId,
+    "tamara_b2b_contacts",
+  )
+  const recipientFindings = React.useMemo(
+    () => (isB2B ? scanRecipientRules(journeyId) : []),
+    [isB2B, journeyId],
+  )
+
   return (
     <div className="flex flex-col">
       <JourneySubNav journeyId={journeyId} />
@@ -165,6 +183,36 @@ export default function JourneyValidatorPage() {
         description="Snapshot the entry-segment audience, then compare each borrower's executed path against the prediction — node by node, branch by branch. Read-only: this tool never runs the journey."
       >
         <div className="space-y-4">
+          {isB2B && recipientFindings.length > 0 && (
+            <div className="rounded-xl border border-warning-500/40 bg-warning-500/[0.06] p-3">
+              <div className="flex items-center gap-1.5 text-[11px] font-semibold text-warning-300">
+                <ShieldAlert className="h-3.5 w-3.5" />
+                Recipient rules · {recipientFindings.length} finding
+                {recipientFindings.length === 1 ? "" : "s"}
+              </div>
+              <ul className="mt-2 space-y-1.5">
+                {recipientFindings.map((f, i) => (
+                  <li
+                    key={i}
+                    className={cn(
+                      "flex items-start gap-2 rounded-md border px-2.5 py-1.5 text-[11px]",
+                      f.severity === "error"
+                        ? "border-error-500/40 bg-error-500/[0.05] text-error-300"
+                        : "border-warning-500/40 bg-warning-500/[0.05] text-warning-300",
+                    )}
+                  >
+                    <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
+                    <div className="min-w-0 flex-1">
+                      <div className="font-medium text-foreground">
+                        {f.nodeLabel}
+                      </div>
+                      <div className="mt-0.5">{f.message}</div>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
           <p className="text-[11px] leading-relaxed text-muted-foreground">
             <span className="rounded bg-primary/10 px-1 py-px font-medium text-primary">
               Fetch Audience
@@ -559,3 +607,83 @@ function hash(s: string): number {
 function dealIdFor(b: Borrower, i: number): string {
   return `deal-${b.id.slice(-4)}-${(hash(b.id) % 9000) + 1000 + i}`
 }
+
+/**
+ * B2B recipient-rule check. Walks every node on the journey with a
+ * `recipientRule` and flags:
+ *   error   — rule resolves to zero contacts on every sample account.
+ *   warn    — contact.* tokens are used with primary_only (contact
+ *             fallback to fallback string works but is noisy).
+ *   warn    — retryTarget=next_contact_same_designation but the rule
+ *             isn't by_designation (already surfaced on the node UI,
+ *             also flagged here so authors don't miss it in review).
+ */
+interface RecipientFinding {
+  severity: "error" | "warn"
+  nodeLabel: string
+  message: string
+}
+
+function scanRecipientRules(journeyId: string): RecipientFinding[] {
+  const flow = getJourneyFlow(journeyId)
+  if (!flow) return []
+  const findings: RecipientFinding[] = []
+  const sampleAccounts = B2B_ACCOUNTS.slice(0, 5)
+
+  for (const n of flow.nodes) {
+    const d = (n.data ?? {}) as Record<string, unknown>
+    const label = (d.label as string) ?? n.id
+    const rule = d.recipientRule as RecipientRule | undefined
+    if (!rule) continue
+
+    // Resolve against a small sample cohort — if every account returns 0,
+    // this rule will effectively silence the node for that portfolio.
+    const resolvedCounts = sampleAccounts.map(
+      (a) => resolveRecipients(a, rule).length,
+    )
+    if (resolvedCounts.every((n) => n === 0)) {
+      findings.push({
+        severity: "error",
+        nodeLabel: label,
+        message: `Recipient rule resolves to zero contacts across the sample audience. Every attempt from this node will be skipped. Fix the rule or set fallback to Use primary.`,
+      })
+    }
+
+    // Retry target mismatch — mirrors the AI Call node's inline warning.
+    const retryTarget = d.retryTarget as string | undefined
+    if (
+      retryTarget === "next_contact_same_designation" &&
+      rule.mode !== "by_designation"
+    ) {
+      findings.push({
+        severity: "warn",
+        nodeLabel: label,
+        message: `Retry target "Next contact — same designation" is set but the recipient rule mode is "${rule.mode}". Rotation will never advance to another contact. Switch the mode to By designation or pick a different retry target.`,
+      })
+    }
+
+    // Contact merge tag on a primary-only rule — technically works, but
+    // authors should know a single-contact plan is dressed as multi-contact.
+    const bodyBlob = [
+      d.manualSubject,
+      d.manualBodyText,
+      d.manualBodyHtml,
+      d.welcomeMessage,
+      d.loopMessage,
+      d.busyMessage,
+    ]
+      .filter((x) => typeof x === "string")
+      .join("\n")
+    const usesContactTags = /\{\{\s*contact\.[a-z_]+\s*\}\}/.test(bodyBlob)
+    if (usesContactTags && rule.mode === "primary_only") {
+      findings.push({
+        severity: "warn",
+        nodeLabel: label,
+        message: `Body uses {{contact.*}} tags but the recipient rule targets only the primary. All contacts collapse to one — consider By designation or All contacts if you meant multi-recipient outreach.`,
+      })
+    }
+  }
+
+  return findings
+}
+export {} // ensure this file stays a module

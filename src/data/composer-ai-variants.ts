@@ -207,16 +207,27 @@ export const whatsappTemplates: WhatsAppTemplate[] = [
 ]
 
 // Common tokens available in the "Add variable" menu (legacy)
-export const availableTokens: { token: string; label: string }[] = [
+export const availableTokens: { token: string; label: string; resolveAt?: "enrol" | "send" }[] = [
   { token: "{{borrower_name}}", label: "Borrower name" },
-  { token: "{{amount_due}}", label: "Amount due" },
+  { token: "{{amount_due}}", label: "Amount due", resolveAt: "send" },
   { token: "{{due_date}}", label: "Due date" },
   { token: "{{account_number}}", label: "Account number" },
   { token: "{{payment_link}}", label: "Payment link" },
-  { token: "{{days_past_due}}", label: "Days past due" },
+  { token: "{{days_past_due}}", label: "Days past due", resolveAt: "send" },
   { token: "{{contact_number}}", label: "Contact number" },
   { token: "{{agent_name}}", label: "Agent name" },
   { token: "{{lender_name}}", label: "Lender name" },
+  { token: "{{outstanding}}", label: "Outstanding balance", resolveAt: "send" },
+  { token: "{{cut_off_balance}}", label: "Cut-off balance", resolveAt: "send" },
+  // Tamara B2B multi-contact tokens.
+  { token: "{{contact.first_name}}", label: "Contact · first name" },
+  { token: "{{contact.last_name}}", label: "Contact · last name" },
+  { token: "{{contact.full_name}}", label: "Contact · full name" },
+  { token: "{{contact.designation}}", label: "Contact · designation" },
+  { token: "{{contact.phone}}", label: "Contact · phone" },
+  { token: "{{contact.email}}", label: "Contact · email" },
+  { token: "{{business.name}}", label: "Business name" },
+  { token: "{{business.cr_number}}", label: "Business · CR number" },
 ]
 
 // ---------- Execution-level scoped merge variables (Khalil model) ----------

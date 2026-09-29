@@ -31,7 +31,11 @@ import {
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { cn } from "@/lib/utils"
-import { CampaignScheduleTab } from "@/components/campaigns/campaign-schedule-tab"
+import {
+  CampaignScheduleTab,
+  B2B_CONTACT_SLOTS,
+} from "@/components/campaigns/campaign-schedule-tab"
+import { getLenderById, lenderFlag } from "@/data/lenders"
 import { NodeAnalyticsTab } from "@/components/journeys/node-analytics-tab"
 import {
   DEFAULT_CAMPAIGN_SCHEDULE,
@@ -534,6 +538,11 @@ function RedialOverrideTab({
           redial,
           redialEnabled: redial.enabled,
         }}
+        contactSlots={
+          lenderFlag(getLenderById(source.lenderId), "tamara_b2b_contacts")
+            ? B2B_CONTACT_SLOTS
+            : undefined
+        }
         onChange={(next) => {
           onChange({ ...next.redial, enabled: next.redialEnabled })
         }}

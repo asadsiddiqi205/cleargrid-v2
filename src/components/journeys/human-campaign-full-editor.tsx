@@ -43,6 +43,7 @@ import { NodeAnalyticsTab } from "@/components/journeys/node-analytics-tab"
 import { DirectionToggle, type TextDir } from "@/components/shared/direction-toggle"
 import { ContactSelector } from "@/components/shared/contact-selector"
 import { getLenderById, lenderFlag } from "@/data/lenders"
+import { useLenderFlag } from "@/hooks/use-lender-flag"
 import { DEFAULT_RECIPIENT_RULE, type RecipientRule } from "@/data/contacts"
 import { getJourneyById } from "@/data/journeys"
 import {
@@ -155,8 +156,7 @@ export function HumanCampaignNodeFullEditor({
   const d = (node.data ?? {}) as Record<string, unknown>
   const cfg = readConfig(d)
   const [tab, setTab] = React.useState<TabId>("basics")
-  const outerLender = getLenderById(getJourneyById(journeyId)?.lenderId ?? "")
-  const isB2B = lenderFlag(outerLender, "tamara_b2b_contacts")
+  const isB2B = useLenderFlag(getJourneyById(journeyId)?.lenderId, "tamara_b2b_contacts")
 
   const set = <K extends keyof CampaignConfig>(k: K, v: CampaignConfig[K]) => {
     const next: CampaignConfig = { ...cfg, [k]: v }
@@ -295,8 +295,7 @@ function BasicsTab({
   set: <K extends keyof CampaignConfig>(k: K, v: CampaignConfig[K]) => void
   journeyId: string
 }) {
-  const lender = getLenderById(getJourneyById(journeyId)?.lenderId ?? "")
-  const isB2B = lenderFlag(lender, "tamara_b2b_contacts")
+  const isB2B = useLenderFlag(getJourneyById(journeyId)?.lenderId, "tamara_b2b_contacts")
   return (
     <div className="space-y-4">
       {isB2B && (

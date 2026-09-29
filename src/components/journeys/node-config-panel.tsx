@@ -35,7 +35,7 @@ import {
 import { getBlockType, getBlockCategory, getJourneyById } from "@/data/journeys";
 import { cn } from "@/lib/utils";
 import { ContactSelector } from "@/components/shared/contact-selector";
-import { getLenderById, lenderFlag } from "@/data/lenders";
+import { useLenderFlag } from "@/hooks/use-lender-flag";
 import { DEFAULT_RECIPIENT_RULE, type RecipientRule } from "@/data/contacts";
 import { getBlockConfigForm } from "@/components/journeys/block-configs";
 import { CallbackHandlingSection } from "@/components/journeys/callback-handling";
@@ -3295,8 +3295,10 @@ function AICallRecipientsBlock({
   update: (field: string, value: unknown) => void;
   journeyId?: string;
 }) {
-  const lender = getLenderById(getJourneyById(journeyId ?? "")?.lenderId ?? "");
-  const isB2B = lenderFlag(lender, "tamara_b2b_contacts");
+  const isB2B = useLenderFlag(
+    getJourneyById(journeyId ?? "")?.lenderId,
+    "tamara_b2b_contacts",
+  );
   if (!isB2B) return null;
   const rule: RecipientRule =
     (d.recipientRule as RecipientRule) ?? DEFAULT_RECIPIENT_RULE;

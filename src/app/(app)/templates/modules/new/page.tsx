@@ -48,6 +48,7 @@ const KIND_ICON: Record<SavedModuleKind, typeof PanelTop> = {
   payment_cta: CircleDollarSign,
   compliance: ShieldCheck,
   greeting: Smile,
+  payment_details: CircleDollarSign,
 }
 
 type Primitive = "text" | "image" | "button" | "divider" | "html"

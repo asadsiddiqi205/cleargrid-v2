@@ -47,7 +47,7 @@ import { TemplateEditor } from "@/components/templates/template-editor"
 import { NodeAnalyticsTab } from "@/components/journeys/node-analytics-tab"
 import { DirectionToggle, type TextDir } from "@/components/shared/direction-toggle"
 import { ContactSelector } from "@/components/shared/contact-selector"
-import { getLenderById, lenderFlag } from "@/data/lenders"
+import { useLenderFlag } from "@/hooks/use-lender-flag"
 import {
   B2B_ACCOUNTS,
   DEFAULT_RECIPIENT_RULE,
@@ -264,7 +264,7 @@ export function MessageNodeFullEditor({
   const [htmlBuilderOpen, setHtmlBuilderOpen] = React.useState(false)
 
   // B2B multi-contact — hidden unless the owning lender has the flag on.
-  const isB2B = lenderFlag(getLenderById(lenderId ?? ""), "tamara_b2b_contacts")
+  const isB2B = useLenderFlag(lenderId, "tamara_b2b_contacts")
   const recipientRule: RecipientRule =
     (d.recipientRule as RecipientRule) ?? DEFAULT_RECIPIENT_RULE
   const emailSendMode = (d.emailSendMode as string) ?? "one_per_contact"
@@ -1782,15 +1782,16 @@ function TemplateRow({
 
 /* ─────────── Add-variable popover ─────────── */
 
-const VARIABLES: Array<{ token: string; label: string; group: string }> = [
+const VARIABLES: Array<{ token: string; label: string; group: string; resolveAt?: "enrol" | "send" }> = [
   { token: "{{borrower.first_name}}", label: "First name", group: "Borrower" },
   { token: "{{borrower.name}}", label: "Full name", group: "Borrower" },
   { token: "{{borrower.phone}}", label: "Phone", group: "Borrower" },
   { token: "{{borrower.email}}", label: "Email", group: "Borrower" },
   { token: "{{borrower.product}}", label: "Product", group: "Borrower" },
   { token: "{{borrower.dpd}}", label: "DPD", group: "Borrower" },
-  { token: "{{borrower.outstanding}}", label: "Outstanding balance", group: "Financial" },
-  { token: "{{amount}}", label: "Amount due", group: "Financial" },
+  { token: "{{borrower.outstanding}}", label: "Outstanding balance", group: "Financial", resolveAt: "send" },
+  { token: "{{amount}}", label: "Amount due", group: "Financial", resolveAt: "send" },
+  { token: "{{cut_off_balance}}", label: "Cut-off balance", group: "Financial", resolveAt: "send" },
   { token: "{{payment_link}}", label: "Payment link", group: "Financial" },
   { token: "{{ptp_date}}", label: "PTP date", group: "Follow-up" },
   { token: "{{last_agent}}", label: "Last agent", group: "Follow-up" },
@@ -1913,6 +1914,14 @@ export function AddVariableButton({
                       <span className="flex-1 truncate text-[11px] text-foreground">
                         {v.label}
                       </span>
+                      {v.resolveAt === "send" && (
+                        <span
+                          title="Resolves at send time — always shows the latest daily balance."
+                          className="rounded bg-warning-500/15 px-1 py-px text-[8px] font-medium uppercase tracking-wider text-warning-300"
+                        >
+                          at send
+                        </span>
+                      )}
                       <span className="font-mono text-[9px] text-muted-foreground">
                         {v.token.replace(/[{}]/g, "")}
                       </span>

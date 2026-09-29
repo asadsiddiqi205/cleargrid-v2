@@ -13,7 +13,13 @@
  *  - greeting — reusable salutation block
  */
 
-export type SavedModuleKind = "header" | "footer" | "payment_cta" | "compliance" | "greeting"
+export type SavedModuleKind =
+  | "header"
+  | "footer"
+  | "payment_cta"
+  | "compliance"
+  | "greeting"
+  | "payment_details"
 
 export interface SavedModule {
   id: string
@@ -180,6 +186,37 @@ export const savedModules: SavedModule[] = [
     updatedAt: "2026-06-08T09:00:00Z",
     updatedBy: "Khalil Ahmed",
   },
+  /* ─── Payment details block (Tamara B2B) ───────────────────────
+   * Sent to the current contact on demand from AI Call transcripts
+   * or agent actions. Values resolve from the lender's config, not
+   * per-account — Tamara B2B has one payment endpoint. */
+  {
+    id: "sm-tamara-b2b-payment-details",
+    name: "Tamara B2B · Payment details",
+    kind: "payment_details",
+    lenderId: "lnd-tamara-b2b",
+    locked: true,
+    description:
+      "IBAN, bank name, beneficiary and reference for Tamara B2B merchant settlements. Send from an AI Call transcript or agent action to the current contact.",
+    previewHtml: `
+<div style="background:#F8FAFC;border:1px solid #E2E8F0;border-radius:12px;padding:16px 20px;font-family:-apple-system,Inter,system-ui,sans-serif;">
+  <div style="font-size:11px;font-weight:600;color:#64748B;text-transform:uppercase;letter-spacing:0.14em;">Payment details</div>
+  <div style="margin-top:8px;display:grid;grid-template-columns:110px 1fr;gap:6px;font-size:13px;color:#0F172A;">
+    <div style="color:#64748B;">Beneficiary</div><div style="font-weight:600;">Tamara Finance Ltd.</div>
+    <div style="color:#64748B;">Bank</div><div>Mashreq Bank PSC · Dubai</div>
+    <div style="color:#64748B;">IBAN</div><div style="font-family:ui-monospace,monospace;">AE07 0331 2345 6789 0123 456</div>
+    <div style="color:#64748B;">SWIFT</div><div style="font-family:ui-monospace,monospace;">BOMLAEAD</div>
+    <div style="color:#64748B;">Reference</div><div style="font-family:ui-monospace,monospace;">{{business.cr_number}}</div>
+  </div>
+  <div style="margin-top:10px;padding-top:10px;border-top:1px solid #E2E8F0;font-size:11px;color:#475569;">
+    Use the reference exactly as shown so the payment matches your account automatically.
+  </div>
+</div>`.trim(),
+    usedByCount: 0,
+    status: "active",
+    updatedAt: "2026-09-15T09:00:00Z",
+    updatedBy: "Rabab Abbas",
+  },
 ]
 
 export function getSavedModuleById(id: string): SavedModule | undefined {
@@ -192,4 +229,5 @@ export const MODULE_KIND_LABEL: Record<SavedModuleKind, string> = {
   payment_cta: "Payment CTA",
   compliance: "Compliance",
   greeting: "Greeting",
+  payment_details: "Payment Details",
 }

@@ -26,6 +26,7 @@ import {
 } from "@/components/ui/collapsible";
 import { navGroups } from "./nav-config";
 import { ThemeToggle } from "./theme-toggle";
+import { DemoModeToggle } from "./demo-mode-toggle";
 import { ClearGridLogo, ClearGridIcon } from "./cleargrid-logo";
 
 export function AppSidebar() {
@@ -96,6 +97,7 @@ export function AppSidebar() {
       </SidebarContent>
 
       <SidebarFooter className="border-t border-sidebar-border p-3">
+        <DemoModeToggle />
         <div className="flex items-center gap-2 group-data-[collapsible=icon]:justify-center">
           <Avatar className="h-7 w-7">
             <AvatarFallback className="bg-primary/20 text-primary text-xs">RA</AvatarFallback>

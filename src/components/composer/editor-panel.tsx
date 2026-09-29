@@ -86,6 +86,9 @@ import { AiAssistPanel, AI_ASSIST_ACTIONS } from "@/components/composer/ai-assis
 import { SenderProfilePicker } from "@/components/composer/sender-profile-picker"
 import { VariationsPanel } from "@/components/composer/variations-panel"
 import { DirectionToggle, type TextDir } from "@/components/shared/direction-toggle"
+import { ContactSelector } from "@/components/shared/contact-selector"
+import { useLenderFlag } from "@/hooks/use-lender-flag"
+import { DEFAULT_RECIPIENT_RULE, type RecipientRule } from "@/data/contacts"
 import { richEmailTemplates } from "@/data/rich-email-templates"
 import { playbooks, type Playbook } from "@/data/playbooks"
 
@@ -119,6 +122,15 @@ export function EditorPanel({ state, update }: EditorPanelProps) {
   const [activePlaybook, setActivePlaybook] = React.useState<Playbook | null>(null)
   const [playbookDropdownOpen, setPlaybookDropdownOpen] = React.useState(false)
   const [textDir, setTextDir] = React.useState<TextDir>("auto")
+  // Composer has no lender context, so the demo-mode override is the only
+  // driver here. When on, recipient rule + send mode + Contact merge tags
+  // become available.
+  const isB2B = useLenderFlag(undefined, "tamara_b2b_contacts")
+  const [recipientRule, setRecipientRule] =
+    React.useState<RecipientRule>(DEFAULT_RECIPIENT_RULE)
+  const [emailSendMode, setEmailSendMode] = React.useState<
+    "one_per_contact" | "one_with_cc"
+  >("one_per_contact")
 
   // Update draft timestamp 2s after any content change
   const contentSignature = `${state.body}|${state.smsBody}|${state.subject}`
@@ -521,6 +533,53 @@ export function EditorPanel({ state, update }: EditorPanelProps) {
             <VariationsPanel state={state} update={update}>
               <ActiveVariationSenderPicker state={state} update={update} />
               <div className="space-y-4">
+              {isB2B && (
+                <div className="rounded-xl border border-primary/40 bg-primary/[0.03] p-4">
+                  <ContactSelector
+                    value={recipientRule}
+                    onChange={setRecipientRule}
+                  />
+                  <div className="mt-3 border-t border-border/60 pt-3">
+                    <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                      Send mode
+                    </div>
+                    <div className="mt-1.5 space-y-1.5">
+                      <label className="flex cursor-pointer items-start gap-2 rounded-md border border-border bg-background/60 px-2 py-1.5 text-[11px]">
+                        <input
+                          type="radio"
+                          checked={emailSendMode === "one_per_contact"}
+                          onChange={() => setEmailSendMode("one_per_contact")}
+                          className="mt-0.5 h-3.5 w-3.5 accent-primary"
+                        />
+                        <div>
+                          <div className="font-medium text-foreground">
+                            One message per contact
+                          </div>
+                          <div className="mt-0.5 text-[9px] text-muted-foreground">
+                            Personalised per recipient — separate delivery events.
+                          </div>
+                        </div>
+                      </label>
+                      <label className="flex cursor-pointer items-start gap-2 rounded-md border border-border bg-background/60 px-2 py-1.5 text-[11px]">
+                        <input
+                          type="radio"
+                          checked={emailSendMode === "one_with_cc"}
+                          onChange={() => setEmailSendMode("one_with_cc")}
+                          className="mt-0.5 h-3.5 w-3.5 accent-primary"
+                        />
+                        <div>
+                          <div className="font-medium text-foreground">
+                            One message with additional contacts in CC
+                          </div>
+                          <div className="mt-0.5 text-[9px] text-muted-foreground">
+                            Primary in To, others in CC. Duplicate addresses de-duplicated.
+                          </div>
+                        </div>
+                      </label>
+                    </div>
+                  </div>
+                </div>
+              )}
               {/* Three-mode selector */}
               <EmailModeSelector
                 mode={state.emailMode}
@@ -646,6 +705,14 @@ export function EditorPanel({ state, update }: EditorPanelProps) {
           {/* ---- SMS ---- */}
           {state.channel === "sms" && (
             <div className="space-y-3">
+              {isB2B && (
+                <div className="rounded-xl border border-primary/40 bg-primary/[0.03] p-4">
+                  <ContactSelector
+                    value={recipientRule}
+                    onChange={setRecipientRule}
+                  />
+                </div>
+              )}
               <div className="flex items-center justify-end gap-2">
                 <DirectionToggle value={textDir} onChange={setTextDir} label="Direction" />
                 <CreateJourneyDropdown channel="sms" templateName="Composer SMS Draft" />
@@ -1041,8 +1108,16 @@ function EditorToolbar({
             availableTokens.map((t) => (
               <DropdownMenuItem key={t.token} onClick={() => onInsertToken(t.token)}>
                 <span className="font-mono text-xs text-primary">{t.token}</span>
-                <span className="ml-auto text-[11px] text-muted-foreground">
+                <span className="ml-auto flex items-center gap-1.5 text-[11px] text-muted-foreground">
                   {t.label}
+                  {t.resolveAt === "send" && (
+                    <span
+                      title="Resolves at send time — always shows the latest daily balance."
+                      className="rounded bg-warning-500/15 px-1 py-px text-[9px] font-medium uppercase tracking-wider text-warning-300"
+                    >
+                      at send
+                    </span>
+                  )}
                 </span>
               </DropdownMenuItem>
             ))
