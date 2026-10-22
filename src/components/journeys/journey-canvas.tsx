@@ -196,6 +196,46 @@ import {
 /*  Node types registry                                               */
 /* ------------------------------------------------------------------ */
 
+/**
+ * Deep-clone a node's `data` object so a duplicate shares no object
+ * references with its source. Uses structuredClone when available
+ * (modern browsers + Node 17+), falls back to JSON for the demo.
+ */
+function deepCloneData(data: Record<string, unknown>): Record<string, unknown> {
+  try {
+    if (typeof structuredClone === "function") return structuredClone(data) as Record<string, unknown>
+  } catch {
+    /* fall through */
+  }
+  return JSON.parse(JSON.stringify(data)) as Record<string, unknown>
+}
+
+/**
+ * Returns true when the given palette `blockType` is currently hidden by the
+ * untested-nodes feature flag. Kept here (not inside the component) so the
+ * duplicate helper can query it before cloning a hidden-type node.
+ */
+function isHiddenBlockFlag(blockType: string | undefined): boolean {
+  if (!blockType) return false
+  // Read the flag at call time so toggle changes take effect immediately.
+  if (typeof window === "undefined") return false
+  try {
+    const raw = window.localStorage.getItem("cg_untested_nodes_hidden")
+    const hidden = raw ? (JSON.parse(raw) as boolean) : true
+    if (!hidden) return false
+  } catch {
+    return false
+  }
+  return UNTESTED_BLOCK_TYPES.has(blockType)
+}
+
+export const UNTESTED_BLOCK_TYPES = new Set<string>([
+  "inbound_message_trigger",
+  "incoming_call_trigger",
+  "whatsapp_ott",
+  "send_slack",
+])
+
 const nodeTypes = {
   trigger: TriggerNode,
   condition: ConditionNode,
@@ -701,6 +741,97 @@ export default function JourneyCanvas({ journeyId }: JourneyCanvasProps) {
     toast.info("Node deleted")
   }, [selectedNode, setNodes, setEdges])
 
+  /* ---------- duplicate selected node(s) ---------- */
+  // Right-click context menu state. One menu per canvas; shown next to the
+  // node the user right-clicked. `targetId` controls which nodes get copied
+  // if the user picks "Duplicate" from the menu while something else is
+  // currently in the multi-selection.
+  const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; targetId: string } | null>(null)
+
+  const duplicateNodes = React.useCallback(
+    (ids: string[]) => {
+      if (ids.length === 0) return
+      const idSet = new Set(ids)
+      // Block duplication while any hidden-block feature flag is off and the
+      // selection contains such a node. See hideUntestedNodes feature flag.
+      const nowNodes = nodes
+      const selected = nowNodes.filter((n) => idSet.has(n.id))
+      if (selected.length === 0) return
+      // Guard: don't let authors clone an inner child of a component instance
+      // (they're managed by the master).
+      const anyChildOfInstance = selected.some(
+        (n) => (n.data as { _componentInstance?: unknown })?._componentInstance,
+      )
+      if (anyChildOfInstance) {
+        toast.warning("Can't duplicate nodes inside a component instance.")
+        return
+      }
+      // Guard: block duplication of hidden-flag nodes. See hideUntestedNodes.
+      const blockedByFlag = selected.filter((n) => isHiddenBlockFlag((n.data as { blockType?: string })?.blockType))
+      if (blockedByFlag.length > 0) {
+        toast.warning(
+          `Can't duplicate ${blockedByFlag[0].data && (blockedByFlag[0].data as { label?: string }).label} — this node type is temporarily disabled.`,
+        )
+        return
+      }
+
+      // Mint a unique id per original id; deep-copy data so no object
+      // references are shared with the originals.
+      const idMap = new Map<string, string>()
+      const stamp = Date.now().toString(36)
+      let n = 0
+      for (const node of selected) {
+        idMap.set(node.id, `${node.id}__copy_${stamp}_${n++}`)
+      }
+      const copies: Node[] = selected.map((node) => {
+        const newId = idMap.get(node.id)!
+        const dataCopy = deepCloneData((node.data ?? {}) as Record<string, unknown>)
+        const nextLabel =
+          typeof dataCopy.label === "string"
+            ? `${dataCopy.label} (copy)`
+            : dataCopy.label
+        if (nextLabel !== undefined) dataCopy.label = nextLabel
+        // Reset any transient _componentInstance marker so duplicates aren't
+        // mistakenly treated as live children of some other master.
+        if ("_componentInstance" in dataCopy) delete dataCopy._componentInstance
+        return {
+          ...node,
+          id: newId,
+          position: {
+            x: (node.position?.x ?? 0) + 40,
+            y: (node.position?.y ?? 0) + 40,
+          },
+          data: dataCopy as Record<string, unknown>,
+          selected: true,
+        } as Node
+      })
+
+      // For multi-select: re-create only edges whose source AND target are
+      // both inside the selection, remapped to the new ids.
+      const copiedEdges: Edge[] = ids.length > 1
+        ? edges
+            .filter((e) => idSet.has(e.source) && idSet.has(e.target))
+            .map((e) => ({
+              ...e,
+              id: `${e.id}__copy_${stamp}`,
+              source: idMap.get(e.source)!,
+              target: idMap.get(e.target)!,
+            }))
+        : []
+
+      pushHistory(nowNodes, edges)
+      setNodes((cur) => [
+        ...cur.map((n) => ({ ...n, selected: false })),
+        ...(copies as Node[]),
+      ])
+      if (copiedEdges.length > 0) setEdges((cur) => [...cur, ...copiedEdges])
+      setSelectedNodeIds(copies.map((c) => c.id))
+      setSelectedNode(copies[0] ?? null)
+      toast.success(copies.length === 1 ? "Node duplicated" : `Duplicated ${copies.length} nodes`)
+    },
+    [nodes, edges, pushHistory, setNodes, setEdges],
+  )
+
   // Keyboard: Cmd+Z / Cmd+Shift+Z
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -725,10 +856,20 @@ export default function JourneyCanvas({ journeyId }: JourneyCanvasProps) {
         e.preventDefault();
         deleteSelectedNode();
       }
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "d") {
+        e.preventDefault();
+        const ids =
+          selectedNodeIds.length > 0
+            ? selectedNodeIds
+            : selectedNode
+              ? [selectedNode.id]
+              : [];
+        if (ids.length > 0) duplicateNodes(ids);
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [undo, redo, selectedNode, deleteSelectedNode]);
+  }, [undo, redo, selectedNode, selectedNodeIds, deleteSelectedNode, duplicateNodes]);
 
   /* ---------- connections ---------- */
   const onConnect = useCallback(
@@ -2471,6 +2612,11 @@ export default function JourneyCanvas({ journeyId }: JourneyCanvasProps) {
             }}
             onDrop={onDrop}
             onDragOver={onDragOver}
+            onNodeContextMenu={(e, node) => {
+              e.preventDefault();
+              setCtxMenu({ x: e.clientX, y: e.clientY, targetId: node.id });
+            }}
+            onPaneContextMenu={() => setCtxMenu(null)}
             onInit={(instance) => {
               rfInstance.current = instance;
             }}
@@ -2940,6 +3086,36 @@ export default function JourneyCanvas({ journeyId }: JourneyCanvasProps) {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Node right-click context menu — Duplicate + Delete */}
+      {ctxMenu && (
+        <NodeContextMenu
+          x={ctxMenu.x}
+          y={ctxMenu.y}
+          onDuplicate={() => {
+            // If the user right-clicked a node already in the multi-selection,
+            // duplicate the whole selection; otherwise just that node.
+            const inMulti = selectedNodeIds.includes(ctxMenu.targetId)
+            const ids =
+              inMulti && selectedNodeIds.length > 1
+                ? selectedNodeIds
+                : [ctxMenu.targetId]
+            duplicateNodes(ids)
+            setCtxMenu(null)
+          }}
+          onDelete={() => {
+            const target = nodes.find((n) => n.id === ctxMenu.targetId)
+            if (target) {
+              setNodes((nds) => nds.filter((n) => n.id !== target.id))
+              setEdges((eds) => eds.filter((e) => e.source !== target.id && e.target !== target.id))
+              if (selectedNode?.id === target.id) setSelectedNode(null)
+              toast.info("Node deleted")
+            }
+            setCtxMenu(null)
+          }}
+          onClose={() => setCtxMenu(null)}
+        />
+      )}
 
       {/* Save-as-component modal (Part 2) */}
       <SaveAsComponentModal
@@ -3811,3 +3987,77 @@ function ScheduleDialog({
   );
 }
 
+
+/**
+ * Right-click context menu rendered next to the clicked node. Portals to
+ * the viewport by using fixed positioning. Dismisses on outside click or
+ * Escape.
+ */
+function NodeContextMenu({
+  x,
+  y,
+  onDuplicate,
+  onDelete,
+  onClose,
+}: {
+  x: number
+  y: number
+  onDuplicate: () => void
+  onDelete: () => void
+  onClose: () => void
+}) {
+  const ref = React.useRef<HTMLDivElement>(null)
+  React.useEffect(() => {
+    const onDown = (e: MouseEvent) => {
+      // DOM Node (not the ReactFlow Node imported above).
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      if (ref.current && !ref.current.contains(e.target as any)) onClose()
+    }
+    const onEsc = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose()
+    }
+    window.addEventListener("mousedown", onDown)
+    window.addEventListener("keydown", onEsc)
+    return () => {
+      window.removeEventListener("mousedown", onDown)
+      window.removeEventListener("keydown", onEsc)
+    }
+  }, [onClose])
+  return (
+    <div
+      ref={ref}
+      style={{ left: x, top: y }}
+      className="fixed z-50 min-w-[180px] rounded-md border border-border bg-popover p-1 shadow-xl"
+      onContextMenu={(e) => e.preventDefault()}
+    >
+      <MenuItem onClick={onDuplicate} label="Duplicate" shortcut="⌘D" />
+      <MenuItem onClick={onDelete} label="Delete" shortcut="Del" destructive />
+    </div>
+  )
+}
+
+function MenuItem({
+  onClick,
+  label,
+  shortcut,
+  destructive,
+}: {
+  onClick: () => void
+  label: string
+  shortcut?: string
+  destructive?: boolean
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={
+        "flex w-full items-center justify-between gap-2 rounded px-2 py-1.5 text-[12px] text-foreground hover:bg-muted " +
+        (destructive ? "hover:text-destructive" : "")
+      }
+    >
+      <span>{label}</span>
+      {shortcut && <span className="text-[10px] text-muted-foreground">{shortcut}</span>}
+    </button>
+  )
+}
