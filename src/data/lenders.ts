@@ -30,7 +30,7 @@ export interface LenderFlags {
  * toggle so authors can flip the Tamara B2B experience on across every
  * editor without navigating to a B2B-configured journey.
  *
- * Only writes / reads localStorage; SSR returns `null` from `read()`.
+ * Only writes / reads localStorage; SSR returns `{}` from `read()`.
  */
 const DEMO_STORAGE_KEY = "cg_demo_flag_overrides";
 
@@ -48,7 +48,6 @@ export function writeDemoFlags(next: Partial<LenderFlags>): void {
   if (typeof window === "undefined") return;
   try {
     window.localStorage.setItem(DEMO_STORAGE_KEY, JSON.stringify(next));
-    // Signal other components (e.g. sidebar toggle + editors) to re-read.
     window.dispatchEvent(new CustomEvent("cg-demo-flags-changed"));
   } catch {
     /* noop */

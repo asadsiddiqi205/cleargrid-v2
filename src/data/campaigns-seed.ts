@@ -55,11 +55,7 @@ export interface CampaignCallMessages {
   busy?: string
 }
 
-/**
- * Legacy shorthand for consumer phone slots (Contact 1..5). The type is
- * widened to `string` so B2B campaigns can substitute designation labels
- * (CEO Office, Finance, …) via CampaignScheduleTab's `contactSlots` prop.
- */
+/** Phone slot label used by the redial round builder (Contact 1..5). */
 export type CampaignContactSlot = string
 
 export interface CampaignRedialRound {
@@ -75,6 +71,11 @@ export interface CampaignRedialConfig {
   tryMultipleNumbers: boolean
   rounds: CampaignRedialRound[]
   repeatLastRound: boolean
+  /* ─── Tamara B2B multi-contact rotation (gated on lender flag) ─── */
+  /** After this many failed attempts on a contact, rotate to the next contact on the account. */
+  escalateToNextContactAfter?: number
+  /** Wait (minutes) before starting the first attempt on the next contact after rotation. */
+  waitBetweenContactsMin?: number
 }
 
 export type CampaignWeekday =
@@ -121,6 +122,24 @@ export const AGENT_GROUPS: string[] = [
   "Settlement Negotiators",
   "Basma Individual",
 ]
+
+/** Headcount per group. Used to render "N agents" next to the group name. */
+export const AGENT_GROUP_COUNT: Record<string, number> = {
+  "Mashreq Collections": 24,
+  "Mashreq Individual": 11,
+  "Tamara Individual": 18,
+  "ENBD Hardship": 9,
+  "CashNow Settlement": 14,
+  "Final Notice Specialists": 6,
+  "Hardship Care": 7,
+  "Settlement Negotiators": 10,
+  "Basma Individual": 5,
+}
+
+export function getAgentGroupCount(name: string | undefined): number {
+  if (!name) return 0
+  return AGENT_GROUP_COUNT[name] ?? 0
+}
 
 export const DIALER_OPTIONS: string[] = ["Dialer 1", "Dialer 2", "Dialer 3"]
 
@@ -203,6 +222,85 @@ export interface HumanCampaign {
   /* ─── Messages + schedule tabs ─── */
   callMessages: CampaignCallMessages
   schedule: CampaignSchedule
+
+  /* ─── Tamara B2B multi-contact (gated on lender flag) ─── */
+  recipientRule?: import("./contacts").RecipientRule
+  /**
+   * Designations in the order the dialer should walk them, once an account
+   * is picked. Only applies when `recipientRule.mode` is `all_contacts` or
+   * `by_designation`.
+   */
+  designationPriority?: import("./contacts").Designation[]
+  /** @deprecated Superseded by `designationPriority`; retained for old drafts. */
+  withinAccountOrder?: "priority_rank" | "designation" | "last_outcome_recency"
+  emailSendMode?: "one_per_contact" | "one_with_cc"
+
+  /** Dialing mode set at campaign-creation time. */
+  dialingMode?: "power" | "hybrid"
+  /** Hybrid-dialer-specific config. Populated only when `dialingMode === "hybrid"`. */
+  hybrid?: HybridCampaignConfig
+}
+
+export interface HybridCampaignConfig {
+  /** Selected agent ids whose voice clone is Approved and greeting is Ready. */
+  agentIds: string[]
+  /** Segments reused from the audience view mocks. */
+  segments: Array<{
+    id: string
+    viewName: string
+    projectId?: string
+  }>
+  handover: {
+    opensAt: "welcome" | "right_party_confirmed"
+    closesAt: "debt_disclosed" | "negotiation_starts"
+    maxAgeEnabled: boolean
+    maxAgeSec: number
+    voiceBinding: "at_answer" | "at_dial"
+    claimDuringWrap: boolean
+    briefLastSec: number
+  }
+  supply: {
+    mode: "steady" | "responsive"
+    maxCallsPerSec: number
+    maxOutstandingPerAgent: number
+  }
+  ptp: {
+    digitalConfirm: boolean
+    channel: "whatsapp" | "sms"
+    replyWindowHours: number
+    verification: "all" | "by_risk" | "none"
+    riskRules: Array<"first_promise" | "amount_over" | "previously_broken" | "low_confidence">
+    amountOver: number
+    verificationRoute: "owner_voice" | "separate_campaign"
+  }
+}
+
+export const DEFAULT_HYBRID_CONFIG: HybridCampaignConfig = {
+  agentIds: [],
+  segments: [],
+  handover: {
+    opensAt: "right_party_confirmed",
+    closesAt: "negotiation_starts",
+    maxAgeEnabled: false,
+    maxAgeSec: 30,
+    voiceBinding: "at_answer",
+    claimDuringWrap: true,
+    briefLastSec: 3,
+  },
+  supply: {
+    mode: "steady",
+    maxCallsPerSec: 4,
+    maxOutstandingPerAgent: 12,
+  },
+  ptp: {
+    digitalConfirm: true,
+    channel: "whatsapp",
+    replyWindowHours: 24,
+    verification: "all",
+    riskRules: ["first_promise"],
+    amountOver: 1000,
+    verificationRoute: "owner_voice",
+  },
 }
 
 export const humanCampaigns: HumanCampaign[] = [

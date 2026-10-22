@@ -174,12 +174,15 @@ function CampaignRow({ campaign: c }: { campaign: HumanCampaign }) {
   return (
     <tr className="hover:bg-muted/25">
       <td className="px-3 py-2">
-        <Link
-          href={`/campaigns/${c.id}`}
-          className="font-medium text-primary hover:underline"
-        >
-          {c.name}
-        </Link>
+        <div className="flex items-center gap-2">
+          <Link
+            href={`/campaigns/${c.id}`}
+            className="font-medium text-primary hover:underline"
+          >
+            {c.name}
+          </Link>
+          <ModeBadge mode={c.dialingMode ?? "power"} />
+        </div>
         <div className="mt-0.5 text-[9px] text-muted-foreground">
           {c.listTimestamp}
         </div>
@@ -249,6 +252,27 @@ function CampaignRow({ campaign: c }: { campaign: HumanCampaign }) {
         </button>
       </td>
     </tr>
+  )
+}
+
+function ModeBadge({ mode }: { mode: "power" | "hybrid" }) {
+  if (mode === "hybrid") {
+    return (
+      <span
+        className="inline-flex items-center gap-1 rounded border border-primary/40 bg-primary/10 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-primary"
+        title="Hybrid dialer campaign"
+      >
+        Hybrid
+      </span>
+    )
+  }
+  return (
+    <span
+      className="inline-flex items-center gap-1 rounded border border-border bg-muted/40 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-muted-foreground"
+      title="Power dialer campaign"
+    >
+      Power
+    </span>
   )
 }
 

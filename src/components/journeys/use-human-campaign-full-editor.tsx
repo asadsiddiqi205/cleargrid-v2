@@ -543,6 +543,9 @@ function RedialOverrideTab({
             ? B2B_CONTACT_SLOTS
             : undefined
         }
+        isB2B={Boolean(
+          lenderFlag(getLenderById(source.lenderId), "tamara_b2b_contacts"),
+        )}
         onChange={(next) => {
           onChange({ ...next.redial, enabled: next.redialEnabled })
         }}

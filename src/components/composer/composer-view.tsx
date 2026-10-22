@@ -180,6 +180,11 @@ export interface ComposerState {
   // WhatsApp
   whatsappTemplateId: string
 
+  /** How many of the borrower's phones to use (SMS / WhatsApp / voice). */
+  phoneSelection: import("@/data/borrower-channels").PhoneSelection
+  /** How many of the borrower's emails to use (Email channel). */
+  emailSelection: import("@/data/borrower-channels").EmailSelection
+
   previewBorrowerId: string
 
   /** When + how to send. Defaults to "now" for a single one-off; authors
@@ -227,6 +232,13 @@ const DEFAULT_STATE: ComposerState = {
   richSlotValues: {},
   smsBody: "",
   whatsappTemplateId: whatsappTemplates[0].id,
+  phoneSelection: { useAll: true, order: "as_stored", cascadeOnFailure: true },
+  emailSelection: {
+    useAll: false,
+    limit: 1,
+    order: "as_stored",
+    mode: "one_message_cc_rest",
+  },
   previewBorrowerId: borrowers[0].id,
   schedule: {
     mode: "now",

@@ -2,12 +2,47 @@ export interface Borrower {
   id: string
   name: string
   emiratesId: string
+  /** The borrower's primary / first phone — kept for existing call-sites. */
   phone: string
+  /**
+   * Full set of phone numbers on file. Unordered, no labels. UIs that let
+   * authors pick which to use treat this as an opaque list.
+   */
+  phones?: string[]
+  /** Full set of emails on file. Same semantics as `phones`. */
+  emails?: string[]
   outstanding: number
   dpdBucket: string
   product: string
   riskScore: "Low" | "Medium" | "High"
   status: "Active" | "Closed" | "Legal" | "Settled"
+}
+
+/**
+ * Lazy accessor so existing seed data (which only has `phone`) still works —
+ * callers see at least one phone, plus a deterministic set of synthetic
+ * secondaries drawn from the borrower id so previews stay stable.
+ */
+export function getBorrowerPhones(b: Borrower): string[] {
+  if (b.phones && b.phones.length > 0) return b.phones
+  const extraCount = (b.id.charCodeAt(b.id.length - 1) % 3) + 1
+  const base = b.phone.replace(/\D/g, "")
+  const secondaries: string[] = []
+  for (let i = 1; i < extraCount; i++) {
+    const nudged = (BigInt(base) + BigInt(i * 71_111)).toString().slice(-9)
+    secondaries.push(`+971 ${nudged.slice(0, 2)} ${nudged.slice(2, 5)} ${nudged.slice(5)}`)
+  }
+  return [b.phone, ...secondaries]
+}
+
+export function getBorrowerEmails(b: Borrower): string[] {
+  if (b.emails && b.emails.length > 0) return b.emails
+  const first = b.name.split(" ")[0]?.toLowerCase() ?? "borrower"
+  const last = b.name.split(" ").slice(1).join(".").toLowerCase() || "x"
+  const extraCount = (b.id.charCodeAt(b.id.length - 1) % 2) + 1
+  const list = [`${first}.${last}@gmail.com`]
+  if (extraCount > 1) list.push(`${first}.${last}@outlook.com`)
+  return list
 }
 
 export const borrowers: Borrower[] = [

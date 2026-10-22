@@ -15,22 +15,11 @@ import { cn } from "@/lib/utils"
 import { Input } from "@/components/ui/input"
 import {
   DEFAULT_RECIPIENT_RULE,
-  DESIGNATION_LABEL,
   describeRule,
   resolveRecipients,
   B2B_ACCOUNTS,
-  type Designation,
   type RecipientRule,
 } from "@/data/contacts"
-
-const DESIGNATIONS: Designation[] = [
-  "ceo_office",
-  "finance",
-  "admin",
-  "ap",
-  "procurement",
-  "other",
-]
 
 const MODE_OPTIONS: Array<{
   id: RecipientRule["mode"]
@@ -48,11 +37,6 @@ const MODE_OPTIONS: Array<{
     hint: "Every non-DNC contact on the account, in the order returned.",
   },
   {
-    id: "by_designation",
-    label: "By designation",
-    hint: "Only contacts whose designation matches your selection.",
-  },
-  {
     id: "priority_order",
     label: "Priority order",
     hint: "Every contact, sorted by priority rank (1 = highest).",
@@ -65,6 +49,11 @@ interface ContactSelectorProps {
   /** When provided, the "resolves to ~N contacts" hint uses this cohort. */
   sampleAccountIds?: string[]
   className?: string
+  /**
+   * Channel the selector configures. Only affects copy / which secondary
+   * controls render; the stored RecipientRule shape is identical.
+   */
+  channel?: "voice" | "sms" | "email"
 }
 
 export function ContactSelector({
@@ -72,16 +61,11 @@ export function ContactSelector({
   onChange,
   sampleAccountIds,
   className,
+  channel: _channel = "voice",
 }: ContactSelectorProps) {
   const rule = { ...DEFAULT_RECIPIENT_RULE, ...value }
   const set = <K extends keyof RecipientRule>(k: K, v: RecipientRule[K]) =>
     onChange({ ...rule, [k]: v })
-
-  const toggleDesignation = (d: Designation) => {
-    const cur = rule.designations ?? []
-    const next = cur.includes(d) ? cur.filter((x) => x !== d) : [...cur, d]
-    set("designations", next)
-  }
 
   const preview = React.useMemo(() => {
     const cohort = sampleAccountIds ?? B2B_ACCOUNTS
@@ -130,34 +114,6 @@ export function ContactSelector({
           )
         })}
       </div>
-
-      {rule.mode === "by_designation" && (
-        <div>
-          <div className="mb-1 text-[10px] uppercase tracking-wider text-muted-foreground">
-            Designations
-          </div>
-          <div className="flex flex-wrap gap-1">
-            {DESIGNATIONS.map((d) => {
-              const active = (rule.designations ?? []).includes(d)
-              return (
-                <button
-                  key={d}
-                  type="button"
-                  onClick={() => toggleDesignation(d)}
-                  className={cn(
-                    "rounded-md border px-2 py-0.5 text-[10px] font-medium",
-                    active
-                      ? "border-primary bg-primary/10 text-primary"
-                      : "border-border bg-background text-muted-foreground hover:bg-muted",
-                  )}
-                >
-                  {DESIGNATION_LABEL[d]}
-                </button>
-              )
-            })}
-          </div>
-        </div>
-      )}
 
       <div className="grid gap-2 sm:grid-cols-2">
         <label className="flex cursor-pointer items-center justify-between rounded-md border border-border bg-background/60 px-2.5 py-1.5">

@@ -27,16 +27,20 @@ import {
   ExternalLink,
   RefreshCcw,
   ChevronDown,
+  ChevronLeft,
   ChevronRight,
   AlertTriangle,
   Lock,
   Blocks,
 } from "lucide-react";
-import { getBlockType, getBlockCategory, getJourneyById } from "@/data/journeys";
+import { getBlockType, getBlockCategory } from "@/data/journeys";
+import { ChannelContactPicker } from "@/components/shared/channel-contact-picker";
+import {
+  DEFAULT_PHONE_SELECTION,
+  describePhoneSelection,
+  type PhoneSelection,
+} from "@/data/borrower-channels";
 import { cn } from "@/lib/utils";
-import { ContactSelector } from "@/components/shared/contact-selector";
-import { useLenderFlag } from "@/hooks/use-lender-flag";
-import { DEFAULT_RECIPIENT_RULE, type RecipientRule } from "@/data/contacts";
 import { getBlockConfigForm } from "@/components/journeys/block-configs";
 import { CallbackHandlingSection } from "@/components/journeys/callback-handling";
 /* Part 4 — real Composer registry, replacing the old hardcoded EMAIL_TEMPLATES / SMS_TEMPLATES arrays */
@@ -156,6 +160,45 @@ const CLEARVOICE_PROJECTS: ClearVoiceProject[] = [
   { id: "proj_005", name: "Generic Collection EN", status: "draft", tags: ["Collection", "EN"] },
   { id: "proj_006", name: "FAB Final Notice EN", status: "draft", tags: ["Final Notice", "EN", "UAE"] },
 ];
+
+interface ClearVoiceAgent {
+  id: string;
+  name: string;
+  org: string;
+  isDefault?: boolean;
+}
+
+/**
+ * Agents keyed by project id. In production this comes from the ClearVoice
+ * API; here it's a deterministic slice per project so the picker behaves
+ * consistently in the prototype.
+ */
+const CLEARVOICE_AGENTS: Record<string, ClearVoiceAgent[]> = {
+  proj_001: [
+    { id: "agent_101", name: "Jozep", org: "ClearGrid" },
+    { id: "agent_102", name: "Jozep 2", org: "cleargrid" },
+    { id: "agent_103", name: "Jozep (np)", org: "ClearGrid", isDefault: true },
+  ],
+  proj_002: [
+    { id: "agent_201", name: "Salma", org: "ClearGrid", isDefault: true },
+    { id: "agent_202", name: "Salma (fast)", org: "ClearGrid" },
+  ],
+  proj_003: [
+    { id: "agent_301", name: "Rashid", org: "ClearGrid", isDefault: true },
+    { id: "agent_302", name: "Rashid EN", org: "cleargrid" },
+  ],
+  proj_004: [
+    { id: "agent_401", name: "Layla", org: "ClearGrid", isDefault: true },
+    { id: "agent_402", name: "Layla AR", org: "cleargrid" },
+  ],
+  proj_005: [
+    { id: "agent_501", name: "Generic", org: "ClearGrid", isDefault: true },
+  ],
+  proj_006: [
+    { id: "agent_601", name: "Karim", org: "ClearGrid", isDefault: true },
+    { id: "agent_602", name: "Karim (final)", org: "cleargrid" },
+  ],
+};
 
 const AGENT_TEAMS = [
   "General Collections",
@@ -1251,77 +1294,14 @@ export function NodeConfigPanel({ node, onClose, onUpdate, onDeleteNode, nodes =
               (d.actionType as "email" | "sms" | "whatsapp"),
             ) && <NodeMessagePreview data={d} />}
 
-            {/* ---- Start AI Call — Recipients + ClearVoice project picker ---- */}
+            {/* ---- Start AI Call — Project → Agent → Params → Delivery ---- */}
             {(d.actionType as string) === "call" && (
-              <AICallRecipientsBlock d={d} update={update} journeyId={journeyId} />
-            )}
-            {(d.actionType as string) === "call" && (
-              <div className="space-y-3">
-                <Section title="Select a ClearVoice Project">
-                  <div className="space-y-2" data-focus-field="clearvoiceProjectId">
-                    {CLEARVOICE_PROJECTS.map((proj) => {
-                      const selected = (d.clearvoiceProjectId as string) === proj.id;
-                      return (
-                        <button
-                          key={proj.id}
-                          type="button"
-                          onClick={() => {
-                            update("clearvoiceProjectId", proj.id);
-                            update("clearvoiceProjectName", proj.name);
-                            update("template", proj.name);
-                          }}
-                          className={cn(
-                            "w-full rounded-lg border-2 p-3 text-left transition-all",
-                            selected
-                              ? "border-primary bg-primary/10"
-                              : "border-border/50 hover:border-border hover:bg-accent/20"
-                          )}
-                        >
-                          <div className="flex items-center justify-between">
-                            <div className="min-w-0 flex-1">
-                              <p className="text-xs font-semibold text-foreground truncate">
-                                {proj.name}
-                              </p>
-                              <p className="mt-0.5 text-[10px] font-mono text-muted-foreground">
-                                {proj.id}
-                              </p>
-                            </div>
-                            <span
-                              className={cn(
-                                "ml-2 shrink-0 rounded-md px-2 py-0.5 text-[10px] font-semibold",
-                                proj.status === "live"
-                                  ? "bg-primary-500/20 text-primary-400"
-                                  : "bg-neutral-500/20 text-neutral-400"
-                              )}
-                            >
-                              {proj.status === "live" ? "Live" : "Draft"}
-                            </span>
-                          </div>
-                          <div className="mt-2 flex flex-wrap gap-1">
-                            {proj.tags.map((tag) => (
-                              <span
-                                key={tag}
-                                className="rounded-md bg-muted px-1.5 py-0.5 text-[9px] font-medium text-muted-foreground"
-                              >
-                                {tag}
-                              </span>
-                            ))}
-                          </div>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </Section>
-
-                {/* Callback Handling (collapsible) */}
-                <CallbackHandlingSection
-                  data={d}
-                  update={update}
-                />
-
-                {/* Part 2 — Redial policy (collapsible) */}
-                <RedialPolicySection data={d} update={update} />
-              </div>
+              <AICallConfig
+                d={d}
+                update={update}
+                multiUpdate={multiUpdate}
+                journeyId={journeyId}
+              />
             )}
 
             {/* ---- Part 5: Trigger Human Campaign ---- */}
@@ -2833,6 +2813,7 @@ function RedialPolicySection({
 }: {
   data: Record<string, unknown>;
   update: (key: string, value: unknown) => void;
+  journeyId?: string;
 }) {
   const [expanded, setExpanded] = useState(false);
   const enabled = (data.redialEnabled as boolean) ?? true;
@@ -2848,6 +2829,9 @@ function RedialPolicySection({
     | "aggressive";
   const customSchedule = (data.redialCustomSchedule as string) ?? "30m, 2h, 24h";
   const exitOn = (data.redialExitOn as string[]) ?? ["on_ptp_captured", "on_dispute", "on_dnc_added"];
+  const redialPhoneSelection =
+    (data.redialPhoneSelection as PhoneSelection | undefined) ??
+    DEFAULT_PHONE_SELECTION;
 
   const summary = enabled
     ? `${maxAttempts} attempt${maxAttempts === 1 ? "" : "s"} · ${intervalMode}`
@@ -2920,6 +2904,20 @@ function RedialPolicySection({
                     Hard cap 5 to protect against runaway loops.
                   </span>
                 </div>
+              </div>
+
+              {/* Numbers used across redial attempts */}
+              <div className="rounded-md border border-border bg-background/40 p-2.5">
+                <ChannelContactPicker
+                  mode="phone"
+                  value={redialPhoneSelection}
+                  onChange={(next) => update("redialPhoneSelection", next)}
+                  title="Numbers tried across attempts"
+                  compact
+                />
+                <p className="mt-1 text-[10px] text-muted-foreground">
+                  {describePhoneSelection(redialPhoneSelection)}.
+                </p>
               </div>
 
               {/* Retry outcomes */}
@@ -3284,85 +3282,406 @@ function BorrowerSearchPicker({
 }
 
 /** Minimal mustache-style variable renderer, used only for the preview. */
-/* ─────────── AI Call · Recipients + retry-target rotation (B2B) ─────────── */
+/* ─────────── AI Call · full config (Project → Agent → Params → Delivery) ─────────── */
 
-function AICallRecipientsBlock({
+function AICallConfig({
   d,
   update,
+  multiUpdate,
   journeyId,
 }: {
-  d: Record<string, unknown>;
-  update: (field: string, value: unknown) => void;
-  journeyId?: string;
+  d: Record<string, unknown>
+  update: (field: string, value: unknown) => void
+  multiUpdate: (updates: Record<string, unknown>) => void
+  journeyId?: string
 }) {
-  const isB2B = useLenderFlag(
-    getJourneyById(journeyId ?? "")?.lenderId,
-    "tamara_b2b_contacts",
-  );
-  if (!isB2B) return null;
-  const rule: RecipientRule =
-    (d.recipientRule as RecipientRule) ?? DEFAULT_RECIPIENT_RULE;
-  const retryTarget = (d.retryTarget as string) ?? "same_contact";
-  const options: Array<{ id: string; label: string; hint: string }> = [
-    { id: "same_contact", label: "Same contact", hint: "Retry the same person on the same number." },
-    { id: "next_number_same_contact", label: "Next number of same contact", hint: "Move to that contact's next phone before giving up." },
-    { id: "next_contact_priority_order", label: "Next contact — priority order", hint: "Advance to the next contact in the account by priority rank." },
-    { id: "next_contact_same_designation", label: "Next contact — same designation", hint: "Only advance to another contact whose designation matches this run." },
-  ];
-  const requiresByDesignation = retryTarget === "next_contact_same_designation";
-  const compatible =
-    !requiresByDesignation || rule.mode === "by_designation";
+  const projectId = (d.clearvoiceProjectId as string) || ""
+  const agentId = (d.clearvoiceAgentId as string) || ""
+  const project = CLEARVOICE_PROJECTS.find((p) => p.id === projectId)
+  const agents = projectId ? CLEARVOICE_AGENTS[projectId] ?? [] : []
+  const agent = agents.find((a) => a.id === agentId)
+
+  const [agentQuery, setAgentQuery] = useState("")
+  const [projectQuery, setProjectQuery] = useState("")
+
+  // Step 1 — pick a project
+  if (!projectId) {
+    const filtered = CLEARVOICE_PROJECTS.filter((p) => {
+      const q = projectQuery.trim().toLowerCase()
+      if (!q) return true
+      return (
+        p.name.toLowerCase().includes(q) ||
+        p.id.toLowerCase().includes(q) ||
+        p.tags.some((t) => t.toLowerCase().includes(q))
+      )
+    })
+    return (
+      <div className="space-y-3">
+        <div
+          className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground"
+          data-focus-field="clearvoiceProjectId"
+        >
+          Select a ClearVoice Project
+        </div>
+        <input
+          type="text"
+          value={projectQuery}
+          onChange={(e) => setProjectQuery(e.target.value)}
+          placeholder="Search projects by name, id, or tag..."
+          className="h-9 w-full rounded-md border border-input bg-background px-2.5 text-[12px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        />
+        <div className="space-y-2">
+          {filtered.map((proj) => (
+            <button
+              key={proj.id}
+              type="button"
+              onClick={() =>
+                multiUpdate({
+                  clearvoiceProjectId: proj.id,
+                  clearvoiceProjectName: proj.name,
+                  template: proj.name,
+                  // Reset the agent when the project changes.
+                  clearvoiceAgentId: "",
+                  clearvoiceAgentName: "",
+                })
+              }
+              className="w-full rounded-lg border-2 border-border/50 p-3 text-left transition-all hover:border-border hover:bg-accent/20"
+            >
+              <div className="flex items-center justify-between">
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-semibold text-foreground truncate">
+                    {proj.name}
+                  </p>
+                  <p className="mt-0.5 text-[10px] font-mono text-muted-foreground">
+                    {proj.id}
+                  </p>
+                </div>
+                <span
+                  className={cn(
+                    "ml-2 shrink-0 rounded-md px-2 py-0.5 text-[10px] font-semibold",
+                    proj.status === "live"
+                      ? "bg-primary-500/20 text-primary-400"
+                      : "bg-neutral-500/20 text-neutral-400",
+                  )}
+                >
+                  {proj.status === "live" ? "Live" : "Draft"}
+                </span>
+              </div>
+              <div className="mt-2 flex flex-wrap gap-1">
+                {proj.tags.map((tag) => (
+                  <span
+                    key={tag}
+                    className="rounded-md bg-muted px-1.5 py-0.5 text-[9px] font-medium text-muted-foreground"
+                  >
+                    {tag}
+                  </span>
+                ))}
+              </div>
+            </button>
+          ))}
+          {filtered.length === 0 && (
+            <div className="rounded-lg border border-dashed border-border p-6 text-center text-[11px] text-muted-foreground">
+              No matching projects.
+            </div>
+          )}
+        </div>
+      </div>
+    )
+  }
+
+  // Step 2 — pick an agent
+  if (!agentId) {
+    const filtered = agents.filter((a) => {
+      const q = agentQuery.trim().toLowerCase()
+      if (!q) return true
+      return (
+        a.name.toLowerCase().includes(q) || a.org.toLowerCase().includes(q)
+      )
+    })
+    return (
+      <div className="space-y-3">
+        <button
+          type="button"
+          onClick={() =>
+            multiUpdate({
+              clearvoiceProjectId: "",
+              clearvoiceProjectName: "",
+            })
+          }
+          className="inline-flex items-center gap-1 text-[11px] font-medium text-primary hover:underline"
+        >
+          <ChevronLeft className="h-3 w-3" />
+          Back to projects
+        </button>
+        <div className="rounded-lg border border-border bg-card/40 p-3">
+          <div className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">
+            Project
+          </div>
+          <div className="mt-1 text-xs font-semibold text-foreground">
+            {project?.name}
+          </div>
+          <div className="mt-0.5 text-[10px] font-mono text-muted-foreground">
+            {project?.id}
+          </div>
+        </div>
+        <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+          Select an agent
+        </div>
+        <input
+          type="text"
+          value={agentQuery}
+          onChange={(e) => setAgentQuery(e.target.value)}
+          placeholder="Search agents by name or organisation..."
+          className="h-9 w-full rounded-md border border-input bg-background px-2.5 text-[12px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        />
+        <div className="space-y-2">
+          {filtered.map((a) => (
+            <button
+              key={a.id}
+              type="button"
+              onClick={() =>
+                multiUpdate({
+                  clearvoiceAgentId: a.id,
+                  clearvoiceAgentName: a.name,
+                })
+              }
+              className="w-full rounded-lg border-2 border-border/50 p-3 text-left transition-all hover:border-border hover:bg-accent/20"
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0 flex-1">
+                  <div className="text-xs font-semibold text-foreground">
+                    {a.name}
+                  </div>
+                  <div className="mt-0.5 text-[10px] font-mono text-muted-foreground">
+                    {a.id}
+                  </div>
+                  <div className="mt-0.5 text-[10px] text-muted-foreground">
+                    {a.org}
+                  </div>
+                </div>
+                {a.isDefault && (
+                  <span className="rounded bg-primary-500/15 px-1.5 py-0.5 text-[9px] font-semibold text-primary-400">
+                    Default
+                  </span>
+                )}
+              </div>
+            </button>
+          ))}
+          {filtered.length === 0 && (
+            <div className="rounded-lg border border-dashed border-border p-6 text-center text-[11px] text-muted-foreground">
+              No matching agents on this project.
+            </div>
+          )}
+        </div>
+      </div>
+    )
+  }
+
+  // Step 3 — project + agent picked. Show summary + params + delivery.
+  return (
+    <div className="space-y-3">
+      <div className="rounded-lg border border-primary/40 bg-primary/[0.05] p-3">
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0">
+            <div className="text-[9px] font-semibold uppercase tracking-wider text-primary-400">
+              Project · Agent
+            </div>
+            <div className="mt-1 truncate text-xs font-semibold text-foreground">
+              {project?.name} · {agent?.name}
+            </div>
+            <div className="mt-0.5 truncate text-[10px] font-mono text-muted-foreground">
+              {projectId} · {agentId}
+            </div>
+          </div>
+          <div className="flex shrink-0 gap-1">
+            <button
+              type="button"
+              onClick={() =>
+                multiUpdate({
+                  clearvoiceAgentId: "",
+                  clearvoiceAgentName: "",
+                })
+              }
+              className="rounded-md border border-border bg-background px-2 py-1 text-[10px] font-medium text-foreground hover:bg-muted"
+            >
+              Change agent
+            </button>
+            <button
+              type="button"
+              onClick={() =>
+                multiUpdate({
+                  clearvoiceProjectId: "",
+                  clearvoiceProjectName: "",
+                  clearvoiceAgentId: "",
+                  clearvoiceAgentName: "",
+                })
+              }
+              className="rounded-md border border-border bg-background px-2 py-1 text-[10px] font-medium text-foreground hover:bg-muted"
+            >
+              Change project
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <AICallCustomParameters d={d} update={update} journeyId={journeyId} />
+
+      <CallbackHandlingSection data={d} update={update} />
+
+      <RedialPolicySection data={d} update={update} journeyId={journeyId} />
+    </div>
+  )
+}
+
+/* ─────────── AI Call · Custom Parameters ───────────
+   Multi-phone selection for the `phone` parameter is added in a later edit
+   via the shared <ChannelContactPicker>. */
+
+/** Default parameter list detected from a ClearVoice project's prompts. */
+const AI_CALL_DEFAULT_PARAMS: Array<{
+  name: string
+  hint: string
+  suggestedField: string
+}> = [
+  { name: "phone", hint: "Number(s) to dial", suggestedField: "borrower.phone" },
+  { name: "FirstName", hint: "Greeting first name", suggestedField: "borrower.first_name" },
+  { name: "LastName", hint: "Surname", suggestedField: "borrower.last_name" },
+  { name: "Lender", hint: "Lender name to mention", suggestedField: "deal.lender_name" },
+  { name: "amount", hint: "Outstanding balance", suggestedField: "deal.outstanding" },
+]
+
+const AI_CALL_MAP_MODES = [
+  { id: "borrower_field", label: "Map from field" },
+  { id: "static", label: "Static value" },
+] as const
+
+/** For the special `phone` parameter we add a third mode on top of the standard two. */
+const PHONE_PARAM_MODES = [
+  { id: "borrower_field", label: "Map from field" },
+  { id: "multi_phone", label: "Multiple numbers" },
+  { id: "static", label: "Static value" },
+] as const
+
+type ParamMode = "borrower_field" | "static" | "multi_phone"
+interface ParamMapping {
+  mode: ParamMode
+  value: string
+  phoneSelection?: PhoneSelection
+}
+
+function AICallCustomParameters({
+  d,
+  update,
+}: {
+  d: Record<string, unknown>
+  update: (field: string, value: unknown) => void
+  journeyId?: string
+}) {
+  const mappings =
+    (d.paramMappings as Record<string, ParamMapping>) ?? {}
+  const setMapping = (name: string, patch: Partial<ParamMapping>) => {
+    const current: ParamMapping = mappings[name] ?? {
+      mode: "borrower_field",
+      value: "",
+    }
+    update("paramMappings", { ...mappings, [name]: { ...current, ...patch } })
+  }
 
   return (
-    <div className="mt-2 mb-4 rounded-xl border border-primary/40 bg-primary/[0.03] p-4 space-y-3">
-      <ContactSelector
-        value={rule}
-        onChange={(next) => update("recipientRule", next)}
-      />
-      <div className="rounded-md border border-border/60 bg-background/60 p-3">
-        <div className="text-[11px] font-semibold text-foreground">
-          Retry target
-        </div>
-        <p className="mt-0.5 text-[10px] text-muted-foreground">
-          When an attempt does not succeed, who gets the retry.
-        </p>
-        <div className="mt-2 space-y-1">
-          {options.map((o) => (
-            <label
-              key={o.id}
-              className="flex cursor-pointer items-start gap-2 rounded-md border border-border bg-background/60 px-2 py-1.5 text-[11px]"
-            >
-              <input
-                type="radio"
-                checked={retryTarget === o.id}
-                onChange={() => update("retryTarget", o.id)}
-                className="mt-0.5 h-3.5 w-3.5 accent-primary"
-              />
-              <div>
-                <div className="font-medium text-foreground">{o.label}</div>
-                <div className="mt-0.5 text-[9px] text-muted-foreground">
-                  {o.hint}
-                </div>
+    <div
+      className="rounded-lg border border-border bg-card/40 p-3"
+      data-focus-field="paramMappings"
+    >
+      <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+        Custom Parameters
+      </div>
+      <p className="mt-1 text-[10.5px] text-muted-foreground">
+        Detected from the selected agent&apos;s prompts. Resolved per-borrower
+        at run-time — map each to a borrower / deal field, or pin a static
+        value. For the <span className="text-foreground font-medium">phone</span>{" "}
+        parameter you can pick multiple numbers so the agent cascades through
+        them on failure.
+      </p>
+      <div className="mt-3 space-y-3">
+        {AI_CALL_DEFAULT_PARAMS.map((p) => {
+          const isPhone = p.name === "phone"
+          const m: ParamMapping = mappings[p.name] ?? {
+            mode: "borrower_field",
+            value: p.suggestedField,
+          }
+          const modes = isPhone ? PHONE_PARAM_MODES : AI_CALL_MAP_MODES
+          return (
+            <div key={p.name}>
+              <div className="flex items-center gap-1.5">
+                <span className="text-[11.5px] font-medium text-foreground">
+                  {p.name}
+                </span>
+                <span className="ml-auto text-[9.5px] text-muted-foreground">
+                  {p.hint}
+                </span>
               </div>
-            </label>
-          ))}
-        </div>
-        {!compatible && (
-          <div className="mt-2 rounded-md border border-warning-500/40 bg-warning-500/[0.06] px-2 py-1.5 text-[10px] text-warning-300">
-            Rule mode is <span className="font-semibold">{rule.mode.replace("_", " ")}</span>.
-            &quot;Next contact — same designation&quot; only applies when the
-            Recipients rule uses{" "}
-            <span className="font-semibold">By designation</span>.
-          </div>
-        )}
-        <p className="mt-2 text-[10px] text-muted-foreground">
-          Attempts run <span className="text-foreground font-medium">sequentially</span> —
-          the next contact is dialled only after this one&apos;s retries
-          exhaust or its outcome triggers rotation.
-        </p>
+              <div className="mt-1.5 grid gap-1.5 sm:grid-cols-[minmax(0,160px)_minmax(0,1fr)]">
+                <select
+                  value={m.mode}
+                  onChange={(e) =>
+                    setMapping(p.name, { mode: e.target.value as ParamMode })
+                  }
+                  className="h-8 rounded-md border border-input bg-background px-2 text-[11.5px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  {modes.map((opt) => (
+                    <option key={opt.id} value={opt.id}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+                {m.mode === "multi_phone" ? (
+                  <div className="rounded-md border border-primary/40 bg-primary/[0.03] px-2.5 py-2">
+                    <ChannelContactPicker
+                      mode="phone"
+                      value={m.phoneSelection ?? DEFAULT_PHONE_SELECTION}
+                      onChange={(next) =>
+                        setMapping(p.name, { phoneSelection: next })
+                      }
+                      compact
+                    />
+                  </div>
+                ) : m.mode === "borrower_field" ? (
+                  <select
+                    value={m.value || p.suggestedField}
+                    onChange={(e) =>
+                      setMapping(p.name, { value: e.target.value })
+                    }
+                    className="h-8 rounded-md border border-input bg-background px-2 text-[11.5px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    <option value="borrower.first_name">borrower.first_name</option>
+                    <option value="borrower.last_name">borrower.last_name</option>
+                    <option value="borrower.name">borrower.name</option>
+                    <option value="borrower.phone">borrower.phone</option>
+                    <option value="borrower.work_phone">borrower.work_phone</option>
+                    <option value="borrower.email">borrower.email</option>
+                    <option value="deal.lender_name">deal.lender_name</option>
+                    <option value="deal.outstanding">deal.outstanding</option>
+                    <option value="deal.due_date">deal.due_date</option>
+                    <option value="deal.product">deal.product</option>
+                  </select>
+                ) : (
+                  <input
+                    type="text"
+                    value={m.value}
+                    onChange={(e) =>
+                      setMapping(p.name, { value: e.target.value })
+                    }
+                    placeholder="e.g. Mashreq"
+                    className="h-8 rounded-md border border-input bg-background px-2 text-[11.5px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  />
+                )}
+              </div>
+            </div>
+          )
+        })}
       </div>
     </div>
-  );
+  )
 }
 
 function renderVars(text: string, b: { name: string; phone: string; outstanding: number; product: string }): string {

@@ -1,10 +1,9 @@
 "use client"
 
 /**
- * Full-page campaign editor — replaces the modal wizard from the ClearGrid
- * reference with a persistent editor that always shows a live preview on
- * the right. Tabs on the left (Basics / Audience / Schedule / Messages).
- * Nested template editing opens in a modal via TemplateEditor.
+ * Full-page campaign editor. Dispatches to the Power dialer editor
+ * (today's human-only flow) or the Hybrid dialer editor based on
+ * `draft.dialingMode`. Default is Power.
  */
 
 import * as React from "react"
@@ -20,7 +19,6 @@ import {
   MessageSquare,
   Info,
   Route,
-  Pencil,
   Play,
   Wand2,
 } from "lucide-react"
@@ -36,11 +34,17 @@ import {
   DIALER_OPTIONS,
   GATEWAY_OPTIONS,
   DIAL_SPEED_OPTIONS,
+  getAgentGroupCount,
+  DEFAULT_HYBRID_CONFIG,
   type HumanCampaign,
 } from "@/data/campaigns-seed"
 import { TemplateEditor } from "@/components/templates/template-editor"
-import { CampaignScheduleTab } from "@/components/campaigns/campaign-schedule-tab"
+import { CampaignScheduleTab, B2B_CONTACT_SLOTS } from "@/components/campaigns/campaign-schedule-tab"
 import { DirectionToggle, type TextDir } from "@/components/shared/direction-toggle"
+import { ContactSelector } from "@/components/shared/contact-selector"
+import { useLenderFlag } from "@/hooks/use-lender-flag"
+import { DEFAULT_RECIPIENT_RULE } from "@/data/contacts"
+import { HybridCampaignEditor } from "./hybrid-editor"
 
 const TABS = [
   { id: "basics", label: "Basics", icon: Info },
@@ -58,8 +62,6 @@ export default function CampaignEditPage() {
   const seed = humanCampaigns.find((c) => c.id === id)
 
   const [draft, setDraft] = React.useState<HumanCampaign | null>(seed ?? null)
-  const [tab, setTab] = React.useState<TabId>("messages")
-  const [templateEditorOpen, setTemplateEditorOpen] = React.useState(false)
 
   if (!draft) {
     return (
@@ -72,24 +74,52 @@ export default function CampaignEditPage() {
     )
   }
 
+  if (draft.dialingMode === "hybrid") {
+    return (
+      <HybridCampaignEditor
+        draft={draft}
+        setDraft={setDraft}
+        onSave={() => {
+          const idx = humanCampaigns.findIndex((c) => c.id === draft.id)
+          if (idx >= 0) humanCampaigns[idx] = draft
+          toast.success("Hybrid campaign saved", { description: `${draft.name} updated.` })
+          router.push(`/campaigns/${draft.id}`)
+        }}
+        onCancel={() => router.push(`/campaigns/${draft.id}`)}
+      />
+    )
+  }
+
+  return <PowerCampaignEditor draft={draft} setDraft={setDraft} router={router} />
+}
+
+/* ─────────────────────────────────────────────────────────────────── */
+/*  Power dialer editor — the original human-only campaign flow        */
+/* ─────────────────────────────────────────────────────────────────── */
+
+function PowerCampaignEditor({
+  draft,
+  setDraft,
+  router,
+}: {
+  draft: HumanCampaign
+  setDraft: React.Dispatch<React.SetStateAction<HumanCampaign | null>>
+  router: ReturnType<typeof useRouter>
+}) {
+  const [tab, setTab] = React.useState<TabId>("basics")
+  const [templateEditorOpen, setTemplateEditorOpen] = React.useState(false)
+  const isB2B = useLenderFlag(draft.lenderId, "tamara_b2b_contacts")
+
   const set = <K extends keyof HumanCampaign>(k: K, v: HumanCampaign[K]) =>
     setDraft((d) => (d ? { ...d, [k]: v } : d))
   const setMsg = (k: "welcome" | "loop" | "busy", v: string) =>
     setDraft((d) =>
-      d
-        ? {
-            ...d,
-            callMessages: { ...d.callMessages, [k]: v },
-          }
-        : d,
+      d ? { ...d, callMessages: { ...d.callMessages, [k]: v } } : d,
     )
   const save = () => {
-    // Mutate the in-memory seed so the detail page reflects changes this session.
     const idx = humanCampaigns.findIndex((c) => c.id === draft.id)
     if (idx >= 0) humanCampaigns[idx] = draft
-    toast.success("Campaign saved", {
-      description: `${draft.name} updated.`,
-    })
+    toast.success("Campaign saved", { description: `${draft.name} updated.` })
     router.push(`/campaigns/${draft.id}`)
   }
 
@@ -103,7 +133,7 @@ export default function CampaignEditPage() {
           </div>
           <div>
             <div className="text-[9px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-              Edit campaign
+              Edit campaign · Power dialer
             </div>
             <Input
               value={draft.name}
@@ -131,11 +161,10 @@ export default function CampaignEditPage() {
         </div>
       </div>
 
-      {/* Body — left tabs / form  ·  right preview */}
+      {/* Body */}
       <div className="grid flex-1 min-h-0 grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,540px)]">
         <div className="min-h-0 overflow-y-auto border-r border-border bg-background">
           <div className="mx-auto max-w-3xl px-6 py-5">
-            {/* Tab strip */}
             <div className="mb-4 flex border-b border-border">
               {TABS.map((t) => {
                 const Icon = t.icon
@@ -164,16 +193,16 @@ export default function CampaignEditPage() {
               })}
             </div>
 
-            {tab === "basics" && (
-              <BasicsTab draft={draft} set={set} />
+            {tab === "basics" && <BasicsTab draft={draft} set={set} />}
+            {tab === "audience" && (
+              <AudienceTab draft={draft} setDraft={setDraft} isB2B={isB2B} />
             )}
-            {tab === "audience" && <AudienceTab draft={draft} />}
             {tab === "schedule" && (
               <CampaignScheduleTab
                 schedule={draft.schedule}
-                onChange={(schedule) =>
-                  setDraft((d) => (d ? { ...d, schedule } : d))
-                }
+                onChange={(schedule) => setDraft((d) => (d ? { ...d, schedule } : d))}
+                contactSlots={isB2B ? B2B_CONTACT_SLOTS : undefined}
+                isB2B={isB2B}
               />
             )}
             {tab === "messages" && (
@@ -198,7 +227,6 @@ export default function CampaignEditPage() {
         </div>
       </div>
 
-      {/* Template editor modal */}
       <Dialog open={templateEditorOpen} onOpenChange={setTemplateEditorOpen}>
         <DialogContent className="!max-w-[min(1600px,96vw)] h-[92vh] p-0 overflow-hidden gap-0">
           <div className="flex h-full flex-col">
@@ -248,20 +276,17 @@ function BasicsTab({
           actionLabel="Manage user groups"
           onAction={() => window.open("/agents/groups", "_blank")}
         >
-          <Select
+          <AgentGroupSelect
             value={draft.agentGroup}
             placeholder="Select an agent group"
             onChange={(v) => set("agentGroup", v)}
-            options={AGENT_GROUPS}
           />
         </FormField>
         <FormField label="Secondary group">
-          <Select
+          <AgentGroupSelect
             value={draft.secondaryGroup ?? ""}
-            placeholder="Optional — used when the primary group is busy"
-            onChange={(v) => set("secondaryGroup", v)}
-            options={AGENT_GROUPS}
-            allowEmpty
+            placeholder="Optional, used when the primary group is busy"
+            onChange={(v) => set("secondaryGroup", v || undefined)}
           />
         </FormField>
         <FormField label="Dial speed *">
@@ -285,45 +310,18 @@ function BasicsTab({
   )
 }
 
-/* ─────────── Reusable select ─────────── */
-
-function Select({
-  value,
-  onChange,
-  options,
-  placeholder,
-  allowEmpty,
+function AudienceTab({
+  draft,
+  setDraft,
+  isB2B,
 }: {
-  value: string
-  onChange: (v: string) => void
-  options: string[]
-  placeholder?: string
-  allowEmpty?: boolean
+  draft: HumanCampaign
+  setDraft: React.Dispatch<React.SetStateAction<HumanCampaign | null>>
+  isB2B: boolean
 }) {
-  return (
-    <select
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      className={cn(
-        "h-9 w-full rounded-md border border-input bg-background px-2 text-[13px] outline-none focus-visible:border-ring",
-        !value && "text-muted-foreground",
-      )}
-    >
-      {(allowEmpty || !value) && (
-        <option value="">{placeholder ?? "Select…"}</option>
-      )}
-      {options.map((o) => (
-        <option key={o} value={o}>
-          {o}
-        </option>
-      ))}
-    </select>
-  )
-}
-
-function AudienceTab({ draft }: { draft: HumanCampaign }) {
   const src = describeSource(draft.source)
   const isJourney = draft.source.kind === "journey"
+  const rule = draft.recipientRule ?? DEFAULT_RECIPIENT_RULE
   return (
     <div className="space-y-4">
       {isJourney ? (
@@ -334,9 +332,9 @@ function AudienceTab({ draft }: { draft: HumanCampaign }) {
           </div>
           <p className="mt-2 text-[12px] text-foreground">
             Audience is dynamically inherited from{" "}
-            <span className="font-semibold">{src.primary}</span> — every borrower
-            reaching the campaign&apos;s source node is enrolled automatically. You
-            can&apos;t manually add segments to a journey-sourced campaign.
+            <span className="font-semibold">{src.primary}</span>. Every borrower
+            reaching the campaign&apos;s source node is enrolled automatically.
+            You can&apos;t manually add segments to a journey-sourced campaign.
           </p>
           <Link
             href={src.href ?? "#"}
@@ -349,7 +347,7 @@ function AudienceTab({ draft }: { draft: HumanCampaign }) {
         <div>
           <div className="text-[12px] font-semibold">Segments</div>
           <p className="mt-1 text-[11px] text-muted-foreground">
-            Add one or more saved Views. Drag rows to reorder — top segment is
+            Add one or more saved Views. Drag rows to reorder. Top segment is
             dialed first.
           </p>
           <div className="mt-3 rounded border border-dashed border-border bg-muted/20 p-6 text-center text-[11px] text-muted-foreground">
@@ -357,6 +355,37 @@ function AudienceTab({ draft }: { draft: HumanCampaign }) {
           </div>
         </div>
       )}
+
+      {isB2B && (
+        <div className="rounded-lg border border-purple-500/40 bg-purple-500/[0.05] p-4">
+          <div className="flex items-center justify-between">
+            <div className="text-[10px] font-semibold uppercase tracking-wider text-purple-300">
+              Multi-contact recipients · Tamara B2B
+            </div>
+            <span className="rounded bg-purple-500/15 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-purple-200">
+              Account-level
+            </span>
+          </div>
+          <p className="mt-1 text-[11px] text-muted-foreground">
+            Each merchant account has multiple contacts. Choose which are
+            enrolled and how outreach rotates.
+          </p>
+          <div className="mt-3">
+            <ContactSelector
+              channel="voice"
+              value={rule}
+              onChange={(next) =>
+                setDraft((d) => (d ? { ...d, recipientRule: next } : d))
+              }
+            />
+          </div>
+          <div className="mt-3 rounded border border-border/70 bg-background/60 px-3 py-2 text-[10.5px] text-muted-foreground">
+            Sequential rotation moves to the next contact after each failed
+            attempt.
+          </div>
+        </div>
+      )}
+
       <div>
         <div className="text-[12px] font-semibold">Calling priority</div>
         <p className="mt-1 text-[11px] text-muted-foreground">
@@ -437,7 +466,7 @@ function MessagesTab({
           dir={textDir}
           value={draft.callMessages.busy ?? ""}
           onChange={(e) => setMsg("busy", e.target.value)}
-          placeholder="We're sorry, all of our agents are currently unavailable. We'll call you back."
+          placeholder="We're sorry, all our agents are currently unavailable. We'll call you back."
           className="min-h-[110px] w-full rounded-md border border-input bg-background p-3 text-[12px] outline-none focus-visible:border-ring"
         />
       </FormField>
@@ -467,17 +496,14 @@ function CampaignPreview({ draft, tab }: { draft: HumanCampaign; tab: TabId }) {
             v={draft.schedule.mode === "immediate" ? "Start immediately" : "Scheduled"}
           />
           <Row k="Redial" v={draft.schedule.redialEnabled ? "Enabled" : "Off"} />
-          <Row
-            k="Pause by default"
-            v={draft.schedule.pauseByDefault ? "Yes" : "No"}
-          />
+          <Row k="Pause by default" v={draft.schedule.pauseByDefault ? "Yes" : "No"} />
         </div>
       </div>
 
       {(tab === "messages" || tab === "basics") && (
         <div className="rounded-xl border border-border bg-background p-4">
           <div className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-            Call flow — how the borrower experiences it
+            Call flow, how the borrower experiences it
           </div>
           <div className="space-y-2">
             <CallBubble kind="welcome" text={draft.callMessages.welcome} />
@@ -540,7 +566,9 @@ function Row({ k, v }: { k: string; v: React.ReactNode }) {
   )
 }
 
-function FormField({
+/* ─────────── Shared helpers (exported for the Hybrid editor) ─────────── */
+
+export function FormField({
   label,
   actionLabel,
   onAction,
@@ -571,3 +599,68 @@ function FormField({
     </div>
   )
 }
+
+export function Select({
+  value,
+  onChange,
+  options,
+  placeholder,
+  allowEmpty,
+}: {
+  value: string
+  onChange: (v: string) => void
+  options: string[]
+  placeholder?: string
+  allowEmpty?: boolean
+}) {
+  return (
+    <select
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      className={cn(
+        "h-9 w-full rounded-md border border-input bg-background px-2 text-[13px] outline-none focus-visible:border-ring",
+        !value && "text-muted-foreground",
+      )}
+    >
+      {(allowEmpty || !value) && (
+        <option value="">{placeholder ?? "Select..."}</option>
+      )}
+      {options.map((o) => (
+        <option key={o} value={o}>
+          {o}
+        </option>
+      ))}
+    </select>
+  )
+}
+
+export function AgentGroupSelect({
+  value,
+  onChange,
+  placeholder,
+}: {
+  value: string
+  onChange: (v: string) => void
+  placeholder?: string
+}) {
+  return (
+    <select
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      className={cn(
+        "h-9 w-full rounded-md border border-input bg-background px-2 text-[13px] outline-none focus-visible:border-ring",
+        !value && "text-muted-foreground",
+      )}
+    >
+      <option value="">{placeholder ?? "Select an agent group"}</option>
+      {AGENT_GROUPS.map((g) => (
+        <option key={g} value={g}>
+          {g} · {getAgentGroupCount(g)} agents
+        </option>
+      ))}
+    </select>
+  )
+}
+
+/** Expose the default hybrid config so the dialing-mode chooser can seed it. */
+export { DEFAULT_HYBRID_CONFIG }

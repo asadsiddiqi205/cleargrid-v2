@@ -46,19 +46,22 @@ import { borrowers, type Borrower } from "@/data/borrowers"
 import { TemplateEditor } from "@/components/templates/template-editor"
 import { NodeAnalyticsTab } from "@/components/journeys/node-analytics-tab"
 import { DirectionToggle, type TextDir } from "@/components/shared/direction-toggle"
+import { ChannelContactPicker } from "@/components/shared/channel-contact-picker"
 import { ContactSelector } from "@/components/shared/contact-selector"
 import { useLenderFlag } from "@/hooks/use-lender-flag"
+import { DEFAULT_RECIPIENT_RULE, type RecipientRule } from "@/data/contacts"
 import {
-  B2B_ACCOUNTS,
-  DEFAULT_RECIPIENT_RULE,
-  DESIGNATION_LABEL,
-  getAccountContacts,
-  getBusinessName,
-  isB2BAccount,
-  resolveRecipients,
-  type Contact,
-  type RecipientRule,
-} from "@/data/contacts"
+  DEFAULT_PHONE_SELECTION,
+  DEFAULT_EMAIL_SELECTION,
+  type PhoneSelection,
+  type EmailSelection,
+} from "@/data/borrower-channels"
+import { getBorrowerPhones, getBorrowerEmails } from "@/data/borrowers"
+import {
+  SenderProfilePicker,
+  deriveDefaultSenderProfile,
+} from "@/components/composer/sender-profile-picker"
+import { getSenderProfileById } from "@/data/sender-profiles"
 
 type ComposeMode = "template" | "manual"
 
@@ -253,51 +256,40 @@ export function MessageNodeFullEditor({
   const manualBodyHtml = (d.manualBodyHtml as string) ?? ""
   const manualBodyText = (d.manualBodyText as string) ?? ""
   const smsSenderId = (d.smsSenderId as string) ?? "ClearGrid"
-  const fromName = (d.fromName as string) ?? "ClearGrid Collections"
-  const fromAddress = (d.fromAddress as string) ?? "collections@cleargrid.ae"
-  const replyTo = (d.replyTo as string) ?? "replies@cleargrid.ae"
   const provider = (d.provider as string) ?? "default"
+
+  const isB2B = useLenderFlag(lenderId, "tamara_b2b_contacts")
+  const recipientRule: RecipientRule =
+    (d.recipientRule as RecipientRule) ?? DEFAULT_RECIPIENT_RULE
+  const emailSendMode = (d.emailSendMode as string) ?? "one_per_contact"
+
+  // Governed sender profile + optional free-form overrides. Mirrors the
+  // Composer's SenderProfilePicker contract.
+  const senderProfileId =
+    (d.senderProfileId as string | undefined) ??
+    deriveDefaultSenderProfile(lenderId ?? null)
+  const customFromName = (d.senderFromName as string | undefined) ?? ""
+  const customFromEmail = (d.senderFromEmail as string | undefined) ?? ""
+  const customReplyTo = (d.senderReplyTo as string | undefined) ?? ""
+  const resolvedProfile = senderProfileId
+    ? getSenderProfileById(senderProfileId) ?? null
+    : null
+  const effectiveFromName = customFromName || resolvedProfile?.fromName || "ClearGrid Collections"
+  const effectiveFromEmail = customFromEmail || resolvedProfile?.fromEmail || "collections@cleargrid.ae"
 
   const [tab, setTab] = React.useState<EditorTab>("compose")
   const [textDir, setTextDir] = React.useState<TextDir>("auto")
   const [templateEditorOpen, setTemplateEditorOpen] = React.useState(false)
   const [htmlBuilderOpen, setHtmlBuilderOpen] = React.useState(false)
 
-  // B2B multi-contact — hidden unless the owning lender has the flag on.
-  const isB2B = useLenderFlag(lenderId, "tamara_b2b_contacts")
-  const recipientRule: RecipientRule =
-    (d.recipientRule as RecipientRule) ?? DEFAULT_RECIPIENT_RULE
-  const emailSendMode = (d.emailSendMode as string) ?? "one_per_contact"
-  const contactNameFallback =
-    (d.contactNameFallback as string) ?? "Dear Finance Team"
   const [previewBorrowerId, setPreviewBorrowerId] = React.useState<string>(
-    isB2B ? (B2B_ACCOUNTS[0] ?? borrowers[0].id) : borrowers[0].id,
+    borrowers[0].id,
   )
   const subjectRef = React.useRef<HTMLInputElement>(null!)
   const htmlBodyRef = React.useRef<HTMLTextAreaElement>(null!)
   const plainBodyRef = React.useRef<HTMLTextAreaElement>(null!)
   const previewBorrower =
     borrowers.find((b) => b.id === previewBorrowerId) ?? borrowers[0]
-
-  // Per-contact preview — only relevant when the previewed borrower is a
-  // B2B account. Defaults to the first resolved contact under the current
-  // recipient rule.
-  const previewContacts = React.useMemo<Contact[]>(() => {
-    if (!isB2B || !isB2BAccount(previewBorrower.id)) return []
-    const resolved = resolveRecipients(previewBorrower.id, recipientRule)
-    return resolved.length > 0
-      ? resolved.map((r) => r.contact)
-      : getAccountContacts(previewBorrower.id)
-  }, [isB2B, previewBorrower.id, recipientRule])
-  const [previewContactId, setPreviewContactId] = React.useState<string>("")
-  React.useEffect(() => {
-    if (previewContacts.length === 0) {
-      setPreviewContactId("")
-    } else if (!previewContacts.some((c) => c.id === previewContactId)) {
-      setPreviewContactId(previewContacts[0].id)
-    }
-  }, [previewContacts, previewContactId])
-  const previewContact = previewContacts.find((c) => c.id === previewContactId)
 
   const bodySource =
     composeMode === "manual"
@@ -315,13 +307,8 @@ export function MessageNodeFullEditor({
         ? `Reminder — ${template}`
         : ""
 
-  const renderCtx = {
-    contact: previewContact ?? null,
-    contactNameFallback,
-    isB2B: !!isB2B,
-  }
-  const renderedBody = renderVars(bodySource, previewBorrower, renderCtx)
-  const renderedSubject = renderVars(subjectSource, previewBorrower, renderCtx)
+  const renderedBody = renderVars(bodySource, previewBorrower)
+  const renderedSubject = renderVars(subjectSource, previewBorrower)
 
   const ChannelIcon =
     channel === "email" ? Mail : channel === "sms" ? MessageSquare : MessageCircle
@@ -438,10 +425,11 @@ export function MessageNodeFullEditor({
         {/* Left — form */}
         <div className="overflow-y-auto border-r border-border bg-background p-6">
           <div className="mx-auto max-w-2xl space-y-5">
-            {/* B2B Recipients — only when the owning lender has the flag on */}
+            {/* Tamara B2B — multi-contact recipients + email send mode */}
             {isB2B && (
               <div className="rounded-xl border border-primary/40 bg-primary/[0.03] p-4">
                 <ContactSelector
+                  channel={channel === "email" ? "email" : "sms"}
                   value={recipientRule}
                   onChange={(next) => set("recipientRule", next)}
                 />
@@ -463,7 +451,7 @@ export function MessageNodeFullEditor({
                             One message per contact
                           </div>
                           <div className="mt-0.5 text-[9px] text-muted-foreground">
-                            Personalised per recipient — separate delivery events.
+                            Personalised per recipient, separate delivery events.
                           </div>
                         </div>
                       </label>
@@ -486,25 +474,51 @@ export function MessageNodeFullEditor({
                     </div>
                   </div>
                 )}
-                <div className="mt-3 border-t border-border/60 pt-3">
-                  <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">
-                    Fallback for missing contact name
-                  </Label>
-                  <Input
-                    value={contactNameFallback}
-                    onChange={(e) => set("contactNameFallback", e.target.value)}
-                    placeholder="Dear Finance Team"
-                    className="mt-1 h-8 text-[12px]"
-                  />
-                  <div className="mt-1 text-[9px] text-muted-foreground">
-                    Substitutes for{" "}
-                    <span className="font-mono">{"{{contact.first_name}}"}</span>{" "}
-                    when a contact has no known name.
-                  </div>
-                </div>
               </div>
             )}
 
+            {/* Channel address selection. In B2B mode the ContactSelector
+                above governs recipients, so the number/email picker is
+                hidden to avoid two overlapping choosers. */}
+            {!isB2B && (
+            <div className="rounded-lg border border-border bg-background/60 p-3">
+              {channel === "email" ? (
+                <ChannelContactPicker
+                  mode="email"
+                  value={
+                    (d.emailSelection as EmailSelection | undefined) ??
+                    DEFAULT_EMAIL_SELECTION
+                  }
+                  onChange={(next) => set("emailSelection", next)}
+                  previewEmails={getBorrowerEmails(previewBorrower).map((v) => ({
+                    value: v,
+                    verified: true,
+                  }))}
+                  hideOrder
+                />
+              ) : (
+                <ChannelContactPicker
+                  mode="phone"
+                  value={
+                    (d.phoneSelection as PhoneSelection | undefined) ??
+                    DEFAULT_PHONE_SELECTION
+                  }
+                  onChange={(next) => set("phoneSelection", next)}
+                  previewPhones={getBorrowerPhones(previewBorrower).map((v) => ({
+                    value: v,
+                    verified: true,
+                  }))}
+                  hideCascade
+                  hideOrder
+                  title={
+                    channel === "whatsapp"
+                      ? "WhatsApp numbers to use"
+                      : undefined
+                  }
+                />
+              )}
+            </div>
+            )}
             {/* Mode toggle */}
             <div>
               <Label className="text-[11px] uppercase tracking-wider text-muted-foreground">
@@ -691,74 +705,64 @@ export function MessageNodeFullEditor({
               </>
             )}
 
-            {/* Channel-specific extras */}
-            <div className="grid gap-4 sm:grid-cols-2">
-              {channel === "email" && (
-                <>
-                  <FormField label="From name">
+            {/* Email — governed Sender Profile + per-node From overrides. */}
+            {channel === "email" && (
+              <div className="rounded-lg border border-border bg-background/60 p-3">
+                <SenderProfilePicker
+                  lenderId={lenderId ?? null}
+                  value={senderProfileId ?? null}
+                  onChange={(id) => set("senderProfileId", id)}
+                  customFromName={customFromName}
+                  customFromEmail={customFromEmail}
+                  customReplyTo={customReplyTo}
+                  onCustomChange={(patch) => {
+                    if (patch.customFromName !== undefined)
+                      set("senderFromName", patch.customFromName)
+                    if (patch.customFromEmail !== undefined)
+                      set("senderFromEmail", patch.customFromEmail)
+                    if (patch.customReplyTo !== undefined)
+                      set("senderReplyTo", patch.customReplyTo)
+                  }}
+                />
+              </div>
+            )}
+
+            {/* Channel-specific extras (SMS / WhatsApp only). */}
+            {channel !== "email" && (
+              <div className="grid gap-4 sm:grid-cols-2">
+                {channel === "sms" && (
+                  <FormField label="Sender ID">
                     <Input
-                      value={fromName}
-                      onChange={(e) => set("fromName", e.target.value)}
-                      placeholder="ClearGrid Collections"
+                      value={smsSenderId}
+                      onChange={(e) => set("smsSenderId", e.target.value)}
+                      placeholder="ClearGrid"
                       className="h-9 text-[13px]"
                     />
                   </FormField>
-                  <FormField label="From address">
-                    <Input
-                      value={fromAddress}
-                      onChange={(e) => set("fromAddress", e.target.value)}
-                      placeholder="collections@cleargrid.co"
-                      className="h-9 text-[13px]"
-                    />
-                  </FormField>
-                  <FormField label="Reply-to">
-                    <Input
-                      value={replyTo}
-                      onChange={(e) => set("replyTo", e.target.value)}
-                      placeholder="replies@cleargrid.co"
-                      className="h-9 text-[13px]"
-                    />
-                  </FormField>
-                </>
-              )}
-              {channel === "sms" && (
-                <FormField label="Sender ID">
-                  <Input
-                    value={smsSenderId}
-                    onChange={(e) => set("smsSenderId", e.target.value)}
-                    placeholder="ClearGrid"
-                    className="h-9 text-[13px]"
-                  />
+                )}
+                <FormField label="Provider">
+                  <select
+                    value={provider}
+                    onChange={(e) => set("provider", e.target.value)}
+                    className="h-9 w-full rounded-md border border-input bg-background px-2 text-[13px] outline-none focus-visible:border-ring"
+                  >
+                    <option value="default">Default</option>
+                    {channel === "sms" && (
+                      <>
+                        <option value="twilio">Twilio</option>
+                        <option value="unifonic">Unifonic</option>
+                      </>
+                    )}
+                    {channel === "whatsapp" && (
+                      <>
+                        <option value="meta">Meta Cloud API</option>
+                        <option value="twilio">Twilio</option>
+                      </>
+                    )}
+                  </select>
                 </FormField>
-              )}
-              <FormField label="Provider">
-                <select
-                  value={provider}
-                  onChange={(e) => set("provider", e.target.value)}
-                  className="h-9 w-full rounded-md border border-input bg-background px-2 text-[13px] outline-none focus-visible:border-ring"
-                >
-                  <option value="default">Default</option>
-                  {channel === "email" && (
-                    <>
-                      <option value="sendgrid">SendGrid</option>
-                      <option value="ses">Amazon SES</option>
-                    </>
-                  )}
-                  {channel === "sms" && (
-                    <>
-                      <option value="twilio">Twilio</option>
-                      <option value="unifonic">Unifonic</option>
-                    </>
-                  )}
-                  {channel === "whatsapp" && (
-                    <>
-                      <option value="meta">Meta Cloud API</option>
-                      <option value="twilio">Twilio</option>
-                    </>
-                  )}
-                </select>
-              </FormField>
-            </div>
+              </div>
+            )}
 
           </div>
         </div>
@@ -768,45 +772,20 @@ export function MessageNodeFullEditor({
           <div className="sticky top-0">
             <div className="mb-3 flex items-center justify-between">
               <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                Preview · as the {isB2B ? "contact" : "borrower"} received it
+                Preview · as the borrower received it
               </div>
               <select
                 value={previewBorrowerId}
                 onChange={(e) => setPreviewBorrowerId(e.target.value)}
                 className="h-7 rounded border border-input bg-background px-2 text-[11px] outline-none focus-visible:border-ring"
               >
-                {isB2B
-                  ? B2B_ACCOUNTS.map((id) => (
-                      <option key={id} value={id}>
-                        {getBusinessName(id)}
-                      </option>
-                    ))
-                  : borrowers.slice(0, 20).map((b) => (
-                      <option key={b.id} value={b.id}>
-                        {b.name} — {b.dpdBucket} DPD
-                      </option>
-                    ))}
+                {borrowers.slice(0, 20).map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.name} — {b.dpdBucket} DPD
+                  </option>
+                ))}
               </select>
             </div>
-            {isB2B && previewContacts.length > 0 && (
-              <div className="mb-3 flex items-center justify-between gap-2 rounded-md border border-border/60 bg-background/60 px-2.5 py-1.5">
-                <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
-                  Contact
-                </div>
-                <select
-                  value={previewContactId}
-                  onChange={(e) => setPreviewContactId(e.target.value)}
-                  className="h-7 flex-1 rounded border border-input bg-background px-2 text-[11px] outline-none focus-visible:border-ring"
-                >
-                  {previewContacts.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name} · {DESIGNATION_LABEL[c.designation]}
-                      {c.isPrimary ? " · primary" : ""}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
             <MessagePreview
               channel={channel}
               subject={renderedSubject}
@@ -814,8 +793,8 @@ export function MessageNodeFullEditor({
               recipientName={previewBorrower.name}
               recipientPhone={previewBorrower.phone}
               senderId={smsSenderId}
-              fromName={fromName}
-              fromAddress={fromAddress}
+              fromName={effectiveFromName}
+              fromAddress={effectiveFromEmail}
               clickTracking={true}
             />
           </div>
@@ -1796,15 +1775,6 @@ const VARIABLES: Array<{ token: string; label: string; group: string; resolveAt?
   { token: "{{ptp_date}}", label: "PTP date", group: "Follow-up" },
   { token: "{{last_agent}}", label: "Last agent", group: "Follow-up" },
   { token: "{{lender.name}}", label: "Lender name", group: "Lender" },
-  // B2B multi-contact — only resolve when the account has a matching contact.
-  { token: "{{contact.first_name}}", label: "First name", group: "Contact" },
-  { token: "{{contact.last_name}}", label: "Last name", group: "Contact" },
-  { token: "{{contact.full_name}}", label: "Full name", group: "Contact" },
-  { token: "{{contact.designation}}", label: "Designation", group: "Contact" },
-  { token: "{{contact.phone}}", label: "Phone", group: "Contact" },
-  { token: "{{contact.email}}", label: "Email", group: "Contact" },
-  { token: "{{business.name}}", label: "Business name", group: "Business" },
-  { token: "{{business.cr_number}}", label: "CR number", group: "Business" },
 ]
 
 export function AddVariableButton({
@@ -1937,18 +1907,10 @@ export function AddVariableButton({
   )
 }
 
-function renderVars(
-  text: string,
-  b: Borrower,
-  ctx?: {
-    contact?: Contact | null
-    contactNameFallback?: string
-    isB2B?: boolean
-  },
-): string {
+function renderVars(text: string, b: Borrower): string {
   if (!text) return ""
   const first = b.name.split(" ")[0] ?? b.name
-  let out = text
+  return text
     .replace(/\{\{\s*borrower\.first_name\s*\}\}/g, first)
     .replace(/\{\{\s*borrower\.name\s*\}\}/g, b.name)
     .replace(/\{\{\s*borrower\.phone\s*\}\}/g, b.phone)
@@ -1956,32 +1918,4 @@ function renderVars(
     .replace(/\{\{\s*borrower\.product\s*\}\}/g, b.product)
     .replace(/\{\{\s*first_name\s*\}\}/g, first)
     .replace(/\{\{\s*amount\s*\}\}/g, `AED ${b.outstanding.toLocaleString()}`)
-
-  // Contact / business tokens (Tamara B2B). Missing contact falls back to
-  // the configured group greeting string.
-  const c = ctx?.contact ?? null
-  const fallback = ctx?.contactNameFallback ?? "there"
-  const fullName = c?.name ?? fallback
-  const contactFirst = c?.name?.split(" ")[0] ?? fallback
-  const contactLast = c?.name?.split(" ").slice(1).join(" ") ?? ""
-  out = out
-    .replace(/\{\{\s*contact\.first_name\s*\}\}/g, contactFirst)
-    .replace(/\{\{\s*contact\.last_name\s*\}\}/g, contactLast)
-    .replace(/\{\{\s*contact\.full_name\s*\}\}/g, fullName)
-    .replace(
-      /\{\{\s*contact\.designation\s*\}\}/g,
-      c ? DESIGNATION_LABEL[c.designation] : "",
-    )
-    .replace(/\{\{\s*contact\.phone\s*\}\}/g, c?.phones[0]?.e164 ?? "")
-    .replace(/\{\{\s*contact\.email\s*\}\}/g, c?.email ?? "")
-
-  if (ctx?.isB2B) {
-    out = out
-      .replace(/\{\{\s*business\.name\s*\}\}/g, getBusinessName(b.id))
-      .replace(
-        /\{\{\s*business\.cr_number\s*\}\}/g,
-        `CR-${b.id.slice(-6).toUpperCase()}`,
-      )
-  }
-  return out
 }

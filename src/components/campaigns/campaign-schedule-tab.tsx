@@ -74,11 +74,7 @@ const WAIT_OPTIONS: Array<{ min: number; label: string }> = [
 interface CampaignScheduleTabProps {
   schedule: CampaignSchedule
   onChange: (next: CampaignSchedule) => void
-  /**
-   * Override the contact-slot labels. Defaults to Contact 1..5; the Tamara
-   * B2B path passes designation names (`B2B_CONTACT_SLOTS`) so the redial
-   * builder addresses roles, not numbered phone slots.
-   */
+  /** Override the contact-slot labels. Defaults to Contact 1..5. */
   contactSlots?: string[]
   /**
    * "full" (default) renders every section — When-to-run, calling hours,
@@ -89,6 +85,12 @@ interface CampaignScheduleTabProps {
    * redial can be adjusted per enrollment.
    */
   mode?: "full" | "redial-only"
+  /**
+   * When true, renders the Tamara B2B multi-contact rotation controls on top
+   * of the standard per-contact attempt fields. Callers should also pass
+   * B2B designation labels through `contactSlots`.
+   */
+  isB2B?: boolean
 }
 
 export function CampaignScheduleTab({
@@ -96,6 +98,7 @@ export function CampaignScheduleTab({
   onChange,
   mode = "full",
   contactSlots = DEFAULT_CONTACT_SLOTS,
+  isB2B = false,
 }: CampaignScheduleTabProps) {
   const s = mergeSchedule(schedule)
   const set = <K extends keyof CampaignSchedule>(k: K, v: CampaignSchedule[K]) =>
@@ -246,7 +249,10 @@ export function CampaignScheduleTab({
       </>}
 
       {/* Redial settings */}
-      <Section title="Redial settings" description="Configure how the dialer handles unanswered and failed calls.">
+      <Section
+        title="Redial settings"
+        description="Configure how the dialer handles unanswered and failed calls."
+      >
         <ToggleRow
           title="Enable redial / multiple attempts"
           description="After an unanswered call, retry using the rules below."
@@ -286,6 +292,76 @@ export function CampaignScheduleTab({
               checked={s.redial.tryMultipleNumbers}
               onChange={(v) => setRedial("tryMultipleNumbers", v)}
             />
+            {isB2B && (
+              <div className="mt-3 rounded-lg border border-purple-500/40 bg-purple-500/[0.05] p-3">
+                <div className="flex items-center justify-between">
+                  <div className="text-[10px] font-semibold uppercase tracking-wider text-purple-300">
+                    Contact rotation
+                  </div>
+                  <span className="rounded bg-purple-500/15 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-purple-200">
+                    Tamara B2B
+                  </span>
+                </div>
+                <p className="mt-1 text-[10.5px] text-muted-foreground">
+                  How the dialer moves across contacts on a single account,
+                  applied on top of per-contact attempts.
+                </p>
+                <div className="mt-3 space-y-2">
+                  <div className="flex items-center justify-between rounded-md border border-border bg-background/60 px-3 py-2">
+                    <div className="min-w-0">
+                      <div className="text-[11.5px] font-medium text-foreground">
+                        Escalate to next contact after N failed attempts
+                      </div>
+                      <div className="mt-0.5 text-[10px] text-muted-foreground">
+                        Rotate to the next contact in the account&apos;s
+                        priority order once this many attempts fail.
+                      </div>
+                    </div>
+                    <input
+                      type="number"
+                      min={1}
+                      max={10}
+                      value={s.redial.escalateToNextContactAfter ?? 2}
+                      onChange={(e) =>
+                        setRedial(
+                          "escalateToNextContactAfter",
+                          Math.max(1, Math.min(10, Number(e.target.value) || 1)),
+                        )
+                      }
+                      className="ml-3 h-8 w-16 rounded-md border border-input bg-background px-2 text-center text-[13px] tabular-nums outline-none focus-visible:border-ring"
+                    />
+                  </div>
+                  <div className="flex items-center justify-between rounded-md border border-border bg-background/60 px-3 py-2">
+                    <div className="min-w-0">
+                      <div className="text-[11.5px] font-medium text-foreground">
+                        Wait between contacts (min)
+                      </div>
+                      <div className="mt-0.5 text-[10px] text-muted-foreground">
+                        Cool-off before the first attempt on the next contact
+                        after rotation.
+                      </div>
+                    </div>
+                    <input
+                      type="number"
+                      min={0}
+                      max={1440}
+                      value={s.redial.waitBetweenContactsMin ?? 60}
+                      onChange={(e) =>
+                        setRedial(
+                          "waitBetweenContactsMin",
+                          Math.max(0, Math.min(1440, Number(e.target.value) || 0)),
+                        )
+                      }
+                      className="ml-3 h-8 w-16 rounded-md border border-input bg-background px-2 text-center text-[13px] tabular-nums outline-none focus-visible:border-ring"
+                    />
+                  </div>
+                </div>
+                <p className="mt-2 text-[10px] text-muted-foreground">
+                  A resolved outcome on any contact (PTP, Payment, Refused)
+                  automatically stops remaining contacts on the account.
+                </p>
+              </div>
+            )}
             <RoundSequenceBuilder
               rounds={s.redial.rounds}
               onChange={(rounds) => setRedial("rounds", rounds)}

@@ -42,7 +42,6 @@ import {
 import { NodeAnalyticsTab } from "@/components/journeys/node-analytics-tab"
 import { DirectionToggle, type TextDir } from "@/components/shared/direction-toggle"
 import { ContactSelector } from "@/components/shared/contact-selector"
-import { getLenderById, lenderFlag } from "@/data/lenders"
 import { useLenderFlag } from "@/hooks/use-lender-flag"
 import { DEFAULT_RECIPIENT_RULE, type RecipientRule } from "@/data/contacts"
 import { getJourneyById } from "@/data/journeys"
@@ -52,6 +51,7 @@ import {
   DIALER_OPTIONS,
   GATEWAY_OPTIONS,
   DIAL_SPEED_OPTIONS,
+  getAgentGroupCount,
   type CampaignSchedule,
 } from "@/data/campaigns-seed"
 
@@ -156,7 +156,10 @@ export function HumanCampaignNodeFullEditor({
   const d = (node.data ?? {}) as Record<string, unknown>
   const cfg = readConfig(d)
   const [tab, setTab] = React.useState<TabId>("basics")
-  const isB2B = useLenderFlag(getJourneyById(journeyId)?.lenderId, "tamara_b2b_contacts")
+  const isB2B = useLenderFlag(
+    getJourneyById(journeyId)?.lenderId,
+    "tamara_b2b_contacts",
+  )
 
   const set = <K extends keyof CampaignConfig>(k: K, v: CampaignConfig[K]) => {
     const next: CampaignConfig = { ...cfg, [k]: v }
@@ -244,7 +247,7 @@ export function HumanCampaignNodeFullEditor({
             </div>
 
             {tab === "basics" && (
-              <BasicsTab cfg={cfg} set={set} journeyId={journeyId} />
+              <BasicsTab cfg={cfg} set={set} journeyId={journeyId} isB2B={isB2B} />
             )}
             {tab === "messages" && <MessagesTab cfg={cfg} set={set} />}
             {tab === "redial" && (
@@ -261,6 +264,7 @@ export function HumanCampaignNodeFullEditor({
                   schedule={cfg.schedule}
                   onChange={(schedule) => set("schedule", schedule)}
                   contactSlots={isB2B ? B2B_CONTACT_SLOTS : undefined}
+                  isB2B={isB2B}
                 />
               </div>
             )}
@@ -289,18 +293,19 @@ export function HumanCampaignNodeFullEditor({
 function BasicsTab({
   cfg,
   set,
-  journeyId,
+  isB2B,
 }: {
   cfg: CampaignConfig
   set: <K extends keyof CampaignConfig>(k: K, v: CampaignConfig[K]) => void
   journeyId: string
+  isB2B: boolean
 }) {
-  const isB2B = useLenderFlag(getJourneyById(journeyId)?.lenderId, "tamara_b2b_contacts")
   return (
     <div className="space-y-4">
       {isB2B && (
         <div className="rounded-xl border border-primary/40 bg-primary/[0.03] p-4">
           <ContactSelector
+            channel="voice"
             value={cfg.recipientRule ?? DEFAULT_RECIPIENT_RULE}
             onChange={(next) => set("recipientRule", next)}
           />
@@ -317,11 +322,12 @@ function BasicsTab({
                     v as CampaignConfig["withinAccountOrder"],
                   )
                 }
-                options={[
-                  "priority_rank",
-                  "designation",
-                  "last_outcome_recency",
-                ]}
+                options={["priority_rank", "last_outcome_recency"]}
+                renderOption={(o) =>
+                  o === "priority_rank"
+                    ? "Priority rank"
+                    : "Last outcome recency"
+                }
               />
             </div>
             <div className="mt-1 text-[10px] text-muted-foreground">
@@ -364,6 +370,7 @@ function BasicsTab({
             placeholder="Select an agent group"
             onChange={(v) => set("agentGroup", v)}
             options={AGENT_GROUPS}
+            renderOption={(g) => `${g} · ${getAgentGroupCount(g)} agents`}
           />
         </FormField>
         <FormField label="Secondary group">
@@ -373,6 +380,7 @@ function BasicsTab({
             onChange={(v) => set("secondaryGroup", v)}
             options={AGENT_GROUPS}
             allowEmpty
+            renderOption={(g) => `${g} · ${getAgentGroupCount(g)} agents`}
           />
         </FormField>
         <FormField label="Dial speed *">
@@ -402,12 +410,15 @@ function BasicsSelect({
   options,
   placeholder,
   allowEmpty,
+  renderOption,
 }: {
   value: string
   onChange: (v: string) => void
   options: string[]
   placeholder?: string
   allowEmpty?: boolean
+  /** Optional per-option label override; falls back to the raw value. */
+  renderOption?: (option: string) => string
 }) {
   return (
     <select
@@ -423,7 +434,7 @@ function BasicsSelect({
       )}
       {options.map((o) => (
         <option key={o} value={o}>
-          {o}
+          {renderOption ? renderOption(o) : o}
         </option>
       ))}
     </select>
