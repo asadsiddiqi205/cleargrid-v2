@@ -193,6 +193,30 @@ export const BLOCK_TYPES: BlockType[] = [
   { type: "inbound_message_trigger", label: "Inbound Message", icon: MessageCircle, description: "Fires when a borrower sends an email / SMS / WhatsApp", category: "entry", nodeKind: "trigger", defaultData: { label: "Inbound Message", triggerType: "inbound_message" } },
   { type: "incoming_call_trigger", label: "Incoming Call", icon: Phone, description: "Fires when an inbound call is received on a lender line", category: "entry", nodeKind: "trigger", defaultData: { label: "Incoming Call", triggerType: "incoming_call" } },
   { type: "journey_handoff_entry", label: "Journey Handoff Entry", icon: ArrowRightLeft, description: "Accept borrowers handed off from another journey", category: "entry", nodeKind: "trigger", defaultData: { label: "Journey Handoff Entry", triggerType: "journey_handoff_entry", acceptFrom: "all" } },
+  {
+    type: "webhook_trigger",
+    label: "Inbound Webhook",
+    icon: Webhook,
+    description: "Fire when an external system POSTs to a journey-specific URL",
+    category: "entry",
+    nodeKind: "trigger",
+    defaultData: {
+      label: "Inbound Webhook",
+      triggerType: "webhook",
+      // Deterministic per-journey URL in production; prototype shows a mock
+      // path so authors see where to point the external system.
+      webhookPath: "/journeys/wh/{{journeyId}}",
+      webhookSecret: "whsec_demo_rotate_me",
+      // Headers / body columns the external system is expected to send;
+      // downstream nodes list these as variables.
+      webhookColumns: [
+        { id: "col-wh-borrower_id", name: "borrower_id", kind: "text" },
+        { id: "col-wh-phone", name: "phone", kind: "phone" },
+        { id: "col-wh-email", name: "email", kind: "email" },
+        { id: "col-wh-event", name: "event", kind: "text" },
+      ],
+    },
+  },
 
   // ───── Channels / Actions (5) — matches command.cleargrid.ai ─────
   { type: "send_email", label: "Send Email", icon: Mail, description: "Send an email via the lender's Infobip Connection", category: "channels", nodeKind: "action", defaultData: { label: "Send Email", actionType: "email" } },
@@ -230,9 +254,29 @@ export const BLOCK_TYPES: BlockType[] = [
   { type: "dnc_gate", label: "DNC Gate", icon: ShieldOff, description: "Is this borrower DNC'd on every scoped channel?", category: "data", maxOutputs: 2, nodeKind: "condition", defaultData: { label: "DNC Gate", conditionType: "dnc_gate" } },
   { type: "add_to_dnc", label: "Add to DNC", icon: ShieldOff, description: "Mark the deal's primary phone or email as DNC", category: "data", nodeKind: "generic", defaultData: { label: "Add to DNC" } },
 
-  // ───── Integrations (2) — matches command.cleargrid.ai ─────
+  // ───── Integrations ─────
   { type: "flow_handoff", label: "Journey Handoff", icon: ArrowRightLeft, description: "Exit and re-enrol the borrower into another journey", category: "integrations", nodeKind: "generic", defaultData: { label: "Journey Handoff" } },
   { type: "audience_sync", label: "Audience Sync", icon: RefreshCw, description: "Add or remove the deal from a static audience", category: "integrations", nodeKind: "generic", defaultData: { label: "Audience Sync" } },
+  {
+    type: "send_webhook",
+    label: "Send Webhook",
+    icon: Webhook,
+    description: "POST a JSON payload to an external URL (CRM, data warehouse, ops tool)",
+    category: "integrations",
+    nodeKind: "action",
+    defaultData: {
+      label: "Send Webhook",
+      actionType: "webhook",
+      webhookMethod: "POST",
+      webhookUrl: "",
+      webhookHeaders: [{ key: "Content-Type", value: "application/json" }],
+      webhookBodyMode: "json",
+      webhookBodyJson: "{\n  \"borrower_id\": \"{{borrower.id}}\",\n  \"outstanding\": \"{{borrower.outstanding}}\"\n}",
+      webhookRetryOnFailure: true,
+      webhookRetryMaxAttempts: 3,
+      webhookTimeoutSec: 10,
+    },
+  },
 
   // ───── AI & Optimization (1) — matches command.cleargrid.ai ─────
   { type: "experiment", label: "Experiment / A-B Test", icon: FlaskConical, description: "Stable per-borrower A/B routing — same person always sees same variant", category: "ai", maxOutputs: 4, nodeKind: "split", defaultData: { label: "Experiment", variantCount: 4, splitA: 25, splitB: 25, splitC: 25, splitD: 25 } },

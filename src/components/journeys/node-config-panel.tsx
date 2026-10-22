@@ -1345,6 +1345,11 @@ export function NodeConfigPanel({ node, onClose, onUpdate, onDeleteNode, nodes =
               </>
             )}
 
+            {/* ---- Send Webhook ---- */}
+            {(d.actionType as string) === "webhook" && (
+              <WebhookActionConfig d={d} update={update} />
+            )}
+
             {/* ---- Assign Agent ---- */}
             {(d.actionType as string) === "agent" && (
               <>
@@ -3843,4 +3848,182 @@ function RecipientsControl({
       )}
     </div>
   )
+}
+
+/* ─────────── Send Webhook action config ───────────
+   Lets authors POST a payload to an external URL when a borrower reaches
+   this node. Minimal shape in the prototype — URL, method, headers,
+   JSON body, retry policy. Values persist on node.data so the send
+   pipeline can read them at execution time.
+   TODO (backend contract): webhookMethod + webhookUrl + webhookHeaders +
+   webhookBodyJson + webhookRetryOnFailure + webhookRetryMaxAttempts +
+   webhookTimeoutSec; execution worker signs the request (HMAC) and
+   retries with exponential backoff on 5xx / timeout. */
+function WebhookActionConfig({
+  d,
+  update,
+}: {
+  d: Record<string, unknown>;
+  update: (field: string, value: unknown) => void;
+}) {
+  const method = ((d.webhookMethod as string) ?? "POST") as "POST" | "PUT" | "PATCH";
+  const url = (d.webhookUrl as string) ?? "";
+  const headers =
+    (d.webhookHeaders as Array<{ key: string; value: string }> | undefined) ?? [];
+  const body = (d.webhookBodyJson as string) ?? "";
+  const retry = (d.webhookRetryOnFailure as boolean) ?? true;
+  const maxAttempts = (d.webhookRetryMaxAttempts as number) ?? 3;
+  const timeoutSec = (d.webhookTimeoutSec as number) ?? 10;
+  const setHeader = (i: number, patch: Partial<{ key: string; value: string }>) => {
+    const next = headers.map((h, idx) => (idx === i ? { ...h, ...patch } : h));
+    update("webhookHeaders", next);
+  };
+  const addHeader = () =>
+    update("webhookHeaders", [...headers, { key: "", value: "" }]);
+  const removeHeader = (i: number) =>
+    update(
+      "webhookHeaders",
+      headers.filter((_, idx) => idx !== i),
+    );
+  return (
+    <div className="space-y-3">
+      <div className="grid grid-cols-[90px_minmax(0,1fr)] gap-2">
+        <div>
+          <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">
+            Method
+          </Label>
+          <select
+            value={method}
+            onChange={(e) => update("webhookMethod", e.target.value)}
+            className="mt-1 h-8 w-full rounded-md border border-input bg-background px-2 text-[12px] outline-none focus-visible:border-ring"
+          >
+            <option value="POST">POST</option>
+            <option value="PUT">PUT</option>
+            <option value="PATCH">PATCH</option>
+          </select>
+        </div>
+        <div>
+          <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">
+            URL *
+          </Label>
+          <Input
+            value={url}
+            onChange={(e) => update("webhookUrl", e.target.value)}
+            placeholder="https://api.example.com/hooks/journey"
+            className="mt-1 h-8 font-mono text-[11.5px]"
+          />
+        </div>
+      </div>
+
+      <div>
+        <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">
+          Headers
+        </Label>
+        <div className="mt-1 space-y-1.5">
+          {headers.map((h, i) => (
+            <div key={i} className="flex gap-1.5">
+              <Input
+                value={h.key}
+                onChange={(e) => setHeader(i, { key: e.target.value })}
+                placeholder="Header"
+                className="h-7 w-32 font-mono text-[11px]"
+              />
+              <Input
+                value={h.value}
+                onChange={(e) => setHeader(i, { value: e.target.value })}
+                placeholder="value"
+                className="h-7 flex-1 font-mono text-[11px]"
+              />
+              <button
+                type="button"
+                onClick={() => removeHeader(i)}
+                aria-label="Remove header"
+                className="rounded border border-border bg-background p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+              >
+                <Trash2 className="h-3 w-3" />
+              </button>
+            </div>
+          ))}
+          <button
+            type="button"
+            onClick={addHeader}
+            className="w-full rounded border border-dashed border-border bg-muted/20 px-2 py-1 text-[10.5px] text-muted-foreground hover:bg-muted/30 hover:text-foreground"
+          >
+            + Add header
+          </button>
+        </div>
+      </div>
+
+      <div>
+        <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">
+          Body (JSON)
+        </Label>
+        <textarea
+          value={body}
+          onChange={(e) => update("webhookBodyJson", e.target.value)}
+          placeholder='{"borrower_id": "{{borrower.id}}"}'
+          className="mt-1 min-h-[160px] w-full rounded-md border border-input bg-background p-2 font-mono text-[11.5px] outline-none focus-visible:border-ring"
+        />
+        <p className="mt-1 text-[10px] text-muted-foreground">
+          Supports{" "}
+          <span className="font-mono">{"{{borrower.*}}"}</span> and upload-column
+          variables when the audience comes from an uploaded list.
+        </p>
+      </div>
+
+      <div className="rounded-md border border-border bg-background/60 p-2.5 space-y-2">
+        <label className="flex cursor-pointer items-start gap-2 text-[11.5px]">
+          <input
+            type="checkbox"
+            checked={retry}
+            onChange={(e) => update("webhookRetryOnFailure", e.target.checked)}
+            className="mt-0.5 h-3.5 w-3.5 accent-primary"
+          />
+          <div>
+            <div className="font-medium text-foreground">
+              Retry on failure / timeout
+            </div>
+            <div className="mt-0.5 text-[10px] text-muted-foreground">
+              Exponential backoff on 5xx responses and network errors.
+            </div>
+          </div>
+        </label>
+        {retry && (
+          <div className="flex items-center gap-2 text-[11.5px]">
+            <span className="text-muted-foreground">Max attempts</span>
+            <input
+              type="number"
+              min={1}
+              max={10}
+              value={maxAttempts}
+              onChange={(e) =>
+                update(
+                  "webhookRetryMaxAttempts",
+                  Math.max(1, Math.min(10, Number(e.target.value) || 1)),
+                )
+              }
+              className="h-7 w-16 rounded border border-input bg-background px-2 text-center tabular-nums outline-none focus-visible:border-ring"
+            />
+          </div>
+        )}
+        <div className="flex items-center gap-2 text-[11.5px]">
+          <span className="text-muted-foreground">Timeout</span>
+          <input
+            type="number"
+            min={1}
+            max={60}
+            value={timeoutSec}
+            onChange={(e) =>
+              update(
+                "webhookTimeoutSec",
+                Math.max(1, Math.min(60, Number(e.target.value) || 1)),
+              )
+            }
+            className="h-7 w-16 rounded border border-input bg-background px-2 text-center tabular-nums outline-none focus-visible:border-ring"
+          />
+          <span className="text-muted-foreground">seconds</span>
+        </div>
+      </div>
+    </div>
+  );
 }

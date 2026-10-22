@@ -15,6 +15,7 @@ import {
   Layers,
   Globe,
   PhoneIncoming,
+  Webhook,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { QuickAddButton } from "@/components/journeys/quick-add-button";
@@ -25,6 +26,7 @@ const actionIcons: Record<string, typeof Mail> = {
   email: Mail, sms: MessageSquare, whatsapp: MessageCircle, call: Phone,
   agent: UserPlus, attribute: Edit, push: Smartphone, web_push: Bell,
   inapp: Layers, onsite: Globe, rich_media: Layers, notify_internal: Bell,
+  webhook: Webhook,
 };
 
 const actionLabels: Record<string, string> = {
@@ -32,6 +34,7 @@ const actionLabels: Record<string, string> = {
   agent: "Assign Agent", attribute: "Update Attribute", push: "Mobile Push",
   web_push: "Web Push", inapp: "In-App", onsite: "On-Site",
   rich_media: "Rich Media", notify_internal: "Notify Team",
+  webhook: "Webhook",
 };
 
 const HANDLE_CLS = "!h-3.5 !w-3.5 !rounded-full !border-2 !border-[var(--background)] !bg-[var(--primary)]";

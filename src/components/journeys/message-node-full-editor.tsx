@@ -12,7 +12,7 @@
  */
 
 import * as React from "react"
-import type { Node } from "@xyflow/react"
+import type { Node, Edge } from "@xyflow/react"
 import {
   X,
   Mail,
@@ -50,6 +50,10 @@ import { ChannelContactPicker } from "@/components/shared/channel-contact-picker
 import { ContactSelector } from "@/components/shared/contact-selector"
 import { useLenderFlag } from "@/hooks/use-lender-flag"
 import { DEFAULT_RECIPIENT_RULE, type RecipientRule } from "@/data/contacts"
+import {
+  findUpstreamExcelColumns,
+  type UploadColumn,
+} from "@/data/journeys"
 import {
   DEFAULT_PHONE_SELECTION,
   DEFAULT_EMAIL_SELECTION,
@@ -220,6 +224,9 @@ interface MessageNodeFullEditorProps {
   selectedRunId?: string | null
   /** Owning lender — used to gate multi-contact recipient rules. */
   lenderId?: string
+  /** Full node + edge sets so the editor can walk upstream (recipient source). */
+  nodes?: Node[]
+  edges?: Edge[]
 }
 
 type EditorTab = "compose" | "delivery" | "logic" | "analytics"
@@ -239,6 +246,8 @@ export function MessageNodeFullEditor({
   journeyId,
   selectedRunId,
   lenderId,
+  nodes: canvasNodes,
+  edges: canvasEdges,
 }: MessageNodeFullEditorProps) {
   const d = (node.data ?? {}) as Record<string, unknown>
   const actionType = (d.actionType as string) ?? "email"
@@ -262,6 +271,39 @@ export function MessageNodeFullEditor({
   const recipientRule: RecipientRule =
     (d.recipientRule as RecipientRule) ?? DEFAULT_RECIPIENT_RULE
   const emailSendMode = (d.emailSendMode as string) ?? "one_per_contact"
+
+  // Detect whether this node's audience comes from an uploaded list rather
+  // than borrower records. The Excel Upload trigger exposes columns; the
+  // Specific Users trigger enrols a manual list. In either case there is no
+  // borrower record to walk, so neither the B2B ContactSelector (multi-contact
+  // per account) nor the per-borrower phone/email ChannelContactPicker apply.
+  const upstreamUploadColumns: UploadColumn[] | null = React.useMemo(() => {
+    if (!canvasNodes || !canvasEdges) return null
+    return findUpstreamExcelColumns(canvasNodes, canvasEdges, node?.id ?? "")
+  }, [canvasNodes, canvasEdges, node?.id])
+  const upstreamIsSpecificUsers = React.useMemo(() => {
+    if (!canvasNodes || !canvasEdges || !node) return false
+    const byId = new Map(canvasNodes.map((n) => [n.id, n] as const))
+    let cursor = node.id
+    const seen = new Set<string>()
+    for (let i = 0; i < 20; i++) {
+      if (seen.has(cursor)) return false
+      seen.add(cursor)
+      const n = byId.get(cursor)
+      if (!n) return false
+      const t = (n.data as { triggerType?: string } | undefined)?.triggerType
+      if (t === "specific_users") return true
+      const inbound = canvasEdges.find((e) => e.target === cursor)
+      if (!inbound) return false
+      cursor = inbound.source
+    }
+    return false
+  }, [canvasNodes, canvasEdges, node])
+  // Explicit author choice wins; otherwise auto-detect from the upstream trigger.
+  const explicitSource = (d.recipientSource as string | undefined)
+  const isListSourced =
+    explicitSource === "upload" ||
+    (explicitSource === undefined && (upstreamUploadColumns !== null || upstreamIsSpecificUsers))
 
   // Governed sender profile + optional free-form overrides. Mirrors the
   // Composer's SenderProfilePicker contract.
@@ -425,8 +467,10 @@ export function MessageNodeFullEditor({
         {/* Left — form */}
         <div className="overflow-y-auto border-r border-border bg-background p-6">
           <div className="mx-auto max-w-2xl space-y-5">
-            {/* Tamara B2B — multi-contact recipients + email send mode */}
-            {isB2B && (
+            {/* Tamara B2B — multi-contact recipients + email send mode.
+                Hidden when the audience comes from an uploaded list: there's
+                no account / contact record to resolve against. */}
+            {isB2B && !isListSourced && (
               <div className="rounded-xl border border-primary/40 bg-primary/[0.03] p-4">
                 <ContactSelector
                   channel={channel === "email" ? "email" : "sms"}
@@ -477,10 +521,37 @@ export function MessageNodeFullEditor({
               </div>
             )}
 
+            {/* List-sourced recipients summary — rendered when the audience
+                comes from an upstream Excel Upload or Specific Users node.
+                Replaces both the B2B ContactSelector and the per-borrower
+                phone/email picker. */}
+            {isListSourced && (
+              <div className="rounded-lg border border-primary/40 bg-primary/[0.03] p-3 text-[11px]">
+                <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-primary">
+                  Recipients from upload
+                </div>
+                <p className="mt-1 text-muted-foreground">
+                  This node runs on the uploaded list, not borrower records.
+                  The {channel === "email" ? "email" : "phone number"} comes
+                  from the mapped column; borrower-level pickers don&apos;t
+                  apply.
+                </p>
+                {upstreamUploadColumns && (
+                  <div className="mt-2 text-[10.5px] text-muted-foreground">
+                    Available columns:{" "}
+                    {upstreamUploadColumns
+                      .map((c) => c.name)
+                      .join(", ")}
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Channel address selection. In B2B mode the ContactSelector
                 above governs recipients, so the number/email picker is
-                hidden to avoid two overlapping choosers. */}
-            {!isB2B && (
+                hidden to avoid two overlapping choosers. Also hidden when
+                the audience is sourced from an uploaded list. */}
+            {!isB2B && !isListSourced && (
             <div className="rounded-lg border border-border bg-background/60 p-3">
               {channel === "email" ? (
                 <ChannelContactPicker

@@ -142,6 +142,9 @@ interface HumanCampaignNodeFullEditorProps {
   selectedRunId?: string | null
   onClose: () => void
   incomingNodeLabel?: string | null
+  /** Full canvas so the editor can walk upstream for list-sourced detection. */
+  nodes?: import("@xyflow/react").Node[]
+  edges?: import("@xyflow/react").Edge[]
 }
 
 export function HumanCampaignNodeFullEditor({
@@ -152,6 +155,8 @@ export function HumanCampaignNodeFullEditor({
   onClose,
   incomingNodeLabel,
   selectedRunId,
+  nodes: canvasNodes,
+  edges: canvasEdges,
 }: HumanCampaignNodeFullEditorProps) {
   const d = (node.data ?? {}) as Record<string, unknown>
   const cfg = readConfig(d)
@@ -160,6 +165,31 @@ export function HumanCampaignNodeFullEditor({
     getJourneyById(journeyId)?.lenderId,
     "tamara_b2b_contacts",
   )
+
+  // Mirrors the detection in the message-node editor: when the audience is
+  // sourced from an uploaded list or a specific-users trigger, there's no
+  // borrower / account record, so the multi-contact B2B UI doesn't apply.
+  const isListSourced = React.useMemo(() => {
+    if (!canvasNodes || !canvasEdges) return false
+    const explicit = d.recipientSource as string | undefined
+    if (explicit === "upload") return true
+    const byId = new Map(canvasNodes.map((n) => [n.id, n] as const))
+    let cursor = node.id
+    const seen = new Set<string>()
+    for (let i = 0; i < 20; i++) {
+      if (seen.has(cursor)) return false
+      seen.add(cursor)
+      const n = byId.get(cursor)
+      if (!n) return false
+      const t = (n.data as { triggerType?: string } | undefined)?.triggerType
+      if (t === "excel_upload" || t === "specific_users") return true
+      const inbound = canvasEdges.find((e) => e.target === cursor)
+      if (!inbound) return false
+      cursor = inbound.source
+    }
+    return false
+  }, [canvasNodes, canvasEdges, node, d.recipientSource])
+  const showB2B = isB2B && !isListSourced
 
   const set = <K extends keyof CampaignConfig>(k: K, v: CampaignConfig[K]) => {
     const next: CampaignConfig = { ...cfg, [k]: v }
@@ -247,7 +277,7 @@ export function HumanCampaignNodeFullEditor({
             </div>
 
             {tab === "basics" && (
-              <BasicsTab cfg={cfg} set={set} journeyId={journeyId} isB2B={isB2B} />
+              <BasicsTab cfg={cfg} set={set} journeyId={journeyId} isB2B={showB2B} />
             )}
             {tab === "messages" && <MessagesTab cfg={cfg} set={set} />}
             {tab === "redial" && (
@@ -263,8 +293,8 @@ export function HumanCampaignNodeFullEditor({
                   mode="redial-only"
                   schedule={cfg.schedule}
                   onChange={(schedule) => set("schedule", schedule)}
-                  contactSlots={isB2B ? B2B_CONTACT_SLOTS : undefined}
-                  isB2B={isB2B}
+                  contactSlots={showB2B ? B2B_CONTACT_SLOTS : undefined}
+                  isB2B={showB2B}
                 />
               </div>
             )}

@@ -2963,6 +2963,8 @@ export default function JourneyCanvas({ journeyId }: JourneyCanvasProps) {
                     journeyId={journeyId}
                     selectedRunId={selectedRunId}
                     lenderId={journeyMeta?.lenderId}
+                    nodes={nodes}
+                    edges={edges}
                   />
                 )
               }
@@ -3008,6 +3010,8 @@ export default function JourneyCanvas({ journeyId }: JourneyCanvasProps) {
                     onClose={() => setSelectedNode(null)}
                     incomingNodeLabel={incomingNodeLabel}
                     selectedRunId={selectedRunId}
+                    nodes={nodes}
+                    edges={edges}
                   />
                 )
               }
