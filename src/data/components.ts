@@ -343,11 +343,25 @@ export function createInstanceData(master: ComponentMaster): ComponentInstanceDa
  * Positions on children are RELATIVE to the parent (ReactFlow requirement),
  * shifted below the group header. The group's outer size auto-fits.
  */
+/**
+ * Options for `buildInstanceCanvasPayload`.
+ * `keepSettings` (default true) carries each inner node's full data map
+ * from the master into the instance children. When false, strips to the
+ * minimum structural fields (label + classification), matching the
+ * pre-change-4 structure-only behavior. Pre-change-4 masters that have no
+ * settings on their inner nodes behave the same under either value, so
+ * this flag is safe to flip on existing components.
+ */
+export interface InstancePayloadOptions {
+  keepSettings?: boolean
+}
+
 export function buildInstanceCanvasPayload(
   master: ComponentMaster,
   groupPos: { x: number; y: number },
   groupId: string,
   overrides: ComponentOverride[] = [],
+  options: InstancePayloadOptions = {},
 ): {
   groupNode: import("@xyflow/react").Node
   childNodes: import("@xyflow/react").Node[]
@@ -380,12 +394,24 @@ export function buildInstanceCanvasPayload(
   const width = Math.max(340, maxX - minX + PAD_X * 2)
   const height = Math.max(200, maxY - minY + PAD_Y * 2 + HEADER_H)
 
+  const keepSettings = options.keepSettings !== false
   const childIdMap = new Map<string, string>()
   const childNodes = master.nodes.map((mn) => {
     const childId = `${groupId}__${mn.id}`
     childIdMap.set(mn.id, childId)
+    // Deep-clone the stored master data so an instance never shares object
+    // references with its master. Override logic runs on top of this
+    // isolated copy, so edits on one instance don't bleed into others.
+    const sourceData: Record<string, unknown> = keepSettings
+      ? deepCloneLocal((mn.data ?? {}) as Record<string, unknown>)
+      : {
+          label: (mn.data as Record<string, unknown> | undefined)?.label,
+          blockType: (mn.data as Record<string, unknown> | undefined)?.blockType,
+          actionType: (mn.data as Record<string, unknown> | undefined)?.actionType,
+          triggerType: (mn.data as Record<string, unknown> | undefined)?.triggerType,
+        }
     const resolvedData = applyOverridesToNodeData(
-      (mn.data ?? {}) as Record<string, unknown>,
+      sourceData,
       mn.id,
       overrides,
       master.lockedProperties,
@@ -436,6 +462,22 @@ export function buildInstanceCanvasPayload(
 }
 
 /** Apply overrides inline to a node's data map (dotted-path aware). */
+/**
+ * Deep-clone a plain object so the result shares no object references with
+ * the source. structuredClone handles nested Maps/Sets; JSON fallback is
+ * safe for the config shapes stored in node data (templates, variables,
+ * recipient settings, call settings, delays, conditions).
+ */
+function deepCloneLocal<T>(x: T): T {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    if (typeof structuredClone === "function") return structuredClone(x) as any
+  } catch {
+    /* fall through */
+  }
+  return JSON.parse(JSON.stringify(x)) as T
+}
+
 function applyOverridesToNodeData(
   data: Record<string, unknown>,
   masterNodeId: string,

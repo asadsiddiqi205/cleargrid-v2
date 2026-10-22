@@ -131,6 +131,34 @@ function validateSelection(nodes: Node[], edges: Edge[], selectedIds: string[]):
  * `pad` mirrors PAD_X/PAD_Y + HEADER_H used by buildInstanceCanvasPayload
  * so child nodes stay in roughly the same absolute canvas positions.
  */
+/**
+ * Deep-clone an inner node for storage inside a component master. When
+ * `keepSettings` is false, strip the data map to the minimum structural
+ * fields (label + classification), matching the pre-change-4 behavior.
+ */
+function cloneInnerNode(n: Node, keepSettings: boolean): Node {
+  const deepClone = <T,>(x: T): T => {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      if (typeof structuredClone === "function") return structuredClone(x) as any
+    } catch {
+      /* fall through */
+    }
+    return JSON.parse(JSON.stringify(x)) as T
+  }
+  const cloned = deepClone(n)
+  if (!keepSettings) {
+    const d = (cloned.data ?? {}) as Record<string, unknown>
+    cloned.data = {
+      label: d.label,
+      blockType: d.blockType,
+      actionType: d.actionType,
+      triggerType: d.triggerType,
+    }
+  }
+  return cloned
+}
+
 function selectionTopLeft(nodes: Node[]): { x: number; y: number } {
   if (nodes.length === 0) return { x: 320, y: 200 }
   const minX = nodes.reduce((m, n) => Math.min(m, n.position.x), Infinity)
@@ -181,6 +209,14 @@ export function SaveAsComponentModal({
   const [category, setCategory] = React.useState<ComponentCategory>("Custom")
   const [inputPortLabel, setInputPortLabel] = React.useState("Enter")
   const [outputPorts, setOutputPorts] = React.useState<ComponentPort[]>([])
+  /**
+   * When true (default), each inner node's full config (templates, variables,
+   * recipient settings including change 2's recipientSource/column, call
+   * settings, delays, conditions) is deep-cloned into the master. When off,
+   * only { id, type, position, data: { label, blockType, actionType,
+   * triggerType } } is kept so the component is structure-only.
+   */
+  const [keepSettings, setKeepSettings] = React.useState(true)
 
   const validation = React.useMemo(
     () => validateSelection(nodes, edges, selectedIds),
@@ -194,6 +230,7 @@ export function SaveAsComponentModal({
       setCategory("Custom")
       setInputPortLabel("Enter")
       setOutputPorts(validation.outputPorts)
+      setKeepSettings(true)
     }
   }, [open, validation.outputPorts])
 
@@ -222,7 +259,10 @@ export function SaveAsComponentModal({
       publishHistory: [
         { version: 1, publishedAt: now, authorId: "current-user", note: "Initial version" },
       ],
-      nodes: selectedNodes.map((n) => ({ ...n })),
+      // Deep clone each inner node so master and selection share no object
+      // references. structuredClone preserves nested maps and arrays; falls
+      // back to JSON for older runtimes.
+      nodes: selectedNodes.map((n) => cloneInnerNode(n, keepSettings)),
       edges: edges.filter((e) => selectedIds.includes(e.source) && selectedIds.includes(e.target)),
     }
     saveMaster(master)
@@ -378,6 +418,23 @@ export function SaveAsComponentModal({
                 />
               </div>
             </div>
+
+            <label className="flex cursor-pointer items-start gap-2 rounded-md border border-border bg-background/60 px-3 py-2 text-[11.5px]">
+              <input
+                type="checkbox"
+                checked={keepSettings}
+                onChange={(e) => setKeepSettings(e.target.checked)}
+                className="mt-0.5 h-3.5 w-3.5 accent-primary"
+              />
+              <div>
+                <div className="font-medium text-foreground">Keep node settings</div>
+                <div className="mt-0.5 text-[10px] text-muted-foreground">
+                  Serialize each inner node&apos;s full config (templates,
+                  variables, recipient settings, call settings, delays,
+                  conditions). Turn off to save structure only.
+                </div>
+              </div>
+            </label>
 
             <div>
               <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">
