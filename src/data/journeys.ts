@@ -626,16 +626,16 @@ const highDpdNodes: Node[] = [
       timeWindowUnit: "hours",
     },
   },
-  // Opened Yes -> Send WA
+  // Opened Yes -> Send SMS follow-up
   {
     id: "action-wa-1",
     type: "action",
     position: { x: -100, y: 720 },
     data: {
-      label: "Send WhatsApp",
-      description: "PTP Follow-up WA",
-      actionType: "whatsapp",
-      template: "PTP Follow-up WA",
+      label: "Send SMS",
+      description: "PTP Follow-up SMS",
+      actionType: "sms",
+      template: "PTP Follow-up SMS",
     },
   },
   // Opened No -> Start AI Call
@@ -694,16 +694,16 @@ const highDpdNodes: Node[] = [
       respectContactHours: true,
     },
   },
-  // Send WhatsApp "Friendly Reminder"
+  // Send Email "Friendly Reminder"
   {
     id: "action-wa-2",
     type: "action",
     position: { x: 600, y: 570 },
     data: {
-      label: "Send WhatsApp",
-      description: "Payment Reminder WA",
-      actionType: "whatsapp",
-      template: "Payment Reminder WA",
+      label: "Send Email",
+      description: "Payment Reminder Email",
+      actionType: "email",
+      template: "Payment Reminder Email",
     },
   },
   // End for No branch

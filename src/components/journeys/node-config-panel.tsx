@@ -24,6 +24,8 @@ import {
   SlidersHorizontal,
   Plus,
   Trash2,
+  Upload as UploadIcon,
+  FileSpreadsheet,
   ExternalLink,
   RefreshCcw,
   ChevronDown,
@@ -872,6 +874,11 @@ export function NodeConfigPanel({ node, onClose, onUpdate, onDeleteNode, nodes =
                   )}
                 </div>
               </Section>
+            )}
+
+            {/* Excel upload — picker + parsed-columns preview */}
+            {(d.triggerType as string) === "excel_upload" && (
+              <ExcelUploadConfig d={d} update={update} />
             )}
 
             {/* Schedule */}
@@ -4025,5 +4032,209 @@ function WebhookActionConfig({
         </div>
       </div>
     </div>
+  );
+}
+
+/* ─────────── Excel Upload trigger config ───────────
+   The Excel Upload entry node lets authors drop a contact list onto the
+   journey without defining a segment. This panel shows:
+     • the currently attached file (name + row count)
+     • an "upload / replace" button that in the prototype re-mocks a parse
+     • the parsed columns, each with a kind pill and remove button, plus
+       inline rename and a lightweight "Add column" fallback.
+   The columns persist on node.data.uploadColumns so downstream helpers
+   (findUpstreamExcelColumns, RecipientsControl) can list them.
+   TODO (backend contract): real file ingest returns {fileName, rowCount,
+   columns:[{id,name,kind}]}; replace mockReparse() with the upload. */
+
+const MOCK_FILE_VARIANTS: Array<{
+  fileName: string;
+  rowCount: number;
+  columns: Array<{ id: string; name: string; kind: "text" | "phone" | "email" | "number" | "date" }>;
+}> = [
+  {
+    fileName: "borrowers.xlsx",
+    rowCount: 128,
+    columns: [
+      { id: "col-name", name: "name", kind: "text" },
+      { id: "col-phone", name: "phone", kind: "phone" },
+      { id: "col-email", name: "email", kind: "email" },
+      { id: "col-amount_due", name: "amount_due", kind: "number" },
+      { id: "col-due_date", name: "due_date", kind: "date" },
+    ],
+  },
+  {
+    fileName: "q4_overdue_batch.csv",
+    rowCount: 342,
+    columns: [
+      { id: "col-first_name", name: "first_name", kind: "text" },
+      { id: "col-mobile", name: "mobile", kind: "phone" },
+      { id: "col-email_primary", name: "email_primary", kind: "email" },
+      { id: "col-dpd", name: "dpd", kind: "number" },
+      { id: "col-outstanding", name: "outstanding", kind: "number" },
+      { id: "col-last_promise_date", name: "last_promise_date", kind: "date" },
+    ],
+  },
+];
+
+function ExcelUploadConfig({
+  d,
+  update,
+}: {
+  d: Record<string, unknown>;
+  update: (field: string, value: unknown) => void;
+}) {
+  const fileName = (d.uploadFileName as string) ?? "";
+  const rowCount = (d.uploadRowCount as number) ?? 0;
+  const columns =
+    (d.uploadColumns as Array<{ id: string; name: string; kind: string }> | undefined) ?? [];
+  const hasFile = Boolean(fileName);
+
+  const applyMock = (variantIndex: number) => {
+    const v = MOCK_FILE_VARIANTS[variantIndex % MOCK_FILE_VARIANTS.length];
+    update("uploadFileName", v.fileName);
+    update("uploadRowCount", v.rowCount);
+    update("uploadColumns", v.columns);
+    toast.success(`Parsed ${v.fileName}`, {
+      description: `${v.rowCount.toLocaleString()} rows · ${v.columns.length} columns`,
+    });
+  };
+
+  const onUploadClick = () => {
+    // Prototype: no real file picker — cycle between the mock variants so
+    // authors can see what a different-shape upload would look like.
+    const nextIndex = hasFile && fileName === MOCK_FILE_VARIANTS[0].fileName ? 1 : 0;
+    applyMock(nextIndex);
+  };
+
+  const removeFile = () => {
+    update("uploadFileName", "");
+    update("uploadRowCount", 0);
+    update("uploadColumns", []);
+  };
+
+  const renameColumn = (id: string, name: string) => {
+    update(
+      "uploadColumns",
+      columns.map((c) => (c.id === id ? { ...c, name } : c)),
+    );
+  };
+
+  const setColumnKind = (id: string, kind: string) => {
+    update(
+      "uploadColumns",
+      columns.map((c) => (c.id === id ? { ...c, kind } : c)),
+    );
+  };
+
+  const removeColumn = (id: string) => {
+    update(
+      "uploadColumns",
+      columns.filter((c) => c.id !== id),
+    );
+  };
+
+  const addColumn = () => {
+    const id = `col-${Date.now().toString(36)}`;
+    update("uploadColumns", [...columns, { id, name: "new_column", kind: "text" }]);
+  };
+
+  return (
+    <Section title="Upload">
+      <div className="space-y-2">
+        {hasFile ? (
+          <div className="rounded-md border border-border bg-background/60 p-2.5">
+            <div className="flex items-start gap-2">
+              <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
+                <FileSpreadsheet className="h-3.5 w-3.5" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-[12px] font-medium text-foreground">
+                  {fileName}
+                </div>
+                <div className="text-[10px] text-muted-foreground">
+                  {rowCount.toLocaleString()} rows · {columns.length} columns
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={removeFile}
+                aria-label="Remove file"
+                className="rounded border border-border bg-background p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+              >
+                <Trash2 className="h-3 w-3" />
+              </button>
+            </div>
+            <button
+              type="button"
+              onClick={onUploadClick}
+              className="mt-2 flex w-full items-center justify-center gap-1.5 rounded border border-dashed border-border bg-muted/20 px-2 py-1.5 text-[10.5px] text-muted-foreground hover:bg-muted/30 hover:text-foreground"
+            >
+              <UploadIcon className="h-3 w-3" />
+              Replace file
+            </button>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={onUploadClick}
+            className="flex w-full flex-col items-center gap-1 rounded-md border border-dashed border-border bg-muted/10 px-3 py-5 text-[11px] text-muted-foreground hover:border-primary/60 hover:bg-primary/5 hover:text-foreground"
+          >
+            <UploadIcon className="h-4 w-4" />
+            <span>Click to upload Excel or CSV</span>
+            <span className="text-[10px] opacity-70">
+              Headers become downstream variables
+            </span>
+          </button>
+        )}
+      </div>
+
+      {hasFile && columns.length > 0 && (
+        <div className="mt-3 space-y-1.5">
+          <div className="text-[9.5px] uppercase tracking-wider text-muted-foreground">
+            Parsed columns
+          </div>
+          {columns.map((c) => (
+            <div key={c.id} className="flex items-center gap-1.5">
+              <Input
+                value={c.name}
+                onChange={(e) => renameColumn(c.id, e.target.value)}
+                className="h-7 flex-1 font-mono text-[11px]"
+              />
+              <select
+                value={c.kind}
+                onChange={(e) => setColumnKind(c.id, e.target.value)}
+                className="h-7 w-[76px] rounded border border-input bg-background px-1 text-[10.5px] outline-none focus-visible:border-ring"
+              >
+                <option value="text">text</option>
+                <option value="phone">phone</option>
+                <option value="email">email</option>
+                <option value="number">number</option>
+                <option value="date">date</option>
+              </select>
+              <button
+                type="button"
+                onClick={() => removeColumn(c.id)}
+                aria-label={`Remove ${c.name}`}
+                className="rounded border border-border bg-background p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+              >
+                <Trash2 className="h-3 w-3" />
+              </button>
+            </div>
+          ))}
+          <button
+            type="button"
+            onClick={addColumn}
+            className="w-full rounded border border-dashed border-border bg-muted/20 px-2 py-1 text-[10.5px] text-muted-foreground hover:bg-muted/30 hover:text-foreground"
+          >
+            + Add column
+          </button>
+          <p className="text-[10px] text-muted-foreground">
+            Downstream Email / SMS / AI call nodes can pick a column as the
+            recipient instead of the Command borrower.
+          </p>
+        </div>
+      )}
+    </Section>
   );
 }
