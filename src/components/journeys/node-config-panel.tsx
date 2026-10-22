@@ -33,7 +33,7 @@ import {
   Lock,
   Blocks,
 } from "lucide-react";
-import { getBlockType, getBlockCategory } from "@/data/journeys";
+import { getBlockType, getBlockCategory, findUpstreamExcelColumns } from "@/data/journeys";
 import { ChannelContactPicker } from "@/components/shared/channel-contact-picker";
 import {
   DEFAULT_PHONE_SELECTION,
@@ -1089,6 +1089,14 @@ export function NodeConfigPanel({ node, onClose, onUpdate, onDeleteNode, nodes =
             {/* ---- Send Email ---- */}
             {(d.actionType as string) === "email" && (
               <>
+                <RecipientsControl
+                  d={d}
+                  update={update}
+                  nodes={nodes}
+                  edges={edges}
+                  nodeId={node?.id ?? ""}
+                  channel="email"
+                />
                 {/* Template / Manual mode toggle */}
                 <ModeToggle
                   value={((d.composeMode as string) ?? "template") as "template" | "manual"}
@@ -1179,6 +1187,14 @@ export function NodeConfigPanel({ node, onClose, onUpdate, onDeleteNode, nodes =
             {/* ---- Send SMS ---- */}
             {(d.actionType as string) === "sms" && (
               <>
+                <RecipientsControl
+                  d={d}
+                  update={update}
+                  nodes={nodes}
+                  edges={edges}
+                  nodeId={node?.id ?? ""}
+                  channel="phone"
+                />
                 {/* Template / Manual mode toggle */}
                 <ModeToggle
                   value={((d.composeMode as string) ?? "template") as "template" | "manual"}
@@ -1296,17 +1312,37 @@ export function NodeConfigPanel({ node, onClose, onUpdate, onDeleteNode, nodes =
 
             {/* ---- Start AI Call — Project → Agent → Params → Delivery ---- */}
             {(d.actionType as string) === "call" && (
-              <AICallConfig
-                d={d}
-                update={update}
-                multiUpdate={multiUpdate}
-                journeyId={journeyId}
-              />
+              <>
+                <RecipientsControl
+                  d={d}
+                  update={update}
+                  nodes={nodes}
+                  edges={edges}
+                  nodeId={node?.id ?? ""}
+                  channel="phone"
+                />
+                <AICallConfig
+                  d={d}
+                  update={update}
+                  multiUpdate={multiUpdate}
+                  journeyId={journeyId}
+                />
+              </>
             )}
 
             {/* ---- Part 5: Trigger Human Campaign ---- */}
             {(d.actionType as string) === "human_campaign" && (
-              <HumanCampaignConfig d={d} update={update} />
+              <>
+                <RecipientsControl
+                  d={d}
+                  update={update}
+                  nodes={nodes}
+                  edges={edges}
+                  nodeId={node?.id ?? ""}
+                  channel="phone"
+                />
+                <HumanCampaignConfig d={d} update={update} />
+              </>
             )}
 
             {/* ---- Assign Agent ---- */}
@@ -3697,3 +3733,114 @@ function renderVars(text: string, b: { name: string; phone: string; outstanding:
     .replace(/\{\{\s*amount\s*\}\}/g, `AED ${b.outstanding.toLocaleString()}`)
 }
 
+
+/* ─────────── Recipients control (change 2) ───────────
+   Shared helper that lets authors switch between "Command borrower" (the
+   current default) and "From uploaded file" (resolves recipients from the
+   nearest upstream Excel upload trigger). Rendered inside the SMS, Email,
+   AI call and Human campaign node config branches.
+
+   TODO (backend contract): the node data carries `recipientSource` plus
+   `recipientPhoneColumn` / `recipientEmailColumn` (column ids); the send
+   pipeline is expected to resolve recipients from the uploaded file rows
+   when source is "upload". No backend wiring is done in this prototype. */
+function RecipientsControl({
+  d,
+  update,
+  nodes,
+  edges,
+  nodeId,
+  channel,
+}: {
+  d: Record<string, unknown>
+  update: (field: string, value: unknown) => void
+  nodes: Array<{ id: string; data?: Record<string, unknown> }>
+  edges: Array<{ source: string; target: string }>
+  nodeId: string
+  /** phone  = SMS / AI call / Human call; email = Email. */
+  channel: "phone" | "email"
+}) {
+  const columns = findUpstreamExcelColumns(nodes, edges, nodeId) ?? null
+  const canUseUpload = columns !== null && columns.length > 0
+  const source = ((d.recipientSource as string) ?? "borrower") as "borrower" | "upload"
+  const columnField = channel === "phone" ? "recipientPhoneColumn" : "recipientEmailColumn"
+  const columnId = (d[columnField] as string | undefined) ?? ""
+  // Narrow column suggestions by kind so phone channels don't surface the
+  // email column by default.
+  const suggested = columns?.filter((c) =>
+    channel === "phone"
+      ? c.kind === "phone" || c.kind === "text"
+      : c.kind === "email" || c.kind === "text",
+  ) ?? []
+  return (
+    <div className="space-y-1.5">
+      <Label className="text-xs text-muted-foreground">Recipients</Label>
+      <div className="grid grid-cols-2 gap-1 rounded-md border border-input bg-background p-1">
+        <button
+          type="button"
+          onClick={() => update("recipientSource", "borrower")}
+          className={cn(
+            "rounded px-2 py-1 text-[11px] font-medium",
+            source === "borrower"
+              ? "bg-primary text-primary-foreground"
+              : "text-muted-foreground hover:bg-muted/40 hover:text-foreground",
+          )}
+        >
+          Command borrower
+        </button>
+        <button
+          type="button"
+          disabled={!canUseUpload}
+          title={
+            !canUseUpload
+              ? "Add an Excel Upload trigger upstream to enable this option."
+              : undefined
+          }
+          onClick={() => update("recipientSource", "upload")}
+          className={cn(
+            "rounded px-2 py-1 text-[11px] font-medium",
+            source === "upload"
+              ? "bg-primary text-primary-foreground"
+              : "text-muted-foreground hover:bg-muted/40 hover:text-foreground",
+            !canUseUpload && "cursor-not-allowed opacity-40",
+          )}
+        >
+          From uploaded file
+        </button>
+      </div>
+      {source === "upload" && canUseUpload && (
+        <div className="rounded-md border border-border bg-background/60 p-2.5 space-y-1.5">
+          <div className="text-[9.5px] uppercase tracking-wider text-muted-foreground">
+            {channel === "phone" ? "Phone column *" : "Email column *"}
+          </div>
+          <select
+            value={columnId}
+            onChange={(e) => update(columnField, e.target.value || undefined)}
+            className={cn(
+              "h-8 w-full rounded border border-input bg-background px-2 text-[12px] outline-none focus-visible:border-ring",
+              !columnId && "text-muted-foreground",
+            )}
+          >
+            <option value="">Select a column from the upload</option>
+            {suggested.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name} · {c.kind}
+              </option>
+            ))}
+          </select>
+          {!columnId && (
+            <div className="text-[10px] text-warning-300">
+              Pick a column, or the send pipeline has nothing to resolve.
+            </div>
+          )}
+        </div>
+      )}
+      {source === "upload" && !canUseUpload && (
+        <div className="rounded-md border border-warning-500/40 bg-warning-500/[0.05] px-2.5 py-1.5 text-[10.5px] text-warning-300">
+          The upstream Excel Upload trigger was removed. Switch back to Command
+          borrower or add an upload trigger upstream.
+        </div>
+      )}
+    </div>
+  )
+}

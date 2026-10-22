@@ -166,6 +166,30 @@ export const BLOCK_TYPES: BlockType[] = [
   { type: "segment_trigger", label: "Segment Membership", icon: Users, description: "Enrol borrowers when they enter or exit a segment", category: "entry", nodeKind: "trigger", defaultData: { label: "Segment Membership", triggerType: "segment_entry" } },
   { type: "profile_change_trigger", label: "Profile Attribute Change", icon: User, description: "Fires when a borrower attribute changes to a value", category: "entry", nodeKind: "trigger", defaultData: { label: "Profile Attribute Change", triggerType: "attribute_change" } },
   { type: "specific_users_trigger", label: "Specific Users", icon: Upload, description: "Manually enrol a defined list of borrowers", category: "entry", nodeKind: "trigger", defaultData: { label: "Specific Users", triggerType: "specific_users" } },
+  {
+    type: "excel_upload_trigger",
+    label: "Excel Upload",
+    icon: Upload,
+    description: "Enrol contacts from an uploaded Excel / CSV file; columns are available downstream",
+    category: "entry",
+    nodeKind: "trigger",
+    defaultData: {
+      label: "Excel Upload",
+      triggerType: "excel_upload",
+      // Columns the uploaded file carries. In production these come from the
+      // parsed header row; here the prototype seeds a plausible mock so
+      // downstream nodes have something to list.
+      uploadColumns: [
+        { id: "col-name", name: "name", kind: "text" },
+        { id: "col-phone", name: "phone", kind: "phone" },
+        { id: "col-email", name: "email", kind: "email" },
+        { id: "col-amount_due", name: "amount_due", kind: "text" },
+        { id: "col-due_date", name: "due_date", kind: "text" },
+      ],
+      uploadFileName: "borrowers.xlsx",
+      uploadRowCount: 128,
+    },
+  },
   { type: "inbound_message_trigger", label: "Inbound Message", icon: MessageCircle, description: "Fires when a borrower sends an email / SMS / WhatsApp", category: "entry", nodeKind: "trigger", defaultData: { label: "Inbound Message", triggerType: "inbound_message" } },
   { type: "incoming_call_trigger", label: "Incoming Call", icon: Phone, description: "Fires when an inbound call is received on a lender line", category: "entry", nodeKind: "trigger", defaultData: { label: "Incoming Call", triggerType: "incoming_call" } },
   { type: "journey_handoff_entry", label: "Journey Handoff Entry", icon: ArrowRightLeft, description: "Accept borrowers handed off from another journey", category: "entry", nodeKind: "trigger", defaultData: { label: "Journey Handoff Entry", triggerType: "journey_handoff_entry", acceptFrom: "all" } },
@@ -216,6 +240,52 @@ export const BLOCK_TYPES: BlockType[] = [
   // ───── Exit / Governance (1) — matches command.cleargrid.ai ─────
   { type: "global_exit", label: "Global Exit Trigger Manager", icon: Power, description: "Define rules that immediately exit any borrower from this journey", category: "exit", nodeKind: "end", defaultData: { label: "Global Exit", outcome: "Exited" } },
 ];
+
+/**
+ * Shape of a parsed column from an upstream Excel upload trigger node.
+ * Prototype mock; backend sets these from the real header row.
+ */
+export interface UploadColumn {
+  id: string
+  name: string
+  /** Column semantics hint; UI uses this to filter picker suggestions. */
+  kind: "text" | "phone" | "email" | "number" | "date"
+}
+
+/**
+ * Walk the journey graph backwards from a node and return the first
+ * upstream Excel upload trigger's parsed columns, or null if there is no
+ * such trigger. React Flow nodes aren't imported here (type-only), so the
+ * caller passes plain id-shaped records.
+ *
+ * Note: the function pre-dates the nodes/edges types in this file to
+ * avoid a heavier dep; the inputs are structurally minimal.
+ */
+export function findUpstreamExcelColumns(
+  nodes: Array<{ id: string; data?: Record<string, unknown> }>,
+  edges: Array<{ source: string; target: string }>,
+  startId: string,
+  maxHops = 20,
+): UploadColumn[] | null {
+  const byId = new Map(nodes.map((n) => [n.id, n] as const))
+  let cursor = startId
+  const visited = new Set<string>()
+  for (let i = 0; i < maxHops; i++) {
+    if (visited.has(cursor)) return null
+    visited.add(cursor)
+    const node = byId.get(cursor)
+    if (!node) return null
+    const d = (node.data ?? {}) as {
+      triggerType?: string
+      uploadColumns?: UploadColumn[]
+    }
+    if (d.triggerType === "excel_upload" && d.uploadColumns) return d.uploadColumns
+    const inbound = edges.find((e) => e.target === cursor)
+    if (!inbound) return null
+    cursor = inbound.source
+  }
+  return null
+}
 
 export function getBlockType(type: string): BlockType | undefined {
   return BLOCK_TYPES.find((b) => b.type === type);
