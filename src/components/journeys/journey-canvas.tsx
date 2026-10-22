@@ -38,6 +38,7 @@ import { EndNode } from "@/components/journeys/nodes/end-node";
 import { GenericNode } from "@/components/journeys/nodes/generic-node";
 import { ComponentInstanceNode } from "@/components/journeys/nodes/component-instance-node";
 import { SaveAsComponentModal } from "@/components/journeys/save-as-component-modal";
+import { isBlockHiddenByFlag } from "@/data/feature-flags";
 import { ComponentInstancePanel } from "@/components/journeys/component-instance-panel";
 import { InstanceInnerNodeEditor } from "@/components/journeys/instance-inner-node-editor";
 import {
@@ -209,32 +210,6 @@ function deepCloneData(data: Record<string, unknown>): Record<string, unknown> {
   }
   return JSON.parse(JSON.stringify(data)) as Record<string, unknown>
 }
-
-/**
- * Returns true when the given palette `blockType` is currently hidden by the
- * untested-nodes feature flag. Kept here (not inside the component) so the
- * duplicate helper can query it before cloning a hidden-type node.
- */
-function isHiddenBlockFlag(blockType: string | undefined): boolean {
-  if (!blockType) return false
-  // Read the flag at call time so toggle changes take effect immediately.
-  if (typeof window === "undefined") return false
-  try {
-    const raw = window.localStorage.getItem("cg_untested_nodes_hidden")
-    const hidden = raw ? (JSON.parse(raw) as boolean) : true
-    if (!hidden) return false
-  } catch {
-    return false
-  }
-  return UNTESTED_BLOCK_TYPES.has(blockType)
-}
-
-export const UNTESTED_BLOCK_TYPES = new Set<string>([
-  "inbound_message_trigger",
-  "incoming_call_trigger",
-  "whatsapp_ott",
-  "send_slack",
-])
 
 const nodeTypes = {
   trigger: TriggerNode,
@@ -767,7 +742,7 @@ export default function JourneyCanvas({ journeyId }: JourneyCanvasProps) {
         return
       }
       // Guard: block duplication of hidden-flag nodes. See hideUntestedNodes.
-      const blockedByFlag = selected.filter((n) => isHiddenBlockFlag((n.data as { blockType?: string })?.blockType))
+      const blockedByFlag = selected.filter((n) => isBlockHiddenByFlag((n.data as { blockType?: string })?.blockType))
       if (blockedByFlag.length > 0) {
         toast.warning(
           `Can't duplicate ${blockedByFlag[0].data && (blockedByFlag[0].data as { label?: string }).label} — this node type is temporarily disabled.`,
@@ -933,6 +908,13 @@ export default function JourneyCanvas({ journeyId }: JourneyCanvasProps) {
         data: Record<string, unknown>;
       };
 
+      // Belt + suspenders: palette already filters hidden nodes, but a drop
+      // can also originate from paste or legacy drag payloads. Refuse here.
+      if (isBlockHiddenByFlag(parsed.blockType)) {
+        toast.warning("This node type is temporarily disabled.");
+        return;
+      }
+
       if (!rfInstance.current) return;
 
       const position = rfInstance.current.screenToFlowPosition({
@@ -983,6 +965,11 @@ export default function JourneyCanvas({ journeyId }: JourneyCanvasProps) {
   // the user can continue chaining.
   const onPaletteAdd = useCallback(
     (block: BlockType) => {
+      // Palette filters these out; this guards paste / programmatic adds too.
+      if (isBlockHiddenByFlag(block.type)) {
+        toast.warning("This node type is temporarily disabled.");
+        return;
+      }
       const NODE_GAP_X = 260;
       const NODE_GAP_Y = 160;
 

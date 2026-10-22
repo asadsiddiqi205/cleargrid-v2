@@ -6,6 +6,7 @@ import { Play, Zap, Users, Star } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { QuickAddButton } from "@/components/journeys/quick-add-button";
 import { NodeErrorBadge } from "@/components/journeys/nodes/node-error-badge";
+import { isBlockHiddenByFlag } from "@/data/feature-flags";
 
 const triggerIcons: Record<string, typeof Play> = {
   segment_entry: Users,
@@ -46,6 +47,8 @@ export function TriggerNode({ id, data, selected }: NodeProps) {
 
   const simCount = data._simCount as number | undefined;
   const liveCount = data._liveCount as number | undefined;
+  const blockType = (data.blockType as string | undefined) ?? undefined;
+  const unavailable = isBlockHiddenByFlag(blockType);
 
   return (
     <div
@@ -65,6 +68,15 @@ export function TriggerNode({ id, data, selected }: NodeProps) {
         severity={((data._errorSeverity as string) === "warning" ? "warning" : "blocker") as "blocker" | "warning"}
         side="left"
       />
+
+      {unavailable && (
+        <span
+          title="This node type is temporarily disabled. Existing instances still load but can't be added or duplicated."
+          className="absolute right-2 top-2 z-10 rounded border border-amber-500/40 bg-amber-500/15 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-amber-300"
+        >
+          Unavailable
+        </span>
+      )}
 
       <div className="flex items-center gap-2.5 bg-primary-500/10 px-3 py-2.5">
         <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-primary-500/20">

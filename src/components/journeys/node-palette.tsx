@@ -23,6 +23,7 @@ import {
   COMPONENT_CATEGORIES,
   type ComponentCategory,
 } from "@/data/components";
+import { isBlockHiddenByFlag } from "@/data/feature-flags";
 
 /* ------------------------------------------------------------------ */
 /*  Props                                                              */
@@ -88,18 +89,33 @@ export function NodePalette({
 
   const q = search.trim().toLowerCase();
 
+  // Subscribe to feature-flag changes so toggling flags in another tab or
+  // from a settings panel re-renders the palette live.
+  const [flagTick, setFlagTick] = useState(0);
+  useEffect(() => {
+    const bump = () => setFlagTick((n) => n + 1);
+    window.addEventListener("cg-feature-flags-changed", bump);
+    return () => window.removeEventListener("cg-feature-flags-changed", bump);
+  }, []);
+
   const filtered = useMemo(() => {
     return BLOCK_CATEGORIES.map((cat) => {
-      const items = BLOCK_TYPES.filter((b) => b.category === cat.id).filter((b) => {
-        if (!q) return true;
-        return (
-          b.label.toLowerCase().includes(q) ||
-          b.description.toLowerCase().includes(q)
-        );
-      });
+      const items = BLOCK_TYPES.filter((b) => b.category === cat.id)
+        // Untested nodes don't appear in the palette, search, or any
+        // "add node" menu while the feature flag is on.
+        .filter((b) => !isBlockHiddenByFlag(b.type))
+        .filter((b) => {
+          if (!q) return true;
+          return (
+            b.label.toLowerCase().includes(q) ||
+            b.description.toLowerCase().includes(q)
+          );
+        });
       return { ...cat, items };
     });
-  }, [q]);
+    // flagTick re-runs the memo when a flag flips.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [q, flagTick]);
 
   const filteredComponents = useMemo(() => {
     return masters
