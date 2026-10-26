@@ -242,8 +242,12 @@ export interface HumanCampaign {
 }
 
 export interface HybridCampaignConfig {
-  /** Selected agent ids whose voice clone is Approved and greeting is Ready. */
-  agentIds: string[]
+  /**
+   * Legacy — kept for drafts persisted before the agent-group model. The
+   * Agents tab now derives who's included from the Basics `agentGroup`
+   * field and includes every ready agent automatically.
+   */
+  agentIds?: string[]
   /** Segments reused from the audience view mocks. */
   segments: Array<{
     id: string
@@ -264,19 +268,9 @@ export interface HybridCampaignConfig {
     maxCallsPerSec: number
     maxOutstandingPerAgent: number
   }
-  ptp: {
-    digitalConfirm: boolean
-    channel: "whatsapp" | "sms"
-    replyWindowHours: number
-    verification: "all" | "by_risk" | "none"
-    riskRules: Array<"first_promise" | "amount_over" | "previously_broken" | "low_confidence">
-    amountOver: number
-    verificationRoute: "owner_voice" | "separate_campaign"
-  }
 }
 
 export const DEFAULT_HYBRID_CONFIG: HybridCampaignConfig = {
-  agentIds: [],
   segments: [],
   handover: {
     opensAt: "right_party_confirmed",
@@ -291,15 +285,6 @@ export const DEFAULT_HYBRID_CONFIG: HybridCampaignConfig = {
     mode: "steady",
     maxCallsPerSec: 4,
     maxOutstandingPerAgent: 12,
-  },
-  ptp: {
-    digitalConfirm: true,
-    channel: "whatsapp",
-    replyWindowHours: 24,
-    verification: "all",
-    riskRules: ["first_promise"],
-    amountOver: 1000,
-    verificationRoute: "owner_voice",
   },
 }
 

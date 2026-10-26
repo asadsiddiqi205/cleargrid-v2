@@ -1,9 +1,12 @@
 "use client"
 
 /**
- * Hybrid dialer campaign editor. Seven tabs: Basics, Agents, Audience,
- * Handover, Supply, PTP, Schedule. Live preview on the right shows the
- * call journey built from the current settings.
+ * Hybrid dialer campaign editor. Six tabs: Basics, Agents, Audience,
+ * Handover, Supply, Schedule. Live preview on the right shows the call
+ * journey built from the current settings.
+ *
+ * The Agents tab is a readiness check against the group picked in Basics.
+ * It no longer asks managers to pick agents.
  */
 
 import * as React from "react"
@@ -13,10 +16,8 @@ import {
   Sparkles,
   Info,
   Users,
-  Phone,
   Timer,
   Gauge,
-  ShieldCheck,
   Calendar,
   AlertTriangle,
   ExternalLink,
@@ -35,12 +36,9 @@ import {
 } from "@/components/campaigns/campaign-schedule-tab"
 import {
   HYBRID_AGENTS,
-  HYBRID_AGENT_GROUPS,
   VOICE_CLONE_LABEL,
   GREETING_CLIP_LABEL,
   isAgentEligibleForHybrid,
-  reasonAgentNotEligible,
-  getHybridAgentById,
   type HybridAgent,
 } from "@/data/hybrid-agents"
 import {
@@ -48,7 +46,7 @@ import {
   BUCKET_LABEL,
   getProjectById,
 } from "@/data/clearvoice"
-import { FormField, Select } from "./page"
+import { FormField, Select, AgentGroupSelect } from "./page"
 
 const TABS = [
   { id: "basics", label: "Basics", icon: Info },
@@ -56,9 +54,34 @@ const TABS = [
   { id: "audience", label: "Audience", icon: Users },
   { id: "handover", label: "Handover", icon: Timer },
   { id: "supply", label: "Supply", icon: Gauge },
-  { id: "ptp", label: "PTP", icon: ShieldCheck },
   { id: "schedule", label: "Schedule", icon: Calendar },
 ] as const
+
+/* ─────────── Agent-group readiness ─────────── */
+
+interface GroupReadiness {
+  group: string
+  ready: HybridAgent[]
+  excluded: Array<{ agent: HybridAgent; reasons: string[] }>
+  total: number
+}
+
+function readinessReasons(a: HybridAgent): string[] {
+  const r: string[] = []
+  if (a.voiceClone === "pending") r.push("Voice pending")
+  else if (a.voiceClone === "not_recorded") r.push("Voice not recorded")
+  if (a.greetingClip === "missing") r.push("Greeting missing")
+  return r
+}
+
+function computeGroupReadiness(group: string): GroupReadiness {
+  const inGroup = HYBRID_AGENTS.filter((a) => a.group === group)
+  const ready = inGroup.filter(isAgentEligibleForHybrid)
+  const excluded = inGroup
+    .filter((a) => !isAgentEligibleForHybrid(a))
+    .map((agent) => ({ agent, reasons: readinessReasons(agent) }))
+  return { group, ready, excluded, total: inGroup.length }
+}
 
 type TabId = (typeof TABS)[number]["id"]
 
@@ -187,11 +210,10 @@ export function HybridCampaignEditor({
             {tab === "basics" && (
               <BasicsTab draft={draft} setBasic={setBasic} />
             )}
-            {tab === "agents" && <AgentsTab hybrid={hybrid} setHybrid={setHybrid} />}
+            {tab === "agents" && <AgentsTab draft={draft} />}
             {tab === "audience" && <AudienceTab hybrid={hybrid} setHybrid={setHybrid} />}
             {tab === "handover" && <HandoverTab hybrid={hybrid} setHybrid={setHybrid} errors={errors} />}
             {tab === "supply" && <SupplyTab hybrid={hybrid} setHybrid={setHybrid} />}
-            {tab === "ptp" && <PtpTab hybrid={hybrid} setHybrid={setHybrid} />}
             {tab === "schedule" && (
               <div className="space-y-4">
                 <CampaignScheduleTab
@@ -274,6 +296,17 @@ function BasicsTab({
           />
         </FormField>
       </div>
+      <FormField
+        label="Agent group *"
+        actionLabel="Manage user groups"
+        onAction={() => window.open("/agents/groups", "_blank")}
+      >
+        <AgentGroupSelect
+          value={draft.agentGroup}
+          placeholder="Select an agent group"
+          onChange={(v) => setBasic("agentGroup", v)}
+        />
+      </FormField>
       <FormField label="Gateway">
         <div className="rounded-md border border-border bg-background/60 px-3 py-2 font-mono text-[12px] text-foreground">
           {draft.gateway}
@@ -283,106 +316,136 @@ function BasicsTab({
   )
 }
 
-function AgentsTab({
-  hybrid,
-  setHybrid,
-}: {
-  hybrid: HybridCampaignConfig
-  setHybrid: (patch: Partial<HybridCampaignConfig>) => void
-}) {
-  const [groupFilter, setGroupFilter] = React.useState<string>("")
-  const list = HYBRID_AGENTS.filter(
-    (a) => !groupFilter || a.group === groupFilter,
-  )
-  const toggle = (a: HybridAgent) => {
-    if (!isAgentEligibleForHybrid(a)) return
-    const on = hybrid.agentIds.includes(a.id)
-    setHybrid({
-      agentIds: on
-        ? hybrid.agentIds.filter((x) => x !== a.id)
-        : [...hybrid.agentIds, a.id],
-    })
+function AgentsTab({ draft }: { draft: HumanCampaign }) {
+  const group = draft.agentGroup
+  if (!group) {
+    return (
+      <div className="space-y-3">
+        <div className="rounded-md border border-dashed border-border bg-muted/10 px-4 py-8 text-center">
+          <Users className="mx-auto h-5 w-5 text-muted-foreground" />
+          <div className="mt-2 text-[12.5px] font-medium text-foreground">
+            Choose an agent group in Basics to check voices.
+          </div>
+          <p className="mt-1 text-[11px] text-muted-foreground">
+            The campaign includes every ready agent in that group automatically.
+          </p>
+        </div>
+      </div>
+    )
   }
+  const readiness = computeGroupReadiness(group)
+  const bannerTone =
+    readiness.ready.length === 0
+      ? "err"
+      : readiness.excluded.length > 0
+        ? "warn"
+        : "ok"
+  const bannerText =
+    readiness.ready.length === 0
+      ? `No agents in this group have voices ready. The campaign can't start.`
+      : readiness.excluded.length === 0
+        ? `All ${readiness.total} agents in ${group} have voices ready.`
+        : `${readiness.ready.length} of ${readiness.total} agents are ready. ${readiness.excluded.length} are excluded until their voice and greeting are complete.`
+
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex items-start justify-between gap-3">
         <div>
-          <div className="text-[12px] font-semibold">Hybrid agents</div>
+          <div className="text-[12px] font-semibold">Voice readiness</div>
           <p className="mt-0.5 text-[10.5px] text-muted-foreground">
-            Calls only ever start in the voice of a selected agent. An agent
-            can take over only calls in their own voice.
+            Calls only start in a ready agent&apos;s voice. Agents whose voice
+            or greeting isn&apos;t ready are excluded automatically.
           </p>
         </div>
         <a
           href="/agents/voice-consent"
           target="_blank"
           rel="noreferrer"
-          className="inline-flex items-center gap-1 text-[11px] font-medium text-primary hover:underline"
+          className="inline-flex items-center gap-1 text-[11px] font-medium text-primary hover:underline whitespace-nowrap"
         >
           Manage voice consent <ExternalLink className="h-3 w-3" />
         </a>
       </div>
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <FormField label="Group filter">
-          <select
-            value={groupFilter}
-            onChange={(e) => setGroupFilter(e.target.value)}
-            className="h-8 rounded-md border border-input bg-background px-2 text-[12px] outline-none focus-visible:border-ring"
-          >
-            <option value="">All groups</option>
-            {HYBRID_AGENT_GROUPS.map((g) => (
-              <option key={g} value={g}>
-                {g}
-              </option>
-            ))}
-          </select>
-        </FormField>
-        <div className="rounded-md border border-border bg-background/60 px-2.5 py-1 text-[11px] text-muted-foreground">
-          <span className="text-foreground font-medium">{hybrid.agentIds.length}</span>{" "}
-          selected
-        </div>
-      </div>
+
+      <ReadinessBanner tone={bannerTone} text={bannerText} />
+
       <div className="space-y-1.5">
-        {list.map((a) => {
-          const eligible = isAgentEligibleForHybrid(a)
-          const checked = hybrid.agentIds.includes(a.id)
-          return (
-            <label
-              key={a.id}
-              title={!eligible ? reasonAgentNotEligible(a) : undefined}
-              className={cn(
-                "flex items-center justify-between gap-3 rounded border px-3 py-2 text-[12px]",
-                eligible
-                  ? "cursor-pointer border-border bg-background/60 hover:bg-muted/40"
-                  : "border-dashed border-border bg-muted/10 opacity-60",
+        {readiness.ready.map((a) => (
+          <AgentRow key={a.id} agent={a} ready />
+        ))}
+        {readiness.excluded.map(({ agent, reasons }) => (
+          <AgentRow key={agent.id} agent={agent} ready={false} reasons={reasons} />
+        ))}
+        {readiness.total === 0 && (
+          <div className="rounded border border-dashed border-border bg-muted/10 px-3 py-6 text-center text-[11px] text-muted-foreground">
+            No agents are assigned to {group} yet.
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function ReadinessBanner({ tone, text }: { tone: "ok" | "warn" | "err"; text: string }) {
+  return (
+    <div
+      className={cn(
+        "rounded-md border px-3 py-2 text-[11.5px]",
+        tone === "ok" && "border-emerald-500/40 bg-emerald-500/[0.07] text-emerald-200",
+        tone === "warn" && "border-amber-500/40 bg-amber-500/[0.07] text-amber-200",
+        tone === "err" && "border-error-500/40 bg-error-500/[0.07] text-error-300",
+      )}
+    >
+      {text}
+    </div>
+  )
+}
+
+function AgentRow({
+  agent,
+  ready,
+  reasons = [],
+}: {
+  agent: HybridAgent
+  ready: boolean
+  reasons?: string[]
+}) {
+  return (
+    <div
+      className={cn(
+        "flex items-center justify-between gap-3 rounded border px-3 py-2 text-[12px]",
+        ready
+          ? "border-border bg-background/60"
+          : "border-dashed border-border bg-muted/10 opacity-60",
+      )}
+    >
+      <div className="min-w-0">
+        <div className="flex items-center gap-2">
+          <span className="truncate font-medium text-foreground">{agent.name}</span>
+          {!ready && (
+            <>
+              <span className="rounded bg-muted/60 px-1.5 py-0.5 text-[9.5px] font-semibold uppercase tracking-wider text-muted-foreground">
+                Excluded
+              </span>
+              {reasons.length > 0 && (
+                <span className="truncate text-[10px] text-muted-foreground">
+                  {reasons.join(", ")}
+                </span>
               )}
-            >
-              <div className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={checked}
-                  disabled={!eligible}
-                  onChange={() => toggle(a)}
-                  className="h-3.5 w-3.5 accent-primary"
-                />
-                <div>
-                  <div className="font-medium text-foreground">{a.name}</div>
-                  <div className="text-[10px] text-muted-foreground">{a.group}</div>
-                </div>
-              </div>
-              <div className="flex items-center gap-1">
-                <StatusChip
-                  tone={a.voiceClone === "approved" ? "ok" : a.voiceClone === "pending" ? "warn" : "err"}
-                  label={`Voice: ${VOICE_CLONE_LABEL[a.voiceClone]}`}
-                />
-                <StatusChip
-                  tone={a.greetingClip === "ready" ? "ok" : "err"}
-                  label={`Greeting: ${GREETING_CLIP_LABEL[a.greetingClip]}`}
-                />
-              </div>
-            </label>
-          )
-        })}
+            </>
+          )}
+        </div>
+        <div className="text-[10px] text-muted-foreground">{agent.group}</div>
+      </div>
+      <div className="flex items-center gap-1 shrink-0">
+        <StatusChip
+          tone={agent.voiceClone === "approved" ? "ok" : agent.voiceClone === "pending" ? "warn" : "err"}
+          label={`Voice: ${VOICE_CLONE_LABEL[agent.voiceClone]}`}
+        />
+        <StatusChip
+          tone={agent.greetingClip === "ready" ? "ok" : "err"}
+          label={`Greeting: ${GREETING_CLIP_LABEL[agent.greetingClip]}`}
+        />
       </div>
     </div>
   )
@@ -855,197 +918,6 @@ function SupplyTab({
   )
 }
 
-function PtpTab({
-  hybrid,
-  setHybrid,
-}: {
-  hybrid: HybridCampaignConfig
-  setHybrid: (patch: Partial<HybridCampaignConfig>) => void
-}) {
-  const p = hybrid.ptp
-  const setP = (patch: Partial<HybridCampaignConfig["ptp"]>) =>
-    setHybrid({ ptp: { ...p, ...patch } })
-  const toggleRule = (
-    r: HybridCampaignConfig["ptp"]["riskRules"][number],
-  ) => {
-    const on = p.riskRules.includes(r)
-    setP({ riskRules: on ? p.riskRules.filter((x) => x !== r) : [...p.riskRules, r] })
-  }
-  return (
-    <div className="space-y-4">
-      <div className="rounded-md border border-border bg-background/60 p-3 space-y-3">
-        <label className="flex cursor-pointer items-start gap-2 text-[11.5px]">
-          <input
-            type="checkbox"
-            checked={p.digitalConfirm}
-            onChange={(e) => setP({ digitalConfirm: e.target.checked })}
-            className="mt-0.5 h-3.5 w-3.5 accent-primary"
-          />
-          <div className="flex-1">
-            <div className="font-medium text-foreground">Digital confirmation</div>
-            <div className="mt-0.5 text-[10px] text-muted-foreground">
-              After a PTP, send a confirmation message. The borrower replies 1 to confirm.
-            </div>
-          </div>
-        </label>
-        {p.digitalConfirm && (
-          <>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <FormField label="Channel">
-                <select
-                  value={p.channel}
-                  onChange={(e) =>
-                    setP({ channel: e.target.value as typeof p.channel })
-                  }
-                  className="h-8 w-full rounded border border-input bg-background px-2 text-[12px] outline-none focus-visible:border-ring"
-                >
-                  <option value="whatsapp">WhatsApp</option>
-                  <option value="sms">SMS</option>
-                </select>
-              </FormField>
-              <FormField label="Reply window (hours)">
-                <input
-                  type="number"
-                  min={1}
-                  max={168}
-                  value={p.replyWindowHours}
-                  onChange={(e) =>
-                    setP({
-                      replyWindowHours: Math.max(1, Math.min(168, Number(e.target.value) || 1)),
-                    })
-                  }
-                  className="h-8 w-full rounded border border-input bg-background px-2 text-[12px] outline-none focus-visible:border-ring"
-                />
-              </FormField>
-            </div>
-            <div className="rounded-md border border-border/70 bg-muted/20 px-3 py-2 text-[11px]">
-              <div className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">
-                Message preview
-              </div>
-              <div className="mt-1 font-mono text-[11.5px] text-foreground">
-                Reply 1 to confirm AED [amount] on [date].
-              </div>
-            </div>
-          </>
-        )}
-      </div>
-
-      <FormField label="Verification policy">
-        <div className="space-y-1.5">
-          {[
-            { id: "all", label: "All Jabi PTPs" },
-            { id: "by_risk", label: "By risk" },
-            { id: "none", label: "None" },
-          ].map((o) => (
-            <label
-              key={o.id}
-              className="flex cursor-pointer items-center gap-2 rounded border border-border bg-background/60 px-3 py-2 text-[11.5px]"
-            >
-              <input
-                type="radio"
-                checked={p.verification === o.id}
-                onChange={() => setP({ verification: o.id as typeof p.verification })}
-                className="h-3.5 w-3.5 accent-primary"
-              />
-              <span className="text-foreground">{o.label}</span>
-            </label>
-          ))}
-        </div>
-      </FormField>
-
-      {p.verification === "by_risk" && (
-        <div className="rounded-md border border-border bg-background/60 p-3 space-y-2">
-          <div className="text-[10.5px] font-semibold text-foreground">
-            Risk rules
-          </div>
-          <div className="flex flex-wrap gap-1">
-            {(
-              [
-                { id: "first_promise", label: "First promise" },
-                { id: "previously_broken", label: "Previously broken promise" },
-                { id: "low_confidence", label: "Low Jabi confidence" },
-              ] as const
-            ).map((r) => (
-              <button
-                key={r.id}
-                type="button"
-                onClick={() => toggleRule(r.id)}
-                className={cn(
-                  "rounded-md border px-2 py-0.5 text-[10.5px] font-medium",
-                  p.riskRules.includes(r.id)
-                    ? "border-primary bg-primary/10 text-primary"
-                    : "border-border bg-background text-muted-foreground hover:bg-muted",
-                )}
-              >
-                {r.label}
-              </button>
-            ))}
-            <button
-              type="button"
-              onClick={() => toggleRule("amount_over")}
-              className={cn(
-                "rounded-md border px-2 py-0.5 text-[10.5px] font-medium",
-                p.riskRules.includes("amount_over")
-                  ? "border-primary bg-primary/10 text-primary"
-                  : "border-border bg-background text-muted-foreground hover:bg-muted",
-              )}
-            >
-              Amount over
-            </button>
-            {p.riskRules.includes("amount_over") && (
-              <div className="flex items-center gap-1 text-[10.5px]">
-                <span className="text-muted-foreground">AED</span>
-                <input
-                  type="number"
-                  min={1}
-                  value={p.amountOver}
-                  onChange={(e) =>
-                    setP({ amountOver: Math.max(1, Number(e.target.value) || 1) })
-                  }
-                  className="h-6 w-20 rounded border border-input bg-background px-1 text-center tabular-nums outline-none focus-visible:border-ring"
-                />
-              </div>
-            )}
-          </div>
-          {p.riskRules.length === 0 && (
-            <WarnRow block>Select at least one risk rule.</WarnRow>
-          )}
-        </div>
-      )}
-
-      <FormField label="Verification route">
-        <div className="space-y-1.5">
-          <label className="flex cursor-pointer items-center gap-2 rounded border border-border bg-background/60 px-3 py-2 text-[11.5px]">
-            <input
-              type="radio"
-              checked={p.verificationRoute === "owner_voice"}
-              onChange={() => setP({ verificationRoute: "owner_voice" })}
-              className="h-3.5 w-3.5 accent-primary"
-            />
-            <span className="text-foreground">
-              Owner-voice verification calls <span className="rounded bg-muted px-1 py-px text-[9px] font-semibold text-muted-foreground">Default</span>
-            </span>
-          </label>
-          <label className="flex cursor-pointer items-center gap-2 rounded border border-border bg-background/60 px-3 py-2 text-[11.5px]">
-            <input
-              type="radio"
-              checked={p.verificationRoute === "separate_campaign"}
-              onChange={() => setP({ verificationRoute: "separate_campaign" })}
-              className="h-3.5 w-3.5 accent-primary"
-            />
-            <span className="text-foreground">Separate campaign</span>
-          </label>
-        </div>
-      </FormField>
-
-      <div className="rounded-md border border-border bg-background/60 px-3 py-2 text-[10.5px] text-muted-foreground">
-        No verification is created when the agent took over and agreed the
-        promise.
-      </div>
-    </div>
-  )
-}
-
 /* ─────────── Preview ─────────── */
 
 function HybridPreview({
@@ -1055,9 +927,13 @@ function HybridPreview({
   draft: HumanCampaign
   hybrid: HybridCampaignConfig
 }) {
-  const firstAgent = hybrid.agentIds[0]
-    ? getHybridAgentById(hybrid.agentIds[0])?.name ?? "a selected agent"
-    : "the selected agent"
+  const readiness = draft.agentGroup
+    ? computeGroupReadiness(draft.agentGroup)
+    : null
+  const firstAgent =
+    readiness && readiness.ready.length > 0
+      ? readiness.ready[0].name
+      : "a ready agent"
   const windowOpen = labelOpens(hybrid.handover.opensAt)
   const windowClose = labelCloses(hybrid.handover.closesAt)
   return (
@@ -1097,7 +973,14 @@ function HybridPreview({
           Summary
         </div>
         <div className="mt-2 grid gap-1 text-[11px]">
-          <PRow k="Agents" v={`${hybrid.agentIds.length} selected`} />
+          <PRow
+            k="Agents"
+            v={
+              readiness
+                ? `${readiness.ready.length} of ${readiness.total} ready`
+                : "No group picked"
+            }
+          />
           <PRow
             k="Segments"
             v={
@@ -1116,16 +999,6 @@ function HybridPreview({
               hybrid.supply.mode === "steady"
                 ? `Steady, ${hybrid.supply.maxCallsPerSec}/s`
                 : `Responsive, ${hybrid.supply.maxOutstandingPerAgent}/agent`
-            }
-          />
-          <PRow
-            k="PTP verification"
-            v={
-              hybrid.ptp.verification === "by_risk"
-                ? `By risk, ${hybrid.ptp.riskRules.length} rule${hybrid.ptp.riskRules.length === 1 ? "" : "s"}`
-                : hybrid.ptp.verification === "all"
-                  ? "All Jabi PTPs"
-                  : "None"
             }
           />
         </div>
@@ -1173,12 +1046,17 @@ function computeErrors(draft: HumanCampaign): ValidationFinding[] {
   const out: ValidationFinding[] = []
   const h = draft.hybrid
   if (!h) return out
-  const eligible = h.agentIds.filter((id) => {
-    const a = getHybridAgentById(id)
-    return a && isAgentEligibleForHybrid(a)
-  })
-  if (eligible.length === 0) {
-    out.push({ id: "no_agents", tab: "agents", message: "No eligible agents selected." })
+  if (!draft.agentGroup) {
+    out.push({ id: "no_group", tab: "basics", message: "Pick an agent group." })
+  } else {
+    const readiness = computeGroupReadiness(draft.agentGroup)
+    if (readiness.ready.length === 0) {
+      out.push({
+        id: "no_ready_agents",
+        tab: "agents",
+        message: `No agents in ${draft.agentGroup} have voices ready.`,
+      })
+    }
   }
   const segsMissingProject = h.segments.filter((s) => s.viewName && !s.projectId)
   if (h.segments.length > 0 && segsMissingProject.length > 0) {
@@ -1199,9 +1077,6 @@ function computeErrors(draft: HumanCampaign): ValidationFinding[] {
   }
   if (h.supply.mode === "responsive" && h.supply.maxOutstandingPerAgent < 1) {
     out.push({ id: "supply_cap", tab: "supply", message: "Responsive cap must be at least 1." })
-  }
-  if (h.ptp.verification === "by_risk" && h.ptp.riskRules.length === 0) {
-    out.push({ id: "no_risk_rules", tab: "ptp", message: "By risk is selected but no rules are set." })
   }
   return out
 }
@@ -1229,16 +1104,16 @@ function computeWarnings(draft: HumanCampaign): ValidationFinding[] {
       message: `Max age is ${h.handover.maxAgeSec} seconds, which is quite short.`,
     })
   }
-  const eligible = h.agentIds.filter((id) => {
-    const a = getHybridAgentById(id)
-    return a && isAgentEligibleForHybrid(a)
-  })
-  if (eligible.length > 0 && eligible.length < 3) {
-    out.push({
-      id: "few_agents",
-      tab: "agents",
-      message: `Only ${eligible.length} eligible agent${eligible.length === 1 ? "" : "s"} selected.`,
-    })
+  if (draft.agentGroup) {
+    const readiness = computeGroupReadiness(draft.agentGroup)
+    if (readiness.ready.length > 0 && readiness.excluded.length > 0) {
+      const names = readiness.excluded.map((e) => e.agent.name).join(", ")
+      out.push({
+        id: "excluded_agents",
+        tab: "agents",
+        message: `${readiness.excluded.length} agent${readiness.excluded.length === 1 ? "" : "s"} excluded until voice is ready: ${names}.`,
+      })
+    }
   }
   return out
 }
