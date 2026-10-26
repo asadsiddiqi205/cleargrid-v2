@@ -21,6 +21,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Info } from "lucide-react";
 import * as React from "react";
 import type { ReactNode } from "react";
+import {
+  HYBRID_CAMPAIGN_CATALOG,
+  getHybridCampaignById,
+  readinessForGroup,
+} from "@/data/hybrid-campaigns";
+import { AGENT_GROUPS } from "@/data/campaigns-seed";
+import { CLEARVOICE_PROJECTS } from "@/data/clearvoice";
 
 /* ------------------------------------------------------------------ */
 /*  Shared atoms                                                       */
@@ -2512,6 +2519,190 @@ export function GlobalExitForm({ data, update }: BlockConfigFormProps) {
 }
 
 /* ------------------------------------------------------------------ */
+/*  Hybrid Campaign node                                               */
+/* ------------------------------------------------------------------ */
+
+export function HybridCampaignForm({ data, update }: BlockConfigFormProps) {
+  const mode = ((data.hybridMode as string) ?? "existing") as "existing" | "new"
+  const linkedId = (data.linkedCampaignId as string) ?? ""
+  const linked = getHybridCampaignById(linkedId)
+  const linkedReadiness = linked ? readinessForGroup(linked.agentGroup) : null
+  const newCampaign = (data.newCampaign as {
+    name?: string
+    agentGroup?: string
+    projectId?: string
+  }) ?? {}
+  const newReadiness = newCampaign.agentGroup
+    ? readinessForGroup(newCampaign.agentGroup)
+    : null
+  const maxTimeHours = (data.maxTimeHours as number) ?? 24
+
+  const patchNew = (
+    patch: Partial<{ name: string; agentGroup: string; projectId: string }>,
+  ) => update("newCampaign", { ...newCampaign, ...patch })
+
+  return (
+    <SectionCard
+      title="Hybrid campaign"
+      helper="Dial borrowers with Jabi; a ready agent takes over when free."
+    >
+      {/* Mode toggle */}
+      <div className="grid grid-cols-2 gap-1 rounded-md border border-input bg-background p-1">
+        {(["existing", "new"] as const).map((m) => (
+          <button
+            key={m}
+            type="button"
+            onClick={() => update("hybridMode", m)}
+            className={
+              "rounded px-2 py-1 text-[11px] font-medium " +
+              (mode === m
+                ? "bg-primary text-primary-foreground"
+                : "text-muted-foreground hover:bg-muted/40 hover:text-foreground")
+            }
+          >
+            {m === "existing" ? "Use existing" : "Create new"}
+          </button>
+        ))}
+      </div>
+
+      {mode === "existing" ? (
+        <div className="space-y-2">
+          <FieldLabel>Campaign</FieldLabel>
+          <NS
+            value={linkedId}
+            onChange={(v) => update("linkedCampaignId", v)}
+          >
+            <option value="">Select a hybrid campaign</option>
+            {HYBRID_CAMPAIGN_CATALOG.map((c) => {
+              const r = readinessForGroup(c.agentGroup)
+              return (
+                <option key={c.id} value={c.id}>
+                  {c.name} · {c.agentGroup} · {r.ready}/{r.total} ready
+                </option>
+              )
+            })}
+          </NS>
+          {linked && (
+            <div className="rounded-md border border-border bg-background/60 p-2.5 space-y-1 text-[11px]">
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">Agent group</span>
+                <span className="font-medium text-foreground">{linked.agentGroup}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">Dialer</span>
+                <span className="font-medium text-foreground">{linked.dialerName}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">Jabi project</span>
+                <span className="font-medium text-foreground">{linked.projectName}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">Max attempts</span>
+                <span className="font-medium text-foreground">{linked.maxAttempts}</span>
+              </div>
+              {linkedReadiness && (
+                <div className="flex items-center justify-between pt-1">
+                  <span className="text-muted-foreground">Voices ready</span>
+                  <span
+                    className={
+                      "rounded px-1.5 py-0.5 text-[10px] font-semibold " +
+                      (linkedReadiness.ready === 0
+                        ? "bg-error-500/15 text-error-300"
+                        : linkedReadiness.ready < linkedReadiness.total
+                          ? "bg-amber-500/15 text-amber-300"
+                          : "bg-emerald-500/15 text-emerald-300")
+                    }
+                  >
+                    {linkedReadiness.ready}/{linkedReadiness.total}
+                  </span>
+                </div>
+              )}
+              <a
+                href={`/campaigns/${linked.id}`}
+                target="_blank"
+                rel="noreferrer"
+                className="mt-1 inline-flex text-[10.5px] font-medium text-primary hover:underline"
+              >
+                Open campaign
+              </a>
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="space-y-2">
+          <div>
+            <FieldLabel>Campaign name</FieldLabel>
+            <Input
+              value={newCampaign.name ?? ""}
+              onChange={(e) => patchNew({ name: e.target.value })}
+              placeholder="e.g. Journey Early Delinquency Hybrid"
+              className="h-8 text-[12px]"
+            />
+          </div>
+          <div>
+            <FieldLabel>Agent group</FieldLabel>
+            <NS
+              value={newCampaign.agentGroup ?? ""}
+              onChange={(v) => patchNew({ agentGroup: v })}
+            >
+              <option value="">Select a group</option>
+              {AGENT_GROUPS.map((g) => (
+                <option key={g} value={g}>{g}</option>
+              ))}
+            </NS>
+            {newReadiness && (
+              <div className="mt-1 text-[10px] text-muted-foreground">
+                {newReadiness.ready} of {newReadiness.total} agents have voices ready.
+              </div>
+            )}
+          </div>
+          <div>
+            <FieldLabel>Jabi project</FieldLabel>
+            <NS
+              value={newCampaign.projectId ?? ""}
+              onChange={(v) => patchNew({ projectId: v })}
+            >
+              <option value="">Select a project</option>
+              {CLEARVOICE_PROJECTS.filter((p) => p.status !== "disabled").map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name} · {p.lenderName}
+                </option>
+              ))}
+            </NS>
+          </div>
+          <div className="rounded-md border border-border bg-background/60 px-2.5 py-1.5 text-[10.5px] text-muted-foreground">
+            Audience: borrowers who reach this node.
+          </div>
+        </div>
+      )}
+
+      <div className="pt-2">
+        <FieldLabel>Max time in node</FieldLabel>
+        <div className="flex items-center gap-2">
+          <Input
+            type="number"
+            min={1}
+            max={168}
+            value={maxTimeHours}
+            onChange={(e) =>
+              update(
+                "maxTimeHours",
+                Math.max(1, Math.min(168, Number(e.target.value) || 1)),
+              )
+            }
+            className="h-8 w-20 text-center tabular-nums"
+          />
+          <span className="text-[11px] text-muted-foreground">hours</span>
+        </div>
+        <p className="mt-1 text-[10px] text-muted-foreground">
+          Borrowers still queued when this expires leave through Not reached.
+        </p>
+      </div>
+    </SectionCard>
+  )
+}
+
+/* ------------------------------------------------------------------ */
 /*  Dispatch                                                           */
 /* ------------------------------------------------------------------ */
 
@@ -2596,6 +2787,9 @@ export function getBlockConfigForm(
     content_optimizer: ContentOptimizerForm,
     experiment: ExperimentForm,
     feature_flag: FeatureFlagForm,
+
+    // channels (hybrid dialer)
+    hybrid_campaign: HybridCampaignForm,
 
     // exit
     global_exit: GlobalExitForm,

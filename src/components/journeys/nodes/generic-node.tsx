@@ -7,6 +7,10 @@ import { cn } from "@/lib/utils";
 import { getBlockType, getBlockCategory } from "@/data/journeys";
 import { QuickAddButton } from "@/components/journeys/quick-add-button";
 import { NodeErrorBadge } from "@/components/journeys/nodes/node-error-badge";
+import {
+  getHybridCampaignById,
+  readinessForGroup,
+} from "@/data/hybrid-campaigns";
 
 const SCOPE_BADGE: Record<string, string> = {
   borrower: "bg-primary-500/15 text-primary-300 border-primary-500/30",
@@ -108,6 +112,10 @@ export function GenericNode({ id, data, selected }: NodeProps) {
         </div>
       )}
 
+      {blockType === "hybrid_campaign" && (
+        <HybridCampaignFooter data={data as Record<string, unknown>} />
+      )}
+
       {ports.length > 1 && (
         <div className="space-y-0.5 border-t border-border/40 px-3 py-1.5">
           {ports.map((p, i) => (
@@ -171,6 +179,69 @@ export function GenericNode({ id, data, selected }: NodeProps) {
   );
 }
 
+/**
+ * Footer rendered inside a Hybrid Campaign node card: campaign name,
+ * agent group, and a readiness chip ("8/12 voices ready") coloured by
+ * tone. Reads directly from node.data so the chip updates live when the
+ * author picks a different campaign or group in the config panel.
+ */
+function HybridCampaignFooter({ data }: { data: Record<string, unknown> }) {
+  const mode = (data.hybridMode as string) ?? "existing"
+  let campaignName = ""
+  let agentGroup = ""
+  if (mode === "existing") {
+    const c = getHybridCampaignById(data.linkedCampaignId as string | undefined)
+    campaignName = c?.name ?? ""
+    agentGroup = c?.agentGroup ?? ""
+  } else {
+    const n = (data.newCampaign as { name?: string; agentGroup?: string }) ?? {}
+    campaignName = n.name ?? ""
+    agentGroup = n.agentGroup ?? ""
+  }
+  const readiness = agentGroup ? readinessForGroup(agentGroup) : null
+  const tone =
+    !readiness
+      ? "muted"
+      : readiness.ready === 0
+        ? "err"
+        : readiness.ready < readiness.total
+          ? "warn"
+          : "ok"
+  return (
+    <div className="border-t border-border/40 px-3 py-2 space-y-1">
+      {campaignName ? (
+        <div className="truncate text-[11px] font-medium text-foreground">
+          {campaignName}
+        </div>
+      ) : (
+        <div className="text-[10.5px] italic text-muted-foreground">
+          No campaign linked
+        </div>
+      )}
+      {agentGroup && (
+        <div className="flex items-center justify-between gap-2">
+          <span className="truncate text-[10px] text-muted-foreground">
+            {agentGroup}
+          </span>
+          {readiness && (
+            <span
+              className={cn(
+                "shrink-0 rounded px-1.5 py-0.5 text-[9.5px] font-medium",
+                tone === "ok" && "bg-emerald-500/15 text-emerald-300",
+                tone === "warn" && "bg-amber-500/15 text-amber-300",
+                tone === "err" && "bg-error-500/15 text-error-300",
+                tone === "muted" && "bg-muted/60 text-muted-foreground",
+              )}
+            >
+              {readiness.ready}/{readiness.total} voices ready
+            </span>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function getPorts(branchKind: string | undefined, count: number): string[] {
   if (count <= 1) return ["out"];
   switch (branchKind) {
@@ -178,6 +249,8 @@ function getPorts(branchKind: string | undefined, count: number): string[] {
       return Array.from({ length: count }, (_, i) => `Group ${String.fromCharCode(65 + i)}`);
     case "action_path":
       return ["Clicked", "Opened", "Dismissed", "No Action"].slice(0, count);
+    case "hybrid_campaign":
+      return ["Agent took over", "Jabi completed", "Not reached"];
     case "best_channel":
       return ["Email", "SMS", "Push", "WhatsApp"].slice(0, count);
     case "inbound_evaluator":

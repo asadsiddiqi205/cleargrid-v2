@@ -35,6 +35,7 @@ import {
   Brain,
   FlaskConical,
   Power,
+  Sparkles,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
@@ -226,6 +227,30 @@ export const BLOCK_TYPES: BlockType[] = [
   { type: "send_slack", label: "Send Slack", icon: Send, description: "Post a team notification to a Slack channel", category: "channels", nodeKind: "action", defaultData: { label: "Send Slack", actionType: "slack" } },
   { type: "trigger_human_campaign", label: "Create Human Campaign", icon: Users, description: "Create a brand-new human-agent campaign for the borrowers reaching this step", category: "channels", nodeKind: "action", defaultData: { label: "Create Human Campaign", actionType: "human_campaign", campaignMode: "create", continueMode: "immediate" } },
   { type: "use_human_campaign", label: "Use Existing Human Campaign", icon: Users, description: "Enroll borrowers into a campaign already created inside this journey", category: "channels", nodeKind: "action", defaultData: { label: "Use Existing Human Campaign", actionType: "human_campaign", campaignMode: "existing", continueMode: "immediate" } },
+  {
+    type: "hybrid_campaign",
+    label: "Hybrid Campaign",
+    icon: Sparkles,
+    description: "Dial borrowers with Jabi; a ready agent can take over the call",
+    category: "channels",
+    nodeKind: "generic",
+    maxOutputs: 3,
+    defaultData: {
+      label: "Hybrid Campaign",
+      branchKind: "hybrid_campaign",
+      branches: 3,
+      // Config persisted on node.data; see HybridCampaignNodeConfig in the
+      // node-config-panel for the shape managers edit.
+      hybridMode: "existing", // "existing" | "new"
+      linkedCampaignId: "", // when hybridMode === "existing"
+      newCampaign: {
+        name: "",
+        agentGroup: "",
+        projectId: "", // single Jabi project; audience is the inbound borrowers
+      },
+      maxTimeHours: 24,
+    },
+  },
 
   // ───── Conditions (8) — matches command.cleargrid.ai ─────
   { type: "decision_split", label: "Decision Split", icon: GitBranch, description: "Evaluate a structured rule (audience-style yes/no)", category: "conditions", maxOutputs: 2, nodeKind: "condition", defaultData: { label: "Decision Split", conditionType: "check_attribute" } },

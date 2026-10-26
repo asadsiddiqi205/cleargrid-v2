@@ -39,6 +39,10 @@ import { GenericNode } from "@/components/journeys/nodes/generic-node";
 import { ComponentInstanceNode } from "@/components/journeys/nodes/component-instance-node";
 import { SaveAsComponentModal } from "@/components/journeys/save-as-component-modal";
 import { isBlockHiddenByFlag } from "@/data/feature-flags";
+import {
+  getHybridCampaignById,
+  readinessForGroup,
+} from "@/data/hybrid-campaigns";
 import { ComponentInstancePanel } from "@/components/journeys/component-instance-panel";
 import { InstanceInnerNodeEditor } from "@/components/journeys/instance-inner-node-editor";
 import {
@@ -1131,6 +1135,38 @@ export default function JourneyCanvas({ journeyId }: JourneyCanvasProps) {
         warnings.push(`${orphans.length} disconnected block${orphans.length > 1 ? "s" : ""}`);
         orphans.forEach((n) => problemNodeIds.push(n.id));
       }
+    }
+
+    // Hybrid campaign nodes must link to a campaign with ready agents.
+    {
+      nodes.forEach((n) => {
+        const d = (n.data ?? {}) as Record<string, unknown>;
+        if (d.blockType !== "hybrid_campaign") return;
+        const mode = (d.hybridMode as string) ?? "existing";
+        let group = "";
+        let hasCampaign = false;
+        if (mode === "existing") {
+          const c = getHybridCampaignById(d.linkedCampaignId as string | undefined);
+          hasCampaign = Boolean(c);
+          group = c?.agentGroup ?? "";
+        } else {
+          const nc = (d.newCampaign as { name?: string; agentGroup?: string }) ?? {};
+          hasCampaign = Boolean(nc.name && nc.agentGroup);
+          group = nc.agentGroup ?? "";
+        }
+        if (!hasCampaign) {
+          errors.push("Hybrid campaign node has no campaign linked");
+          problemNodeIds.push(n.id);
+          return;
+        }
+        if (group) {
+          const r = readinessForGroup(group);
+          if (r.ready === 0) {
+            errors.push(`Hybrid campaign node has 0 ready agents in ${group}`);
+            problemNodeIds.push(n.id);
+          }
+        }
+      });
     }
 
     // Helper: shake specific nodes for 600ms
