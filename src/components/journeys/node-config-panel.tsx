@@ -75,6 +75,7 @@ import { MessagePreview, type MessageChannel as PreviewChannel } from "@/compone
 import { borrowers } from "@/data/borrowers";
 import { getRichTemplate } from "@/data/rich-email-templates";
 import { NodeAnalyticsTab } from "@/components/journeys/node-analytics-tab";
+import { ExperimentResults } from "@/components/journeys/experiment-results";
 import { BarChart3 } from "lucide-react";
 
 /* ------------------------------------------------------------------ */
@@ -1639,6 +1640,18 @@ export function NodeConfigPanel({ node, onClose, onUpdate, onDeleteNode, nodes =
                 </NativeSelect>
               </div>
             </Section>
+
+            {journeyId && (
+              <Section title="Results">
+                <ExperimentResults
+                  journeyId={journeyId}
+                  nodeId={node.id}
+                  data={d}
+                  nodes={nodes}
+                  edges={edges}
+                />
+              </Section>
+            )}
           </>
         )}
 
