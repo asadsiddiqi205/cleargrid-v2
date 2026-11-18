@@ -31,6 +31,7 @@ import {
   type RunNodeRow,
 } from "@/data/journey-runs"
 import { BorrowerTraceDrawer } from "@/components/journeys/borrower-trace-drawer"
+import { NodeEmailAnalytics } from "@/components/journeys/node-email-analytics"
 
 interface NodeAnalyticsTabProps {
   journeyId: string
@@ -70,6 +71,19 @@ export function NodeAnalyticsTab({
 
   const run = runId ? getRun(journeyId, runId) : null
   const kind = classifyNode(nodeType, blockType, nodeLabel)
+
+  // Email nodes use the rebuilt per-message analytics view (Funnel + Delivery
+  // + Engagement + Outcomes + per-status borrower list). Other node kinds
+  // keep the legacy run-scoped view below.
+  if (kind === "message_email") {
+    return (
+      <NodeEmailAnalytics
+        journeyId={journeyId}
+        nodeId={nodeId}
+        nodeLabel={nodeLabel}
+      />
+    )
+  }
 
   const rows = React.useMemo(
     () => (run ? listRunNodeBorrowers(run, nodeId, nodeLabel, kind) : []),

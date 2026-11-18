@@ -65,7 +65,22 @@ import {
   SenderProfilePicker,
   deriveDefaultSenderProfile,
 } from "@/components/composer/sender-profile-picker"
-import { getSenderProfileById } from "@/data/sender-profiles"
+import {
+  getSenderProfileById,
+  senderProfiles as SENDER_PROFILES,
+} from "@/data/sender-profiles"
+import {
+  guessCtaType,
+  CTA_LABEL,
+  type CtaType,
+} from "@/data/journey-metrics"
+
+/** CTA-tagged tracked link persisted on node.data.trackedLinks. */
+export interface TrackedLink {
+  id: string
+  url: string
+  cta: CtaType
+}
 
 type ComposeMode = "template" | "manual"
 
@@ -735,6 +750,11 @@ export function MessageNodeFullEditor({
                         className="mt-1.5 min-h-[100px] w-full rounded-md border border-input bg-background p-3 text-[12px] outline-none focus-visible:border-ring"
                       />
                     </div>
+                    <TrackedLinksEditor
+                      body={manualBodyHtml}
+                      links={(d.trackedLinks as TrackedLink[] | undefined) ?? []}
+                      onChange={(next) => set("trackedLinks", next)}
+                    />
                   </>
                 )}
                 {channel !== "email" && (
@@ -770,6 +790,13 @@ export function MessageNodeFullEditor({
                           {manualBodyText.length}/160
                         </span>
                       </div>
+                    )}
+                    {channel === "sms" && (
+                      <TrackedLinksEditor
+                        body={manualBodyText}
+                        links={(d.trackedLinks as TrackedLink[] | undefined) ?? []}
+                        onChange={(next) => set("trackedLinks", next)}
+                      />
                     )}
                   </div>
                 )}
@@ -1247,6 +1274,12 @@ function EmailDeliveryFields({
           label="Track link clicks"
           checked={trackClicks}
           onChange={(v) => set("emailTrackClicks", v)}
+        />
+      </div>
+      <div className="mt-3">
+        <SenderRotationEditor
+          value={(d.emailSenderRotation as string[] | undefined) ?? []}
+          onChange={(next) => set("emailSenderRotation", next)}
         />
       </div>
     </SectionCard>
@@ -1989,4 +2022,192 @@ function renderVars(text: string, b: Borrower): string {
     .replace(/\{\{\s*borrower\.product\s*\}\}/g, b.product)
     .replace(/\{\{\s*first_name\s*\}\}/g, first)
     .replace(/\{\{\s*amount\s*\}\}/g, `AED ${b.outstanding.toLocaleString()}`)
+}
+
+/* ------------------------------------------------------------------ */
+/*  Tracked links editor — CTA tagging under the body                 */
+/* ------------------------------------------------------------------ */
+/**
+ * Scans the body text for URLs (http(s):// and tel:) and lets the author
+ * tag each one with a CTA type. The tags persist on node.data.trackedLinks
+ * and drive the CTA-level CTR breakdown on the Analytics tab and Report.
+ *
+ * TODO (backend contract): on send, the worker rewrites each http(s) link
+ * through the click-tracking shortener (cg.link/<linkId>) carrying the
+ * CTA tag; tel: links are counted via a click-to-call wrapper. For the
+ * prototype we only persist (url, cta) tuples.
+ */
+const URL_REGEX = /(https?:\/\/[^\s"<>]+|tel:[+\-\d() ]+)/gi
+
+export function TrackedLinksEditor({
+  body,
+  links,
+  onChange,
+}: {
+  body: string
+  links: TrackedLink[]
+  onChange: (next: TrackedLink[]) => void
+}) {
+  const detected = React.useMemo(() => {
+    const urls = Array.from(new Set((body || "").match(URL_REGEX) ?? []))
+    return urls.map((url, i) => ({ url, order: i }))
+  }, [body])
+
+  // Merge: keep existing tags for known URLs; add new entries for freshly
+  // detected ones; drop entries whose URLs are no longer in the body.
+  React.useEffect(() => {
+    const byUrl = new Map(links.map((l) => [l.url, l]))
+    const detectedUrls = new Set(detected.map((d) => d.url))
+    const next: TrackedLink[] = detected.map(
+      ({ url }) =>
+        byUrl.get(url) ?? {
+          id: `tl-${Math.random().toString(36).slice(2, 8)}`,
+          url,
+          cta: guessCtaType(url),
+        },
+    )
+    const kept = next.map((n) => n.url).sort().join("|")
+    const existing = links
+      .filter((l) => detectedUrls.has(l.url))
+      .map((l) => l.url)
+      .sort()
+      .join("|")
+    if (kept !== existing || next.length !== links.length) {
+      onChange(next)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [detected.map((d) => d.url).join("|")])
+
+  if (detected.length === 0) {
+    return (
+      <div className="mt-2 rounded-md border border-dashed border-border bg-muted/10 px-2.5 py-2 text-[10.5px] text-muted-foreground">
+        <Info className="mr-1 inline h-2.5 w-2.5" />
+        Paste a link into the body to tag it for CTA-level CTR.
+      </div>
+    )
+  }
+
+  return (
+    <div className="mt-2">
+      <Label className="text-[11px] uppercase tracking-wider text-muted-foreground">
+        Tracked links
+      </Label>
+      <p className="mt-0.5 text-[10px] text-muted-foreground">
+        Tag each link so CTR can break down by CTA type.
+      </p>
+      <ul className="mt-1.5 space-y-1">
+        {links.map((l) => (
+          <li
+            key={l.id}
+            className="flex items-center gap-2 rounded border border-border bg-background/60 px-2 py-1"
+          >
+            <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-foreground">
+              {l.url}
+            </span>
+            <select
+              value={l.cta}
+              onChange={(e) =>
+                onChange(
+                  links.map((x) =>
+                    x.id === l.id ? { ...x, cta: e.target.value as CtaType } : x,
+                  ),
+                )
+              }
+              className="h-7 rounded border border-input bg-background px-1.5 text-[11px] outline-none focus-visible:border-ring"
+            >
+              {(Object.keys(CTA_LABEL) as CtaType[]).map((c) => (
+                <option key={c} value={c}>
+                  {CTA_LABEL[c]}
+                </option>
+              ))}
+            </select>
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
+/* ------------------------------------------------------------------ */
+/*  Sender rotation picker — Delivery tab (Email only)                */
+/* ------------------------------------------------------------------ */
+/**
+ * Lets the author add multiple sender addresses the node rotates through.
+ * Reads the available pool from `SENDER_PROFILES`. The Analytics tab's
+ * Sender breakdown renders one row per profile in this list.
+ *
+ * TODO (backend contract): the worker rotates round-robin by default; a
+ * `rotationStrategy` field can later carry weights or reputation-aware
+ * selection.
+ */
+export function SenderRotationEditor({
+  value,
+  onChange,
+}: {
+  value: string[]
+  onChange: (next: string[]) => void
+}) {
+  const add = (id: string) => {
+    if (value.includes(id) || !id) return
+    onChange([...value, id])
+  }
+  const remove = (id: string) => onChange(value.filter((x) => x !== id))
+  const available = SENDER_PROFILES.filter((p) => !value.includes(p.id))
+  return (
+    <div className="space-y-1.5">
+      <Label className="text-[11px] uppercase tracking-wider text-muted-foreground">
+        Sender rotation
+      </Label>
+      <p className="text-[10px] text-muted-foreground">
+        Rotate sends across multiple approved senders. Each gets its own row
+        on the Analytics tab.
+      </p>
+      {value.length === 0 ? (
+        <div className="rounded border border-dashed border-border bg-muted/10 px-2 py-1.5 text-[10.5px] text-muted-foreground">
+          No rotation — uses the primary sender profile only.
+        </div>
+      ) : (
+        <ul className="space-y-1">
+          {value.map((id) => {
+            const p = getSenderProfileById(id)
+            return (
+              <li
+                key={id}
+                className="flex items-center justify-between rounded border border-border bg-background/60 px-2 py-1"
+              >
+                <span className="truncate font-mono text-[11px] text-foreground">
+                  {p?.fromEmail ?? id}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => remove(id)}
+                  className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+                  aria-label={`Remove ${p?.fromEmail ?? id}`}
+                >
+                  <Trash2 className="h-3 w-3" />
+                </button>
+              </li>
+            )
+          })}
+        </ul>
+      )}
+      {available.length > 0 && (
+        <select
+          value=""
+          onChange={(e) => {
+            add(e.target.value)
+            e.currentTarget.value = ""
+          }}
+          className="h-7 w-full rounded border border-input bg-background px-1.5 text-[11px] outline-none focus-visible:border-ring"
+        >
+          <option value="">+ Add sender</option>
+          {available.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.fromEmail} · {p.fromName}
+            </option>
+          ))}
+        </select>
+      )}
+    </div>
+  )
 }

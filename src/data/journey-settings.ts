@@ -86,6 +86,15 @@ export interface JourneySettings {
    *  hardcoded defaults render (backwards compatibility). */
   businessMetrics: BusinessMetricConfig[]
   /**
+   * Journey-level default attribution window used by message analytics
+   * (node Analytics tab, Report tab) when crediting outcomes to a send.
+   * Per-conversion-event `windowDays` still overrides this for monetary
+   * conversions configured in the roster. 7 days if unset.
+   * TODO (backend contract): persist alongside the conversion overrides in
+   * the same journey-settings endpoint.
+   */
+  defaultAttributionDays: number
+  /**
    * SMS carrier cost + AI-call cost inputs. Reusable across the campaign
    * reports; captured here so admins can override per journey (some journeys
    * negotiate a lower rate with the operator).
@@ -94,6 +103,7 @@ export interface JourneySettings {
     smsPerSegmentAED: number
     aiCallPerMinuteAED: number
     aiCallAvgMinutes: number
+    emailPerSendAED: number
   }
 }
 
@@ -103,7 +113,10 @@ export const DEFAULT_COSTS = {
   smsPerSegmentAED: 0.03,
   aiCallPerMinuteAED: 0.35,
   aiCallAvgMinutes: 3,
+  emailPerSendAED: 0.001,
 }
+
+export const DEFAULT_ATTRIBUTION_DAYS = 7
 
 /** Default business-metrics band — six tiles that match the pre-config
  *  layout (PTPs / RPCs / Revenue) plus the new net + uplift metrics. */
@@ -117,37 +130,31 @@ export const DEFAULT_BUSINESS_METRICS: BusinessMetricConfig[] = [
 ]
 
 export function loadJourneySettings(journeyId: string): JourneySettings {
-  if (typeof window === "undefined") {
-    return {
-      journeyId,
-      conversionOverrides: [],
-      businessMetrics: DEFAULT_BUSINESS_METRICS,
-      costs: DEFAULT_COSTS,
-    }
+  const fallback: JourneySettings = {
+    journeyId,
+    conversionOverrides: [],
+    businessMetrics: DEFAULT_BUSINESS_METRICS,
+    defaultAttributionDays: DEFAULT_ATTRIBUTION_DAYS,
+    costs: DEFAULT_COSTS,
   }
+  if (typeof window === "undefined") return fallback
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY(journeyId))
-    if (!raw) {
-      return {
-        journeyId,
-        conversionOverrides: [],
-        businessMetrics: DEFAULT_BUSINESS_METRICS,
-        costs: DEFAULT_COSTS,
-      }
-    }
-    const parsed = JSON.parse(raw) as JourneySettings
+    if (!raw) return fallback
+    const parsed = JSON.parse(raw) as Partial<JourneySettings>
     return {
-      ...parsed,
-      businessMetrics: parsed.businessMetrics.length > 0 ? parsed.businessMetrics : DEFAULT_BUSINESS_METRICS,
+      journeyId,
+      conversionOverrides: parsed.conversionOverrides ?? [],
+      businessMetrics:
+        parsed.businessMetrics && parsed.businessMetrics.length > 0
+          ? parsed.businessMetrics
+          : DEFAULT_BUSINESS_METRICS,
+      defaultAttributionDays:
+        parsed.defaultAttributionDays ?? DEFAULT_ATTRIBUTION_DAYS,
       costs: { ...DEFAULT_COSTS, ...parsed.costs },
     }
   } catch {
-    return {
-      journeyId,
-      conversionOverrides: [],
-      businessMetrics: DEFAULT_BUSINESS_METRICS,
-      costs: DEFAULT_COSTS,
-    }
+    return fallback
   }
 }
 
