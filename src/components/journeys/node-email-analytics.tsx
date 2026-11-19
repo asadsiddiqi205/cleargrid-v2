@@ -40,6 +40,12 @@ import {
 } from "@/data/journey-metrics"
 import { loadJourneySettings } from "@/data/journey-settings"
 import { formatRunAge, type JourneyRun } from "@/data/journey-runs"
+import {
+  ModeToggle,
+  CompareRunsView,
+  OverTimeView,
+  type AnalyticsMode,
+} from "./message-analytics-modes"
 
 interface NodeEmailAnalyticsProps {
   journeyId: string
@@ -68,6 +74,7 @@ export function NodeEmailAnalytics({
 }: NodeEmailAnalyticsProps) {
   // Run scope drives everything; no slicing filters on this view.
   const filters = EMPTY_FILTERS
+  const [mode, setMode] = React.useState<AnalyticsMode>("this_run")
   const [query, setQuery] = React.useState("")
   const [statusFilter, setStatusFilter] = React.useState<EmailStatus | "all">(
     "all",
@@ -172,13 +179,38 @@ export function NodeEmailAnalytics({
           {run.resolved.toLocaleString()} resolved
         </p>
       </div>
-      <div className="border-b border-border px-3 py-1.5">
-        <p className="text-[9.5px] text-muted-foreground">
-          Scoped to this run. Outcomes attributed within{" "}
-          {settings.defaultAttributionDays} days of delivery.
+      <div className="flex items-center justify-between gap-2 border-b border-border px-3 py-1.5">
+        <ModeToggle value={mode} onChange={setMode} />
+        <p className="truncate text-[9.5px] text-muted-foreground">
+          {mode === "this_run"
+            ? `Scoped to this run · attribution ${settings.defaultAttributionDays}d`
+            : mode === "compare"
+              ? "Side-by-side across picked runs"
+              : "Runs rolled up by period"}
         </p>
       </div>
 
+      {mode === "compare" && (
+        <div className="flex-1 overflow-y-auto">
+          <CompareRunsView
+            journeyId={journeyId}
+            nodeId={nodeId}
+            channel="email"
+          />
+        </div>
+      )}
+
+      {mode === "over_time" && (
+        <div className="flex-1 overflow-y-auto">
+          <OverTimeView
+            journeyId={journeyId}
+            nodeId={nodeId}
+            channel="email"
+          />
+        </div>
+      )}
+
+      {mode === "this_run" && (
       <div className="flex-1 overflow-y-auto">
         {/* Funnel strip */}
         <FunnelStrip
@@ -515,6 +547,7 @@ export function NodeEmailAnalytics({
           )}
         </Section>
       </div>
+      )}
     </div>
   )
 }
