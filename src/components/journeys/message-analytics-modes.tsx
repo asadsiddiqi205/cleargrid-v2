@@ -361,6 +361,40 @@ function bucketKey(d: Date, g: TimeGranularity): string {
   return `${target.getUTCFullYear()}-W${String(week).padStart(2, "0")}`
 }
 
+type RangePreset = "7d" | "30d" | "90d" | "all" | "custom"
+
+const RANGE_LABEL: Record<RangePreset, string> = {
+  "7d": "Last 7 days",
+  "30d": "Last 30 days",
+  "90d": "Last 90 days",
+  all: "All time",
+  custom: "Custom",
+}
+
+function isoDate(d: Date): string {
+  return d.toISOString().slice(0, 10)
+}
+
+/** Compute [start, end) window in ms given preset + custom range + the
+ *  latest run's startedAt (so presets like "7d" anchor to the most recent
+ *  run rather than the wall clock — demo-friendly). */
+function resolveWindow(
+  preset: RangePreset,
+  customStart: string,
+  customEnd: string,
+  anchorMs: number,
+): { start: number; end: number } {
+  const DAY = 86_400_000
+  if (preset === "custom") {
+    const s = customStart ? new Date(customStart).getTime() : -Infinity
+    const e = customEnd ? new Date(customEnd).getTime() + DAY : Infinity
+    return { start: s, end: e }
+  }
+  if (preset === "all") return { start: -Infinity, end: Infinity }
+  const days = preset === "7d" ? 7 : preset === "30d" ? 30 : 90
+  return { start: anchorMs - days * DAY, end: anchorMs + DAY }
+}
+
 export function OverTimeView({
   journeyId,
   nodeId,
@@ -371,8 +405,34 @@ export function OverTimeView({
   channel: MessageChannel
 }) {
   const [granularity, setGranularity] = React.useState<TimeGranularity>("day")
+  const [preset, setPreset] = React.useState<RangePreset>("30d")
   const runs = React.useMemo(() => listRuns(journeyId), [journeyId])
   const settings = React.useMemo(() => loadJourneySettings(journeyId), [journeyId])
+
+  // Anchor the "last N days" presets to the newest run so demo data with
+  // fixed timestamps still reads sensibly.
+  const anchorMs = React.useMemo(() => {
+    if (runs.length === 0) return Date.now()
+    return Math.max(...runs.map((r) => new Date(r.startedAt).getTime()))
+  }, [runs])
+  const anchorIso = React.useMemo(() => isoDate(new Date(anchorMs)), [anchorMs])
+
+  const [customStart, setCustomStart] = React.useState("")
+  const [customEnd, setCustomEnd] = React.useState(anchorIso)
+
+  const window = React.useMemo(
+    () => resolveWindow(preset, customStart, customEnd, anchorMs),
+    [preset, customStart, customEnd, anchorMs],
+  )
+
+  const runsInWindow = React.useMemo(
+    () =>
+      runs.filter((r) => {
+        const t = new Date(r.startedAt).getTime()
+        return t >= window.start && t < window.end
+      }),
+    [runs, window],
+  )
 
   // Aggregate per bucket.
   const buckets = React.useMemo(() => {
@@ -387,7 +447,7 @@ export function OverTimeView({
       collection: number
     }
     const map = new Map<string, Bucket>()
-    for (const run of runs) {
+    for (const run of runsInWindow) {
       const k = bucketKey(new Date(run.startedAt), granularity)
       let b = map.get(k)
       if (!b) {
@@ -434,7 +494,7 @@ export function OverTimeView({
     }
     return Array.from(map.values()).sort((a, b) => (a.key < b.key ? 1 : -1))
   }, [
-    runs,
+    runsInWindow,
     granularity,
     channel,
     journeyId,
@@ -446,26 +506,72 @@ export function OverTimeView({
 
   return (
     <div className="space-y-3 px-3 py-2.5">
-      <div className="flex items-center gap-2">
-        <span className="text-[10.5px] text-muted-foreground">
-          Granularity
-        </span>
-        <div className="inline-flex rounded-md border border-border bg-background p-0.5">
-          {(["day", "week", "month"] as TimeGranularity[]).map((g) => (
-            <button
-              key={g}
-              type="button"
-              onClick={() => setGranularity(g)}
-              className={cn(
-                "rounded px-2 py-0.5 text-[10px] font-medium capitalize",
-                granularity === g
-                  ? "bg-primary text-primary-foreground"
-                  : "text-muted-foreground hover:bg-muted/40 hover:text-foreground",
-              )}
-            >
-              {g}
-            </button>
-          ))}
+      {/* Range + Granularity controls */}
+      <div className="space-y-1.5">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-[10.5px] text-muted-foreground">Range</span>
+          <div className="inline-flex rounded-md border border-border bg-background p-0.5">
+            {(["7d", "30d", "90d", "all", "custom"] as RangePreset[]).map((r) => (
+              <button
+                key={r}
+                type="button"
+                onClick={() => setPreset(r)}
+                className={cn(
+                  "rounded px-2 py-0.5 text-[10px] font-medium",
+                  preset === r
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted-foreground hover:bg-muted/40 hover:text-foreground",
+                )}
+                title={RANGE_LABEL[r]}
+              >
+                {RANGE_LABEL[r]}
+              </button>
+            ))}
+          </div>
+          {preset === "custom" && (
+            <div className="inline-flex items-center gap-1 rounded border border-border bg-background px-1.5 py-0.5 text-[10.5px]">
+              <input
+                type="date"
+                value={customStart}
+                onChange={(e) => setCustomStart(e.target.value)}
+                max={customEnd || undefined}
+                className="h-5 rounded border border-input bg-transparent px-1 text-[10px]"
+              />
+              <span className="text-muted-foreground">to</span>
+              <input
+                type="date"
+                value={customEnd}
+                onChange={(e) => setCustomEnd(e.target.value)}
+                min={customStart || undefined}
+                className="h-5 rounded border border-input bg-transparent px-1 text-[10px]"
+              />
+            </div>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-[10.5px] text-muted-foreground">
+            Granularity
+          </span>
+          <div className="inline-flex rounded-md border border-border bg-background p-0.5">
+            {(["day", "week", "month"] as TimeGranularity[]).map((g) => (
+              <button
+                key={g}
+                type="button"
+                onClick={() => setGranularity(g)}
+                className={cn(
+                  "rounded px-2 py-0.5 text-[10px] font-medium capitalize",
+                  granularity === g
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted-foreground hover:bg-muted/40 hover:text-foreground",
+                )}
+              >
+                {g}
+              </button>
+            ))}
+          </div>
+          <span className="text-[9.5px] text-muted-foreground">
+            {runsInWindow.length} run{runsInWindow.length === 1 ? "" : "s"} in range
+          </span>
         </div>
       </div>
 
