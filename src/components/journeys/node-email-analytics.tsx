@@ -23,11 +23,7 @@ import {
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { formatAED } from "@/lib/formatters"
-import {
-  AnalyticsFilterBar,
-  EMPTY_FILTERS,
-  type AnalyticsFilters,
-} from "./analytics-filter-bar"
+import { EMPTY_FILTERS } from "./analytics-filter-bar"
 import {
   synthesizeEmailAnalytics,
   listEmailBorrowerStatuses,
@@ -70,7 +66,8 @@ export function NodeEmailAnalytics({
   nodeId,
   nodeLabel,
 }: NodeEmailAnalyticsProps) {
-  const [filters, setFilters] = React.useState<AnalyticsFilters>(EMPTY_FILTERS)
+  // Run scope drives everything; no slicing filters on this view.
+  const filters = EMPTY_FILTERS
   const [query, setQuery] = React.useState("")
   const [statusFilter, setStatusFilter] = React.useState<EmailStatus | "all">(
     "all",
@@ -175,14 +172,8 @@ export function NodeEmailAnalytics({
           {run.resolved.toLocaleString()} resolved
         </p>
       </div>
-      <div className="border-b border-border px-3 py-2">
-        <AnalyticsFilterBar
-          value={filters}
-          onChange={setFilters}
-          compact
-          hideDates
-        />
-        <p className="mt-1 text-[9.5px] text-muted-foreground">
+      <div className="border-b border-border px-3 py-1.5">
+        <p className="text-[9.5px] text-muted-foreground">
           Scoped to this run. Outcomes attributed within{" "}
           {settings.defaultAttributionDays} days of delivery.
         </p>
