@@ -67,10 +67,14 @@ export function AnalyticsFilterBar({
   value,
   onChange,
   compact = false,
+  hideDates = false,
 }: {
   value: AnalyticsFilters
   onChange: (next: AnalyticsFilters) => void
   compact?: boolean
+  /** When true, hide the Sent/Submitted date-range pickers. Used on the
+   *  node Analytics tab where scope is driven by the selected run. */
+  hideDates?: boolean
 }) {
   const active = countActive(value)
   const patch = (p: Partial<AnalyticsFilters>) => onChange({ ...value, ...p })
@@ -91,20 +95,24 @@ export function AnalyticsFilterBar({
       )}
     >
       <div className="flex flex-wrap items-center gap-1.5">
-        <DateRange
-          label="Sent between"
-          start={value.dateStart}
-          end={value.dateEnd}
-          onChange={(start, end) => patch({ dateStart: start, dateEnd: end })}
-        />
-        <DateRange
-          label="Submitted"
-          start={value.submissionStart}
-          end={value.submissionEnd}
-          onChange={(start, end) =>
-            patch({ submissionStart: start, submissionEnd: end })
-          }
-        />
+        {!hideDates && (
+          <>
+            <DateRange
+              label="Sent between"
+              start={value.dateStart}
+              end={value.dateEnd}
+              onChange={(start, end) => patch({ dateStart: start, dateEnd: end })}
+            />
+            <DateRange
+              label="Submitted"
+              start={value.submissionStart}
+              end={value.submissionEnd}
+              onChange={(start, end) =>
+                patch({ submissionStart: start, submissionEnd: end })
+              }
+            />
+          </>
+        )}
         <MultiChip
           label="DPD"
           options={DPD_BUCKETS}

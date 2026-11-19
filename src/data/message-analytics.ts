@@ -225,8 +225,11 @@ export function synthesizeEmailAnalytics(
   journeyId: string,
   nodeId: string,
   filters: AnalyticsFilters,
+  runId?: string | null,
 ): EmailAnalytics {
-  const rng = seeded(hash(`email|${journeyId}|${nodeId}|${filterSeed(filters)}`))
+  const rng = seeded(
+    hash(`email|${journeyId}|${nodeId}|${runId ?? "all"}|${filterSeed(filters)}`),
+  )
   const reached = pickReached(journeyId, nodeId, rng)
   const notSentCount = Math.floor(reached * (0.04 + rng() * 0.05))
   const queued = Math.floor(reached * (0.01 + rng() * 0.02))
@@ -377,8 +380,11 @@ export function synthesizeSmsAnalytics(
   nodeId: string,
   filters: AnalyticsFilters,
   smsPerSegmentAED = 0.03,
+  runId?: string | null,
 ): SmsAnalytics {
-  const rng = seeded(hash(`sms|${journeyId}|${nodeId}|${filterSeed(filters)}`))
+  const rng = seeded(
+    hash(`sms|${journeyId}|${nodeId}|${runId ?? "all"}|${filterSeed(filters)}`),
+  )
   const reached = pickReached(journeyId, nodeId, rng)
   const notSentCount = Math.floor(reached * (0.03 + rng() * 0.04))
   const queued = Math.floor(reached * (0.015 + rng() * 0.02))
@@ -563,9 +569,12 @@ export function listEmailBorrowerStatuses(
   journeyId: string,
   nodeId: string,
   filters: AnalyticsFilters,
+  runId?: string | null,
 ): BorrowerStatusRow[] {
   const enrolled = listBorrowersInJourney(journeyId, 80)
-  const rng = seeded(hash(`emailrows|${journeyId}|${nodeId}|${filterSeed(filters)}`))
+  const rng = seeded(
+    hash(`emailrows|${journeyId}|${nodeId}|${runId ?? "all"}|${filterSeed(filters)}`),
+  )
   return enrolled.map(({ borrower: b }) => {
     const r = rng()
     const status: EmailStatus =
@@ -608,9 +617,12 @@ export function listSmsBorrowerStatuses(
   journeyId: string,
   nodeId: string,
   filters: AnalyticsFilters,
+  runId?: string | null,
 ): BorrowerStatusRow[] {
   const enrolled = listBorrowersInJourney(journeyId, 80)
-  const rng = seeded(hash(`smsrows|${journeyId}|${nodeId}|${filterSeed(filters)}`))
+  const rng = seeded(
+    hash(`smsrows|${journeyId}|${nodeId}|${runId ?? "all"}|${filterSeed(filters)}`),
+  )
   return enrolled.map(({ borrower: b }) => {
     const r = rng()
     const status: SmsStatus =

@@ -75,20 +75,37 @@ export function NodeAnalyticsTab({
 
   // Email and SMS nodes use the rebuilt per-message analytics views
   // (Funnel + Delivery + Engagement + Outcomes + per-status borrower list).
-  // Other node kinds keep the legacy run-scoped view below.
-  if (kind === "message_email") {
+  // Scoped to the currently-selected run; show the standard "pick a run"
+  // empty state when none is selected.
+  if ((kind === "message_email" || kind === "message_sms") && !run) {
+    return (
+      <div className="flex flex-col items-center gap-2 p-6 text-center">
+        <AlertCircle className="h-5 w-5 text-warning-300" />
+        <p className="text-[12px] font-medium text-foreground">No run selected</p>
+        <p className="max-w-[240px] text-[10px] leading-relaxed text-muted-foreground">
+          Pick a run from the <span className="text-foreground">Analytics</span> chip at
+          the top of the canvas to see this node&apos;s message analytics.
+        </p>
+      </div>
+    )
+  }
+  if (kind === "message_email" && run) {
     return (
       <NodeEmailAnalytics
         journeyId={journeyId}
+        runId={run.id}
+        run={run}
         nodeId={nodeId}
         nodeLabel={nodeLabel}
       />
     )
   }
-  if (kind === "message_sms") {
+  if (kind === "message_sms" && run) {
     return (
       <NodeSmsAnalytics
         journeyId={journeyId}
+        runId={run.id}
+        run={run}
         nodeId={nodeId}
         nodeLabel={nodeLabel}
       />

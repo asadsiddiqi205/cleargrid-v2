@@ -18,6 +18,8 @@ import {
   AlertCircle,
   ChevronRight,
   Info,
+  Calendar,
+  Clock,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { formatAED } from "@/lib/formatters"
@@ -41,9 +43,12 @@ import {
   type MessageMetricId,
 } from "@/data/journey-metrics"
 import { loadJourneySettings } from "@/data/journey-settings"
+import { formatRunAge, type JourneyRun } from "@/data/journey-runs"
 
 interface NodeEmailAnalyticsProps {
   journeyId: string
+  runId: string
+  run: JourneyRun
   nodeId: string
   nodeLabel: string
 }
@@ -60,6 +65,8 @@ const STATUS_TONE: Record<EmailStatus, string> = {
 
 export function NodeEmailAnalytics({
   journeyId,
+  runId,
+  run,
   nodeId,
   nodeLabel,
 }: NodeEmailAnalyticsProps) {
@@ -72,12 +79,12 @@ export function NodeEmailAnalytics({
 
   const settings = React.useMemo(() => loadJourneySettings(journeyId), [journeyId])
   const data = React.useMemo(
-    () => synthesizeEmailAnalytics(journeyId, nodeId, filters),
-    [journeyId, nodeId, filters],
+    () => synthesizeEmailAnalytics(journeyId, nodeId, filters, runId),
+    [journeyId, nodeId, filters, runId],
   )
   const rows = React.useMemo(
-    () => listEmailBorrowerStatuses(journeyId, nodeId, filters),
-    [journeyId, nodeId, filters],
+    () => listEmailBorrowerStatuses(journeyId, nodeId, filters, runId),
+    [journeyId, nodeId, filters, runId],
   )
 
   const statusCounts = React.useMemo(() => {
@@ -142,10 +149,42 @@ export function NodeEmailAnalytics({
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
+      {/* Run header — matches the legacy analytics view so authors see which
+          run drives the numbers. Canvas run-picker chip switches it. */}
+      <div className="border-b border-border bg-muted/[0.04] px-3 py-2">
+        <div className="flex items-center gap-1.5">
+          <Calendar className="h-3 w-3 text-primary" />
+          <span className="text-[11px] font-medium text-foreground">
+            {run.label}
+          </span>
+          <span
+            className={cn(
+              "rounded px-1 py-px text-[9px] font-medium uppercase tracking-wider",
+              run.status === "completed" && "bg-primary/15 text-primary",
+              run.status === "running" && "bg-info-500/15 text-info-300",
+              run.status === "failed" && "bg-error-500/15 text-error-300",
+              run.status === "queued" && "bg-muted text-neutral-300",
+            )}
+          >
+            {run.status}
+          </span>
+        </div>
+        <p className="mt-0.5 text-[10px] text-muted-foreground">
+          <Clock className="mr-0.5 inline h-2.5 w-2.5" />
+          {formatRunAge(run)} · {run.enrolled.toLocaleString()} enrolled /{" "}
+          {run.resolved.toLocaleString()} resolved
+        </p>
+      </div>
       <div className="border-b border-border px-3 py-2">
-        <AnalyticsFilterBar value={filters} onChange={setFilters} compact />
+        <AnalyticsFilterBar
+          value={filters}
+          onChange={setFilters}
+          compact
+          hideDates
+        />
         <p className="mt-1 text-[9.5px] text-muted-foreground">
-          Outcomes attributed within {settings.defaultAttributionDays} days of delivery.
+          Scoped to this run. Outcomes attributed within{" "}
+          {settings.defaultAttributionDays} days of delivery.
         </p>
       </div>
 
