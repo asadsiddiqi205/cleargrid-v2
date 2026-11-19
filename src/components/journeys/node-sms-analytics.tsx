@@ -411,10 +411,6 @@ export function NodeSmsAnalytics({
         {/* Section: Outcomes */}
         <Section title="Outcomes">
           <TileGrid>
-            <Tile id="calls_initiated" value={data.outcomes.callsInitiated} />
-            <Tile id="offers_accepted" value={data.outcomes.offersAccepted} />
-            <Tile id="extension" value={data.outcomes.extension} />
-            <Tile id="deferral" value={data.outcomes.deferral} />
             <Tile id="ptp_count" value={data.outcomes.ptpCount} />
             <Tile id="ptp_amount" value={data.outcomes.ptpAmount} />
             <Tile id="ptp_kept_rate" value={data.outcomes.ptpKeptRate} />

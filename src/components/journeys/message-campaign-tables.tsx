@@ -346,8 +346,6 @@ export function MessageCampaignTables({
                       ctr_pct: r.ctr,
                       click_to_open_rate: r.clickToOpenRate,
                       replies: "", // TODO: no inbound email source yet
-                      calls_initiated: r.calls,
-                      offers_accepted: r.offers,
                       ptp: r.ptp,
                       borrowed_amount: r.borrowed,
                       collection: r.collection,
@@ -359,8 +357,6 @@ export function MessageCampaignTables({
                       ptp_kept_rate: r.ptpKeptRate,
                       ptp_broken: r.ptpBroken,
                       ptp_amount: r.ptpAmount,
-                      extension: r.extension,
-                      deferral: r.deferral,
                       emails_per_borrower: r.emailsPerBorrower,
                     })),
                     "email-performance",
@@ -417,8 +413,6 @@ export function MessageCampaignTables({
                       unique_clicks: r.uniqueClicks,
                       ctr_pct: r.ctr,
                       replies: "", // TODO: no inbound capture source yet
-                      calls_initiated: r.calls,
-                      offers_accepted: r.offers,
                       ptp: r.ptp,
                       borrowed_amount: r.borrowed,
                       collection: r.collection,
@@ -428,8 +422,6 @@ export function MessageCampaignTables({
                       ptp_kept_rate: r.ptpKeptRate,
                       ptp_broken: r.ptpBroken,
                       ptp_amount: r.ptpAmount,
-                      extension: r.extension,
-                      deferral: r.deferral,
                       sms_per_borrower: r.smsPerBorrower,
                     })),
                     "sms-performance",
@@ -500,8 +492,6 @@ const EMAIL_PERF_COLUMNS: Array<Column<EmailPerfRow>> = [
   { key: "ctr", label: "CTR", right: true, render: (r) => fmt("ctr", r.ctr) },
   { key: "clickToOpenRate", label: "CTOR", right: true, render: (r) => fmt("click_to_open_rate", r.clickToOpenRate) },
   { key: "replies", label: "Replies", right: true, render: () => <span className="italic text-muted-foreground">N/A</span>, title: "Needs inbound email capture." },
-  { key: "calls", label: "Calls", right: true, render: (r) => r.calls.toLocaleString() },
-  { key: "offers", label: "Offers", right: true, render: (r) => r.offers.toLocaleString() },
   { key: "ptp", label: "PTP", right: true, render: (r) => r.ptp.toLocaleString() },
   { key: "borrowed", label: "Borrowed", right: true, render: (r) => fmt("borrowed_amount", r.borrowed) },
   { key: "collection", label: "Collection", right: true, render: (r) => fmt("collection", r.collection) },
@@ -524,8 +514,6 @@ const EMAIL_PERF_COLUMNS: Array<Column<EmailPerfRow>> = [
   { key: "ptpKeptRate", label: "PTP kept", right: true, render: (r) => fmt("ptp_kept_rate", r.ptpKeptRate) },
   { key: "ptpBroken", label: "PTP broken", right: true, render: (r) => r.ptpBroken.toLocaleString() },
   { key: "ptpAmount", label: "PTP AED", right: true, render: (r) => fmt("ptp_amount", r.ptpAmount) },
-  { key: "extension", label: "Ext.", right: true, render: (r) => r.extension.toLocaleString() },
-  { key: "deferral", label: "Def.", right: true, render: (r) => r.deferral.toLocaleString() },
   { key: "emailsPerBorrower", label: "Em/borrower", right: true, render: (r) => r.emailsPerBorrower.toFixed(2) },
 ]
 
@@ -571,8 +559,6 @@ const SMS_PERF_COLUMNS: Array<Column<SmsPerfRow & { isSms: boolean }>> = [
   { key: "campaignName", label: "Campaign" },
   { key: "uniqueClicks", label: "Clicks", right: true, render: (r) => r.uniqueClicks.toLocaleString() },
   { key: "ctr", label: "CTR", right: true, render: (r) => fmt("ctr", r.ctr) },
-  { key: "calls", label: "Calls", right: true, render: (r) => r.calls.toLocaleString() },
-  { key: "offers", label: "Offers", right: true, render: (r) => r.offers.toLocaleString() },
   { key: "ptp", label: "PTP", right: true, render: (r) => r.ptp.toLocaleString() },
   { key: "borrowed", label: "Borrowed", right: true, render: (r) => fmt("borrowed_amount", r.borrowed) },
   { key: "collection", label: "Collection", right: true, render: (r) => fmt("collection", r.collection) },
@@ -593,8 +579,6 @@ const SMS_PERF_COLUMNS: Array<Column<SmsPerfRow & { isSms: boolean }>> = [
   { key: "ptpKeptRate", label: "PTP kept", right: true, render: (r) => fmt("ptp_kept_rate", r.ptpKeptRate) },
   { key: "ptpBroken", label: "PTP broken", right: true, render: (r) => r.ptpBroken.toLocaleString() },
   { key: "ptpAmount", label: "PTP AED", right: true, render: (r) => fmt("ptp_amount", r.ptpAmount) },
-  { key: "extension", label: "Ext.", right: true, render: (r) => r.extension.toLocaleString() },
-  { key: "deferral", label: "Def.", right: true, render: (r) => r.deferral.toLocaleString() },
   { key: "smsPerBorrower", label: "SMS/borrower", right: true, render: (r) => r.smsPerBorrower.toFixed(2) },
 ]
 
