@@ -656,10 +656,18 @@ function CostInputs({
           Send cost inputs
         </h2>
         <p className="mt-0.5 text-[11px] text-muted-foreground">
-          Drives the net-impact and cost-per-conversion tiles. Emails are free in the prototype.
+          Drives the net-impact tile, cost-per-conversion tile and the
+          experiment Analytics tab. Any missing cost shows as "Not available
+          yet" on the arms that use that channel.
         </p>
       </div>
       <div className="grid gap-3 p-4 md:grid-cols-3">
+        <CostField
+          label="Email · per send (AED)"
+          value={settings.costs.emailPerSendAED}
+          step={0.001}
+          onChange={(v) => onChange({ ...settings.costs, emailPerSendAED: v })}
+        />
         <CostField
           label="SMS · per segment (AED)"
           value={settings.costs.smsPerSegmentAED}
@@ -677,6 +685,12 @@ function CostInputs({
           value={settings.costs.aiCallAvgMinutes}
           step={0.5}
           onChange={(v) => onChange({ ...settings.costs, aiCallAvgMinutes: v })}
+        />
+        <CostField
+          label="Human call · per attempt (AED)"
+          value={settings.costs.humanCallPerAttemptAED}
+          step={0.1}
+          onChange={(v) => onChange({ ...settings.costs, humanCallPerAttemptAED: v })}
         />
       </div>
     </div>

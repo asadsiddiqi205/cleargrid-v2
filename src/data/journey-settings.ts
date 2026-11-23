@@ -104,6 +104,10 @@ export interface JourneySettings {
     aiCallPerMinuteAED: number
     aiCallAvgMinutes: number
     emailPerSendAED: number
+    /** Per-attempt cost for a human-call campaign (agent time + dialer).
+     *  Applied as attempts × cost; when missing, the experiment Analytics tab
+     *  shows "Not available yet" for the human-call cost column. */
+    humanCallPerAttemptAED: number
   }
 }
 
@@ -114,6 +118,7 @@ export const DEFAULT_COSTS = {
   aiCallPerMinuteAED: 0.35,
   aiCallAvgMinutes: 3,
   emailPerSendAED: 0.001,
+  humanCallPerAttemptAED: 1.5,
 }
 
 export const DEFAULT_ATTRIBUTION_DAYS = 7
