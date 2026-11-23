@@ -55,6 +55,22 @@ export type MessageMetricId =
   | "estimated_cost"
   | "awaiting_receipt"
   | "undelivered"
+  // Experiment-level (added for the Experiment node Analytics tab + Report)
+  | "ptp_rate"
+  | "ptp_broken_rate"
+  | "payment_rate"
+  | "collection_pct"
+  | "collection_per_borrower"
+  | "rpc_rate"
+  | "connect_rate"
+  | "touches_per_borrower"
+  | "contacted_any_channel_pct"
+  | "cost_per_borrower"
+  | "cost_per_recovery"
+  | "net_recovered"
+  | "incremental_net_vs_control"
+  | "uplift"
+  | "confidence"
 
 export interface MetricDefinition {
   id: MessageMetricId
@@ -64,6 +80,9 @@ export interface MetricDefinition {
   format: MetricFormat
   /** Accent tone when shown as a card. */
   tone?: "primary" | "info" | "warn" | "muted"
+  /** Whether a positive delta is good (`up`) or bad (`down`). `null` means
+   *  the metric is directionless — neither better nor worse when it moves. */
+  goodDirection?: "up" | "down" | null
 }
 
 export const METRIC_DEFINITIONS: Record<MessageMetricId, MetricDefinition> = {
@@ -323,6 +342,117 @@ export const METRIC_DEFINITIONS: Record<MessageMetricId, MetricDefinition> = {
     description: "SMS the operator reported as undelivered (with error code).",
     format: "count",
     tone: "warn",
+    goodDirection: "down",
+  },
+  ptp_rate: {
+    id: "ptp_rate",
+    label: "PTP rate",
+    description: "PTPs captured ÷ borrowers assigned (ITT).",
+    format: "percent",
+    tone: "primary",
+    goodDirection: "up",
+  },
+  ptp_broken_rate: {
+    id: "ptp_broken_rate",
+    label: "PTP broken rate",
+    description: "PTPs not paid by due date ÷ PTPs that reached their due date.",
+    format: "percent",
+    tone: "warn",
+    goodDirection: "down",
+  },
+  payment_rate: {
+    id: "payment_rate",
+    label: "Payment rate",
+    description: "Borrowers who paid within the attribution window ÷ borrowers assigned.",
+    format: "percent",
+    tone: "primary",
+    goodDirection: "up",
+  },
+  collection_pct: {
+    id: "collection_pct",
+    label: "Collection %",
+    description: "AED collected ÷ AED outstanding of assigned borrowers.",
+    format: "percent",
+    tone: "primary",
+    goodDirection: "up",
+  },
+  collection_per_borrower: {
+    id: "collection_per_borrower",
+    label: "Collection per borrower",
+    description: "AED collected ÷ borrowers assigned.",
+    format: "aed",
+    goodDirection: "up",
+  },
+  rpc_rate: {
+    id: "rpc_rate",
+    label: "RPC rate",
+    description: "Right-party contacts ÷ call attempts (AI + human).",
+    format: "percent",
+    goodDirection: "up",
+  },
+  connect_rate: {
+    id: "connect_rate",
+    label: "Connect rate",
+    description: "Connected calls ÷ call attempts (AI + human).",
+    format: "percent",
+    goodDirection: "up",
+  },
+  touches_per_borrower: {
+    id: "touches_per_borrower",
+    label: "Touches per borrower",
+    description: "Emails + SMS + call attempts, divided by borrowers assigned.",
+    format: "count",
+    goodDirection: null,
+  },
+  contacted_any_channel_pct: {
+    id: "contacted_any_channel_pct",
+    label: "Contacted on any channel",
+    description: "Borrowers reached on at least one channel (email delivered, SMS delivered or call connected) ÷ assigned.",
+    format: "percent",
+    goodDirection: "up",
+  },
+  cost_per_borrower: {
+    id: "cost_per_borrower",
+    label: "Cost per borrower",
+    description: "Total channel cost (email + SMS + AI call + human call) ÷ borrowers assigned.",
+    format: "aed",
+    goodDirection: "down",
+  },
+  cost_per_recovery: {
+    id: "cost_per_recovery",
+    label: "Cost per recovery",
+    description: "Total channel cost ÷ borrowers who paid within the attribution window.",
+    format: "aed",
+    goodDirection: "down",
+  },
+  net_recovered: {
+    id: "net_recovered",
+    label: "Net recovered",
+    description: "AED collected − channel cost.",
+    format: "aed",
+    tone: "primary",
+    goodDirection: "up",
+  },
+  incremental_net_vs_control: {
+    id: "incremental_net_vs_control",
+    label: "Incremental net vs control",
+    description: "This arm's net recovered − control arm's net recovered.",
+    format: "aed",
+    goodDirection: "up",
+  },
+  uplift: {
+    id: "uplift",
+    label: "Uplift",
+    description: "Arm value − baseline value on the primary metric, in the metric's native units (pp for rates, % for amounts).",
+    format: "percent",
+    goodDirection: "up",
+  },
+  confidence: {
+    id: "confidence",
+    label: "Confidence",
+    description: "1 − p-value. A metric is 'significant' above 95%.",
+    format: "percent",
+    goodDirection: "up",
   },
 }
 
