@@ -2,12 +2,47 @@
 
 import { useCallback, useRef, useState } from "react";
 import { Handle, Position, NodeToolbar, type NodeProps } from "@xyflow/react";
-import { FlaskConical, Users } from "lucide-react";
+import { FlaskConical, Users, Shield } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { QuickAddButton } from "@/components/journeys/quick-add-button";
 import { NodeErrorBadge } from "@/components/journeys/nodes/node-error-badge";
+import { ARM_HANDLES, readExperimentConfig, statusLabel, totalShare } from "@/data/experiments";
+import type { ArmHandle, ExperimentArm, ExperimentStatus } from "@/data/experiments";
 
 const HANDLE_CLS = "!h-3.5 !w-3.5 !rounded-full !border-2 !border-[var(--background)] !bg-[var(--primary)]";
+
+const ARM_COLOR: Record<ArmHandle, string> = {
+  a: "bg-blue-500",
+  b: "bg-purple-500",
+  c: "bg-warning-500",
+  d: "bg-rose-500",
+  e: "bg-emerald-500",
+};
+
+const ARM_HANDLE_COLOR: Record<ArmHandle, string> = {
+  a: "bg-blue-400",
+  b: "bg-purple-400",
+  c: "bg-warning-400",
+  d: "bg-rose-400",
+  e: "bg-emerald-400",
+};
+
+const ARM_TEXT_COLOR: Record<ArmHandle, string> = {
+  a: "text-blue-400",
+  b: "text-purple-400",
+  c: "text-warning-400",
+  d: "text-rose-400",
+  e: "text-emerald-400",
+};
+
+function handleLeftPercent(index: number, total: number): string {
+  // Evenly space `total` handles between 15% and 85% of the card's width.
+  if (total <= 1) return "50%";
+  const start = 15;
+  const end = 85;
+  const pct = start + ((end - start) * index) / (total - 1);
+  return `${pct}%`;
+}
 
 export function SplitNode({ id, data, selected }: NodeProps) {
   const [hovered, setHovered] = useState(false);
@@ -21,14 +56,12 @@ export function SplitNode({ id, data, selected }: NodeProps) {
     hoverTimer.current = setTimeout(() => setHovered(false), 200);
   }, []);
 
-  const splitA = (data.splitA as number) ?? 50;
-  const splitB = (data.splitB as number) ?? 50;
-  const splitC = (data.splitC as number) ?? 0;
-  const splitD = (data.splitD as number) ?? 0;
-  const variantCount = (data.variantCount as number) ?? 2;
-  const winnerCriteria = data.winnerCriteria as string | undefined;
-  const simCount = data._simCount as number | undefined;
-  const liveCount = data._liveCount as number | undefined;
+  const cfg = readExperimentConfig(data as Record<string, unknown>);
+  const arms = cfg.arms;
+  const sum = totalShare(arms);
+  const leading = (data as { _leadingArm?: LeadingArmSummary })._leadingArm;
+  const simCount = (data as { _simCount?: number })._simCount;
+  const liveCount = (data as { _liveCount?: number })._liveCount;
 
   return (
     <div
@@ -43,46 +76,59 @@ export function SplitNode({ id, data, selected }: NodeProps) {
     >
       <div className="h-1 w-full bg-fuchsia-500" />
       <NodeErrorBadge
-        message={data._error as string | undefined}
-        severity={((data._errorSeverity as string) === "warning" ? "warning" : "blocker") as "blocker" | "warning"}
+        message={(data as { _error?: string })._error}
+        severity={(((data as { _errorSeverity?: string })._errorSeverity === "warning") ? "warning" : "blocker") as "blocker" | "warning"}
         side="left"
       />
       <Handle type="target" position={Position.Top} className={HANDLE_CLS} />
 
+      {/* Header: name + status chip */}
       <div className="flex items-center gap-2.5 bg-fuchsia-500/10 px-3 py-2.5">
         <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-fuchsia-500/20">
           <FlaskConical className="h-4 w-4 text-fuchsia-400" />
         </div>
         <div className="min-w-0 flex-1">
-          <div className="truncate text-xs font-semibold text-foreground">
-            {(data.label as string) ?? "Experiment"}
-          </div>
-          <div className="text-[9px] uppercase tracking-wider text-fuchsia-400/80">
-            {variantCount}-variant A/B test
+          <div className="truncate text-xs font-semibold text-foreground">{cfg.name}</div>
+          <div className="truncate text-[9px] uppercase tracking-wider text-fuchsia-400/80">
+            {cfg.experimentId}
           </div>
         </div>
+        <StatusChip status={cfg.status} />
       </div>
 
+      {/* Share bar + per-arm rows */}
       <div className="border-t border-border/40 px-3 py-2">
         <div className="flex h-2 w-full overflow-hidden rounded-full bg-muted/20">
-          <div className="bg-blue-500" style={{ width: `${splitA}%` }} />
-          <div className="bg-purple-500" style={{ width: `${splitB}%` }} />
-          {variantCount >= 3 && <div className="bg-warning-500" style={{ width: `${splitC}%` }} />}
-          {variantCount >= 4 && <div className="bg-rose-500" style={{ width: `${splitD}%` }} />}
+          {arms.map((arm) => (
+            <div
+              key={arm.id}
+              className={cn(ARM_COLOR[arm.handle], arm.isControl && "opacity-70")}
+              style={{ width: `${arm.share}%` }}
+              title={`${arm.name} · ${arm.share}%`}
+            />
+          ))}
         </div>
-        <p className="mt-1 text-center text-[10px] text-muted-foreground">
-          {splitA}/{splitB}{variantCount >= 3 && `/${splitC}`}{variantCount >= 4 && `/${splitD}`}
-        </p>
-        {winnerCriteria && (
-          <p className="mt-0.5 text-center text-[9px] text-muted-foreground/80">Optimize by: {winnerCriteria}</p>
+        <div className="mt-1.5 space-y-0.5">
+          {arms.map((arm) => (
+            <div key={arm.id} className="flex items-center justify-between text-[10px]">
+              <div className="flex min-w-0 items-center gap-1">
+                {arm.isControl && <Shield className="h-2.5 w-2.5 text-muted-foreground" />}
+                <span className={cn("truncate", ARM_TEXT_COLOR[arm.handle])}>{arm.name}</span>
+              </div>
+              <span className="text-muted-foreground">{arm.share}%</span>
+            </div>
+          ))}
+        </div>
+        {sum !== 100 && (
+          <p className="mt-1 rounded bg-error-500/10 px-1 py-0.5 text-center text-[9px] text-error-400">
+            Shares total {sum}% — must be 100%
+          </p>
         )}
-      </div>
-
-      <div className="flex items-center justify-around border-t border-border/40 px-3 py-1.5">
-        <span className="text-[10px] font-medium text-blue-400">A</span>
-        <span className="text-[10px] font-medium text-purple-400">B</span>
-        {variantCount >= 3 && <span className="text-[10px] font-medium text-warning-400">C</span>}
-        {variantCount >= 4 && <span className="text-[10px] font-medium text-rose-400">D</span>}
+        {leading && (
+          <p className="mt-1 rounded bg-primary-500/10 px-1 py-0.5 text-center text-[9px] text-primary-400">
+            {leading.armName} leading · {leading.deltaLabel} {leading.metricLabel} · {leading.confidenceLabel}
+          </p>
+        )}
       </div>
 
       {typeof simCount === "number" && (
@@ -98,35 +144,65 @@ export function SplitNode({ id, data, selected }: NodeProps) {
         </div>
       )}
 
-      <Handle type="source" position={Position.Bottom} id="a"
-        style={{ left: "20%" }}
-        className="!h-3.5 !w-3.5 !rounded-full !border-2 !border-[var(--background)] !bg-blue-400"
-      />
-      <Handle type="source" position={Position.Bottom} id="b"
-        style={{ left: variantCount === 2 ? "80%" : variantCount === 3 ? "50%" : "40%" }}
-        className="!h-3.5 !w-3.5 !rounded-full !border-2 !border-[var(--background)] !bg-purple-400"
-      />
-      {variantCount >= 3 && (
-        <Handle type="source" position={Position.Bottom} id="c"
-          style={{ left: variantCount === 3 ? "80%" : "60%" }}
-          className="!h-3.5 !w-3.5 !rounded-full !border-2 !border-[var(--background)] !bg-warning-400"
+      {/* Handles — one per arm, in config order */}
+      {arms.map((arm, i) => (
+        <Handle
+          key={arm.handle}
+          type="source"
+          position={Position.Bottom}
+          id={arm.handle}
+          style={{ left: handleLeftPercent(i, arms.length) }}
+          className={cn(
+            "!h-3.5 !w-3.5 !rounded-full !border-2 !border-[var(--background)]",
+            ARM_HANDLE_COLOR[arm.handle]
+          )}
         />
-      )}
-      {variantCount >= 4 && (
-        <Handle type="source" position={Position.Bottom} id="d"
-          style={{ left: "80%" }}
-          className="!h-3.5 !w-3.5 !rounded-full !border-2 !border-[var(--background)] !bg-rose-400"
-        />
-      )}
+      ))}
 
       <NodeToolbar position={Position.Bottom} offset={18} align="center" isVisible={hovered}>
         <div className="nodrag nopan flex gap-2">
-          <QuickAddButton sourceId={id} sourceHandle="a" label="A" />
-          <QuickAddButton sourceId={id} sourceHandle="b" label="B" />
-          {variantCount >= 3 && <QuickAddButton sourceId={id} sourceHandle="c" label="C" />}
-          {variantCount >= 4 && <QuickAddButton sourceId={id} sourceHandle="d" label="D" />}
+          {arms.map((arm) => (
+            <QuickAddButton
+              key={arm.handle}
+              sourceId={id}
+              sourceHandle={arm.handle}
+              label={arm.name.slice(0, 10)}
+            />
+          ))}
         </div>
       </NodeToolbar>
     </div>
   );
 }
+
+function StatusChip({ status }: { status: ExperimentStatus }) {
+  const label = statusLabel(status);
+  const cls =
+    status === "running"
+      ? "bg-primary-500/15 text-primary-400"
+      : status === "paused"
+        ? "bg-warning-500/15 text-warning-400"
+        : status === "concluded_winner"
+          ? "bg-emerald-500/15 text-emerald-400"
+          : status === "concluded_no_winner"
+            ? "bg-muted/40 text-muted-foreground"
+            : "bg-muted/40 text-muted-foreground";
+  return (
+    <span className={cn("shrink-0 rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider", cls)}>
+      {label.split(" · ")[0]}
+    </span>
+  );
+}
+
+/** Shape the experiment Analytics tab writes back onto node data so the
+ *  canvas card can show "B leading · +1.8pp PTP rate · 91% confident" once
+ *  results exist. */
+export interface LeadingArmSummary {
+  armName: string
+  metricLabel: string
+  deltaLabel: string
+  confidenceLabel: string
+}
+
+export { ARM_HANDLES };
+export type { ExperimentArm };

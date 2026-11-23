@@ -75,7 +75,13 @@ import { MessagePreview, type MessageChannel as PreviewChannel } from "@/compone
 import { borrowers } from "@/data/borrowers";
 import { getRichTemplate } from "@/data/rich-email-templates";
 import { NodeAnalyticsTab } from "@/components/journeys/node-analytics-tab";
-import { ExperimentResults } from "@/components/journeys/experiment-results";
+import {
+  ExperimentArmsSection,
+  ExperimentGeneralSection,
+  ExperimentGoalLogicSection,
+} from "@/components/journeys/experiment-setup-form";
+import { readExperimentConfig } from "@/data/experiments";
+import type { ExperimentConfig } from "@/data/experiments";
 import { BarChart3 } from "lucide-react";
 
 /* ------------------------------------------------------------------ */
@@ -212,8 +218,6 @@ const AGENT_TEAMS = [
 
 const OUTCOME_TAGS = ["Completed", "Converted", "Exhausted", "Unresponsive"];
 
-const WINNER_CRITERIA = ["Conversion Rate", "Open Rate", "Reply Rate"];
-
 const CHANNELS_LIST = ["Email", "SMS", "WhatsApp", "Voice"];
 
 /* ------------------------------------------------------------------ */
@@ -310,6 +314,29 @@ interface NodeConfigPanelProps {
 
 export function NodeConfigPanel({ node, onClose, onUpdate, onDeleteNode, nodes = [], edges = [], journeyId, selectedRunId, focusField, masterContext, instanceContext }: NodeConfigPanelProps) {
   const d = (node?.data ?? {}) as Record<string, unknown>;
+
+  const isExperiment = (d.blockType as string | undefined) === "experiment";
+  const experimentCfg: ExperimentConfig | null = isExperiment ? readExperimentConfig(d) : null;
+  const updateExperiment = useCallback(
+    (next: ExperimentConfig) => {
+      if (!node) return;
+      const currentData = node.data as Record<string, unknown>;
+      // Strip legacy split fields so the migrated form doesn't keep re-hydrating
+      // off them and ignore the ExperimentConfig.
+      const {
+        variantCount: _vc,
+        splitA: _sa,
+        splitB: _sb,
+        splitC: _sc,
+        splitD: _sd,
+        optimizeAfter: _oa,
+        winnerCriteria: _wc,
+        ...rest
+      } = currentData;
+      onUpdate(node.id, { ...rest, experiment: next });
+    },
+    [node, onUpdate]
+  );
 
   // Walk the graph backward from the selected node to find the nearest
   // upstream action node. We hop through pass-through nodes (waits, splits)
@@ -591,14 +618,20 @@ export function NodeConfigPanel({ node, onClose, onUpdate, onDeleteNode, nodes =
 
         {/* General tab — name + description + type */}
         <TabsContent value="general" className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4">
-          <Section title="Name">
-            <Input
-              value={(d.label as string) ?? ""}
-              onChange={(e) => update("label", e.target.value)}
-              className="h-7 text-xs"
-              placeholder="Node name..."
-            />
-          </Section>
+          {isExperiment && experimentCfg ? (
+            <Section title="Experiment">
+              <ExperimentGeneralSection cfg={experimentCfg} onChange={updateExperiment} />
+            </Section>
+          ) : (
+            <Section title="Name">
+              <Input
+                value={(d.label as string) ?? ""}
+                onChange={(e) => update("label", e.target.value)}
+                className="h-7 text-xs"
+                placeholder="Node name..."
+              />
+            </Section>
+          )}
           <Section title="Description">
             <Textarea
               value={(d.description as string) ?? ""}
@@ -703,43 +736,49 @@ export function NodeConfigPanel({ node, onClose, onUpdate, onDeleteNode, nodes =
         {/* Branches tab — for branching nodes only */}
         {isBranchNode && (
           <TabsContent value="branches" className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
-            <Section title="Outgoing branches">
-              <p className="text-[11px] text-muted-foreground mb-2">
-                Branches are derived from the Logic tab. Edit them here only to rename labels for display on the canvas.
-              </p>
-              {(() => {
-                const persisted = (d.branchLabels as string[] | undefined) ?? [];
-                const fallback = defaultBranches(node, block);
-                const labels = persisted.length > 0 ? persisted : fallback;
-                if (labels.length === 0) {
+            {isExperiment && experimentCfg ? (
+              <Section title="Arms">
+                <ExperimentArmsSection cfg={experimentCfg} onChange={updateExperiment} />
+              </Section>
+            ) : (
+              <Section title="Outgoing branches">
+                <p className="text-[11px] text-muted-foreground mb-2">
+                  Branches are derived from the Logic tab. Edit them here only to rename labels for display on the canvas.
+                </p>
+                {(() => {
+                  const persisted = (d.branchLabels as string[] | undefined) ?? [];
+                  const fallback = defaultBranches(node, block);
+                  const labels = persisted.length > 0 ? persisted : fallback;
+                  if (labels.length === 0) {
+                    return (
+                      <p className="rounded-md border border-dashed border-border bg-muted/20 px-2 py-3 text-center text-[11px] text-muted-foreground">
+                        This block has no configured branches yet.
+                      </p>
+                    );
+                  }
                   return (
-                    <p className="rounded-md border border-dashed border-border bg-muted/20 px-2 py-3 text-center text-[11px] text-muted-foreground">
-                      This block has no configured branches yet.
-                    </p>
+                    <div className="space-y-1.5">
+                      {labels.map((label, idx) => (
+                        <div key={idx} className="flex items-center gap-2">
+                          <span className="w-6 shrink-0 rounded bg-muted px-1.5 py-0.5 text-center font-mono text-[10px] text-muted-foreground">
+                            {idx + 1}
+                          </span>
+                          <Input
+                            value={label}
+                            onChange={(e) => {
+                              const next = [...labels];
+                              next[idx] = e.target.value;
+                              update("branchLabels", next);
+                            }}
+                            className="h-7 flex-1 text-xs"
+                          />
+                        </div>
+                      ))}
+                    </div>
                   );
-                }
-                return (
-                  <div className="space-y-1.5">
-                    {labels.map((label, idx) => (
-                      <div key={idx} className="flex items-center gap-2">
-                        <span className="w-6 shrink-0 rounded bg-muted px-1.5 py-0.5 text-center font-mono text-[10px] text-muted-foreground">
-                          {idx + 1}
-                        </span>
-                        <Input
-                          value={label}
-                          onChange={(e) => {
-                            const next = [...labels];
-                            next[idx] = e.target.value;
-                            update("branchLabels", next);
-                          }}
-                          className="h-7 flex-1 text-xs"
-                        />
-                      </div>
-                    ))}
-                  </div>
-                );
-              })()}
-            </Section>
+                })()}
+              </Section>
+            )}
           </TabsContent>
         )}
 
@@ -1506,153 +1545,12 @@ export function NodeConfigPanel({ node, onClose, onUpdate, onDeleteNode, nodes =
         )}
 
         {/* ============================================================ */}
-        {/*  SPLIT A/B CONFIG                                            */}
+        {/*  EXPERIMENT / A-B TEST CONFIG                                */}
         {/* ============================================================ */}
-        {hasLegacyRichConfig && node.type === "split" && (
-          <>
-            <Section title="Variant Split">
-              <div className="space-y-3">
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground">Number of variants</Label>
-                  <NativeSelect
-                    value={String((d.variantCount as number) ?? 2)}
-                    onChange={(v) => {
-                      const count = Number(v);
-                      const updates: Record<string, unknown> = { variantCount: count };
-                      if (count === 2) {
-                        updates.splitA = 50;
-                        updates.splitB = 50;
-                      } else if (count === 3) {
-                        updates.splitA = 34;
-                        updates.splitB = 33;
-                        updates.splitC = 33;
-                      } else if (count === 4) {
-                        updates.splitA = 25;
-                        updates.splitB = 25;
-                        updates.splitC = 25;
-                        updates.splitD = 25;
-                      }
-                      multiUpdate(updates);
-                    }}
-                  >
-                    <option value="2">2 variants</option>
-                    <option value="3">3 variants</option>
-                    <option value="4">4 variants</option>
-                  </NativeSelect>
-                </div>
-
-                <div className="flex gap-2">
-                  <div className="flex-1 space-y-1.5">
-                    <Label className="text-xs text-blue-400">Variant A (%)</Label>
-                    <Input
-                      type="number"
-                      value={(d.splitA as number) ?? 50}
-                      onChange={(e) => {
-                        const a = Math.max(0, Math.min(100, Number(e.target.value)));
-                        update("splitA", a);
-                      }}
-                      className="h-7 text-xs"
-                      min={0}
-                      max={100}
-                    />
-                  </div>
-                  <div className="flex-1 space-y-1.5">
-                    <Label className="text-xs text-purple-400">Variant B (%)</Label>
-                    <Input
-                      type="number"
-                      value={(d.splitB as number) ?? 50}
-                      onChange={(e) => {
-                        const b = Math.max(0, Math.min(100, Number(e.target.value)));
-                        update("splitB", b);
-                      }}
-                      className="h-7 text-xs"
-                      min={0}
-                      max={100}
-                    />
-                  </div>
-                </div>
-
-                {((d.variantCount as number) ?? 2) >= 3 && (
-                  <div className="flex gap-2">
-                    <div className="flex-1 space-y-1.5">
-                      <Label className="text-xs text-warning-400">Variant C (%)</Label>
-                      <Input
-                        type="number"
-                        value={(d.splitC as number) ?? 0}
-                        onChange={(e) => update("splitC", Math.max(0, Math.min(100, Number(e.target.value))))}
-                        className="h-7 text-xs"
-                        min={0}
-                        max={100}
-                      />
-                    </div>
-                    {((d.variantCount as number) ?? 2) >= 4 && (
-                      <div className="flex-1 space-y-1.5">
-                        <Label className="text-xs text-rose-400">Variant D (%)</Label>
-                        <Input
-                          type="number"
-                          value={(d.splitD as number) ?? 0}
-                          onChange={(e) => update("splitD", Math.max(0, Math.min(100, Number(e.target.value))))}
-                          className="h-7 text-xs"
-                          min={0}
-                          max={100}
-                        />
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* Sum indicator */}
-                {(() => {
-                  const vc = (d.variantCount as number) ?? 2;
-                  const sum = ((d.splitA as number) ?? 0) + ((d.splitB as number) ?? 0)
-                    + (vc >= 3 ? ((d.splitC as number) ?? 0) : 0)
-                    + (vc >= 4 ? ((d.splitD as number) ?? 0) : 0);
-                  return (
-                    <div className={`rounded-lg px-3 py-1.5 text-xs font-medium ${
-                      sum === 100 ? "bg-primary-500/10 text-primary-400" : "bg-error-500/10 text-error-400"
-                    }`}>
-                      Total: {sum}%{sum !== 100 && " (must equal 100%)"}
-                    </div>
-                  );
-                })()}
-              </div>
-            </Section>
-
-            <Section title="Auto-Optimization">
-              <div className="space-y-2">
-                <div className="flex items-center gap-2">
-                  <Input
-                    type="number"
-                    value={(d.optimizeAfter as number) ?? 100}
-                    onChange={(e) => update("optimizeAfter", Number(e.target.value))}
-                    className="h-7 w-20 text-xs"
-                    min={10}
-                  />
-                  <span className="text-xs text-muted-foreground">conversions</span>
-                </div>
-                <NativeSelect
-                  value={(d.winnerCriteria as string) ?? "Conversion Rate"}
-                  onChange={(v) => update("winnerCriteria", v)}
-                >
-                  {WINNER_CRITERIA.map((c) => (
-                    <option key={c} value={c}>{c}</option>
-                  ))}
-                </NativeSelect>
-              </div>
-            </Section>
-
-            {journeyId && (
-              <Section title="Results">
-                <ExperimentResults
-                  journeyId={journeyId}
-                  nodeId={node.id}
-                  data={d}
-                  nodes={nodes}
-                  edges={edges}
-                />
-              </Section>
-            )}
-          </>
+        {hasLegacyRichConfig && node.type === "split" && experimentCfg && (
+          <Section title="Goal, duration & winner">
+            <ExperimentGoalLogicSection cfg={experimentCfg} onChange={updateExperiment} />
+          </Section>
         )}
 
         {/* ============================================================ */}

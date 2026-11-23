@@ -43,6 +43,11 @@ import {
   getHybridCampaignById,
   readinessForGroup,
 } from "@/data/hybrid-campaigns";
+import {
+  readExperimentConfig,
+  validateExperiment,
+} from "@/data/experiments";
+import type { ArmHandle } from "@/data/experiments";
 import { ComponentInstancePanel } from "@/components/journeys/component-instance-panel";
 import { InstanceInnerNodeEditor } from "@/components/journeys/instance-inner-node-editor";
 import {
@@ -1167,6 +1172,64 @@ export default function JourneyCanvas({ journeyId }: JourneyCanvasProps) {
           }
         }
       });
+    }
+
+    // Experiment nodes must have a name, a primary metric, arms totalling 100%,
+    // every non-Control arm wired to downstream nodes, and a duration ≥ the
+    // attribution window. Also warn on sticky-off and nested experiments.
+    {
+      const experimentNodes = nodes.filter((n) => {
+        const d = (n.data ?? {}) as Record<string, unknown>;
+        return d.blockType === "experiment";
+      });
+      experimentNodes.forEach((n) => {
+        const d = (n.data ?? {}) as Record<string, unknown>;
+        const cfg = readExperimentConfig(d);
+        const armHasDownstream = (handle: ArmHandle) =>
+          edges.some((e) => e.source === n.id && e.sourceHandle === handle);
+        const v = validateExperiment(cfg, armHasDownstream);
+        if (v.errors.length > 0) {
+          v.errors.forEach((msg) => errors.push(`${cfg.name || "Experiment"}: ${msg}`));
+          problemNodeIds.push(n.id);
+        }
+        if (v.warnings.length > 0) {
+          v.warnings.forEach((msg) => warnings.push(`${cfg.name || "Experiment"}: ${msg}`));
+        }
+      });
+      // Nested experiments — two experiment nodes on the same downstream path.
+      if (experimentNodes.length > 1) {
+        const byId = new Map(nodes.map((n) => [n.id, n]));
+        const reachable = (from: string): Set<string> => {
+          const seen = new Set<string>([from]);
+          const q = [from];
+          while (q.length) {
+            const cur = q.shift()!;
+            edges.forEach((e) => {
+              if (e.source === cur && !seen.has(e.target)) {
+                seen.add(e.target);
+                q.push(e.target);
+              }
+            });
+          }
+          return seen;
+        };
+        experimentNodes.forEach((n) => {
+          const downstream = reachable(n.id);
+          experimentNodes.forEach((other) => {
+            if (other.id === n.id) return;
+            if (downstream.has(other.id)) {
+              const dA = (n.data ?? {}) as Record<string, unknown>;
+              const dB = (other.data ?? {}) as Record<string, unknown>;
+              const cfgA = readExperimentConfig(dA);
+              const cfgB = readExperimentConfig(dB);
+              warnings.push(
+                `Experiments "${cfgA.name}" and "${cfgB.name}" share a path — a borrower could be in both`,
+              );
+              void byId;
+            }
+          });
+        });
+      }
     }
 
     // Helper: shake specific nodes for 600ms
