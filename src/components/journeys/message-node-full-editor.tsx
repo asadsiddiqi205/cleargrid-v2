@@ -42,7 +42,8 @@ import {
   MessagePreview,
   type MessageChannel,
 } from "@/components/shared/message-preview"
-import { borrowers, type Borrower } from "@/data/borrowers"
+import { MessagePreviewWithSampling } from "@/components/journeys/message-preview-sample"
+import { borrowers } from "@/data/borrowers"
 import { TemplateEditor } from "@/components/templates/template-editor"
 import { NodeAnalyticsTab } from "@/components/journeys/node-analytics-tab"
 import { DirectionToggle, type TextDir } from "@/components/shared/direction-toggle"
@@ -339,14 +340,14 @@ export function MessageNodeFullEditor({
   const [templateEditorOpen, setTemplateEditorOpen] = React.useState(false)
   const [htmlBuilderOpen, setHtmlBuilderOpen] = React.useState(false)
 
-  const [previewBorrowerId, setPreviewBorrowerId] = React.useState<string>(
-    borrowers[0].id,
-  )
   const subjectRef = React.useRef<HTMLInputElement>(null!)
   const htmlBodyRef = React.useRef<HTMLTextAreaElement>(null!)
   const plainBodyRef = React.useRef<HTMLTextAreaElement>(null!)
-  const previewBorrower =
-    borrowers.find((b) => b.id === previewBorrowerId) ?? borrowers[0]
+  // We still need ONE borrower record to seed the ChannelContactPicker's
+  // "what phones / emails are on file" preview column — that picker lives
+  // in the Compose form, not the preview panel. The preview itself
+  // (right column) now draws its own sample via MessagePreviewWithSampling.
+  const previewBorrower = borrowers[0]
 
   const bodySource =
     composeMode === "manual"
@@ -363,9 +364,6 @@ export function MessageNodeFullEditor({
       : template
         ? `Reminder — ${template}`
         : ""
-
-  const renderedBody = renderVars(bodySource, previewBorrower)
-  const renderedSubject = renderVars(subjectSource, previewBorrower)
 
   const ChannelIcon =
     channel === "email" ? Mail : channel === "sms" ? MessageSquare : MessageCircle
@@ -867,34 +865,39 @@ export function MessageNodeFullEditor({
 
         {/* Right — preview (sticky) */}
         <div className="min-h-0 overflow-y-auto bg-muted/30 p-6">
-          <div className="sticky top-0">
-            <div className="mb-3 flex items-center justify-between">
-              <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                Preview · as the borrower received it
-              </div>
-              <select
-                value={previewBorrowerId}
-                onChange={(e) => setPreviewBorrowerId(e.target.value)}
-                className="h-7 rounded border border-input bg-background px-2 text-[11px] outline-none focus-visible:border-ring"
-              >
-                {borrowers.slice(0, 20).map((b) => (
-                  <option key={b.id} value={b.id}>
-                    {b.name} — {b.dpdBucket} DPD
-                  </option>
-                ))}
-              </select>
+          <div className="sticky top-0 space-y-3">
+            <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+              Preview · as the borrower will receive it
             </div>
-            <MessagePreview
-              channel={channel}
-              subject={renderedSubject}
-              body={renderedBody}
-              recipientName={previewBorrower.name}
-              recipientPhone={previewBorrower.phone}
-              senderId={smsSenderId}
-              fromName={effectiveFromName}
-              fromAddress={effectiveFromEmail}
-              clickTracking={true}
-            />
+            {bodySource.startsWith("(no template picked") ? (
+              <MessagePreview
+                channel={channel}
+                subject=""
+                body=""
+                senderId={smsSenderId}
+                fromName={effectiveFromName}
+                fromAddress={effectiveFromEmail}
+                clickTracking={true}
+              />
+            ) : (
+              <MessagePreviewWithSampling
+                journeyId={journeyId}
+                nodeId={node.id}
+                channel={channel}
+                subject={subjectSource}
+                body={bodySource}
+                fromName={effectiveFromName}
+                fromAddress={effectiveFromEmail}
+                senderId={smsSenderId}
+                clickTracking
+                phoneSelection={d.phoneSelection as PhoneSelection | undefined}
+                emailSelection={d.emailSelection as EmailSelection | undefined}
+                emailSendMode={emailSendMode}
+                nodes={canvasNodes}
+                edges={canvasEdges}
+                selectedRunId={selectedRunId}
+              />
+            )}
           </div>
         </div>
       </div>
@@ -2009,19 +2012,6 @@ export function AddVariableButton({
       )}
     </div>
   )
-}
-
-function renderVars(text: string, b: Borrower): string {
-  if (!text) return ""
-  const first = b.name.split(" ")[0] ?? b.name
-  return text
-    .replace(/\{\{\s*borrower\.first_name\s*\}\}/g, first)
-    .replace(/\{\{\s*borrower\.name\s*\}\}/g, b.name)
-    .replace(/\{\{\s*borrower\.phone\s*\}\}/g, b.phone)
-    .replace(/\{\{\s*borrower\.outstanding\s*\}\}/g, `AED ${b.outstanding.toLocaleString()}`)
-    .replace(/\{\{\s*borrower\.product\s*\}\}/g, b.product)
-    .replace(/\{\{\s*first_name\s*\}\}/g, first)
-    .replace(/\{\{\s*amount\s*\}\}/g, `AED ${b.outstanding.toLocaleString()}`)
 }
 
 /* ------------------------------------------------------------------ */

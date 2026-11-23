@@ -72,7 +72,8 @@ import {
  * Composer uses. Ensures Send Email / Send SMS / Send WhatsApp nodes
  * always render at parity with the Composer preview panel. */
 import { MessagePreview, type MessageChannel as PreviewChannel } from "@/components/shared/message-preview";
-import { borrowers } from "@/data/borrowers";
+import { MessagePreviewWithSampling } from "@/components/journeys/message-preview-sample";
+import type { EmailSelection } from "@/data/borrower-channels";
 import { getRichTemplate } from "@/data/rich-email-templates";
 import { NodeAnalyticsTab } from "@/components/journeys/node-analytics-tab";
 import {
@@ -1356,7 +1357,16 @@ export function NodeConfigPanel({ node, onClose, onUpdate, onDeleteNode, nodes =
             {/* ---- Shared message preview (email/sms/whatsapp) ---- */}
             {(["email", "sms", "whatsapp"] as const).includes(
               (d.actionType as "email" | "sms" | "whatsapp"),
-            ) && <NodeMessagePreview data={d} />}
+            ) && (
+              <NodeMessagePreview
+                data={d}
+                journeyId={journeyId}
+                nodeId={node?.id ?? ""}
+                nodes={nodes}
+                edges={edges}
+                selectedRunId={selectedRunId}
+              />
+            )}
 
             {/* ---- Start AI Call — Project → Agent → Params → Delivery ---- */}
             {(d.actionType as string) === "call" && (
@@ -3096,10 +3106,22 @@ function RoleScopedFilterPicker({
 /*  authors get parity when reviewing a journey end-to-end.           */
 /* ─────────────────────────────────────────────────────────────────── */
 
-function NodeMessagePreview({ data }: { data: Record<string, unknown> }) {
+function NodeMessagePreview({
+  data,
+  journeyId,
+  nodeId,
+  nodes,
+  edges,
+  selectedRunId,
+}: {
+  data: Record<string, unknown>
+  journeyId?: string
+  nodeId: string
+  nodes?: Node[]
+  edges?: Edge[]
+  selectedRunId?: string | null
+}) {
   const [device, setDevice] = React.useState<"ios" | "android">("ios")
-  const [borrowerId, setBorrowerId] = React.useState<string>(borrowers[0].id)
-  const borrower = borrowers.find((b) => b.id === borrowerId) ?? borrowers[0]
 
   const actionType = (data.actionType as string) ?? "email"
   const channel = (actionType === "call" ? "email" : actionType) as PreviewChannel
@@ -3129,131 +3151,50 @@ function NodeMessagePreview({ data }: { data: Record<string, unknown> }) {
         ? `Reminder — ${template}`
         : ""
 
-  const rendered = renderVars(bodySource, borrower)
-  const subject = renderVars(subjectSource, borrower)
+  const noTemplate = !template && !manualBodyText && !manualBodyHtml
 
   return (
     <div className="mt-3 space-y-2 rounded-md border border-border/60 bg-muted/[0.04] p-2.5">
-      <div className="flex items-center justify-between gap-2">
-        <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-          As the borrower received it
-        </div>
-        <BorrowerSearchPicker value={borrowerId} onChange={setBorrowerId} />
+      <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+        Preview · as the borrower will receive it
       </div>
-
-      <MessagePreview
-        channel={channel}
-        subject={subject}
-        body={rendered}
-        recipientPhone={borrower.phone}
-        recipientName={borrower.name}
-        senderId={(data.smsSenderId as string) || "ClearGrid"}
-        fromName={(data.fromName as string) || "ClearGrid Collections"}
-        fromAddress={(data.fromAddress as string) || "collections@cleargrid.ae"}
-        clickTracking={data.smsClickTracking !== false}
-        device={device}
-        onDeviceChange={setDevice}
-      />
-    </div>
-  )
-}
-
-/**
- * BorrowerSearchPicker — small popover with a searchable input that scans
- * every seeded borrower (name / id / phone / product). Used in the Send-node
- * preview so authors can preview against ANY audience borrower, not just
- * the first six.
- */
-function BorrowerSearchPicker({
-  value,
-  onChange,
-}: {
-  value: string
-  onChange: (id: string) => void
-}) {
-  const [open, setOpen] = React.useState(false)
-  const [query, setQuery] = React.useState("")
-  const active = borrowers.find((b) => b.id === value) ?? borrowers[0]
-  const filtered = React.useMemo(() => {
-    const q = query.trim().toLowerCase()
-    if (!q) return borrowers.slice(0, 30)
-    return borrowers.filter(
-      (b) =>
-        b.name.toLowerCase().includes(q) ||
-        b.id.toLowerCase().includes(q) ||
-        b.phone.includes(q) ||
-        b.emiratesId.includes(q) ||
-        b.product.toLowerCase().includes(q),
-    ).slice(0, 30)
-  }, [query])
-  return (
-    <div className="relative">
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        className="flex h-6 items-center gap-1 rounded border border-input bg-transparent px-1.5 text-[10px] text-foreground outline-none hover:border-ring focus-visible:border-ring dark:bg-input/30"
-      >
-        <span className="max-w-[9rem] truncate">{active.name}</span>
-        <ChevronDown className="h-2.5 w-2.5 opacity-70" />
-      </button>
-      {open && (
-        <>
-          {/* Backdrop */}
-          <div
-            className="fixed inset-0 z-40"
-            onClick={() => setOpen(false)}
-          />
-          <div className="absolute right-0 top-full z-50 mt-1 w-[240px] rounded-md border border-border bg-popover shadow-md">
-            <div className="border-b border-border p-1.5">
-              <input
-                autoFocus
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search name, phone, product…"
-                className="h-7 w-full rounded border border-input bg-transparent px-2 text-[11px] outline-none focus-visible:border-ring dark:bg-input/30"
-              />
-            </div>
-            <ul className="max-h-64 overflow-y-auto py-1">
-              {filtered.map((b) => (
-                <li key={b.id}>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      onChange(b.id)
-                      setOpen(false)
-                      setQuery("")
-                    }}
-                    className={cn(
-                      "flex w-full items-center gap-2 px-2 py-1 text-left text-[11px] hover:bg-muted/60",
-                      b.id === value && "bg-primary/10",
-                    )}
-                  >
-                    <div className="min-w-0 flex-1">
-                      <div className="truncate text-foreground">{b.name}</div>
-                      <div className="truncate text-[10px] text-muted-foreground">
-                        {b.dpdBucket} DPD · {b.product}
-                      </div>
-                    </div>
-                  </button>
-                </li>
-              ))}
-              {filtered.length === 0 && (
-                <li className="px-2 py-2 text-center text-[11px] text-muted-foreground">
-                  No matches
-                </li>
-              )}
-            </ul>
-            <p className="border-t border-border px-2 py-1 text-[9px] text-muted-foreground">
-              Journey audience preview · pick any borrower to render
-            </p>
-          </div>
-        </>
+      {noTemplate ? (
+        <MessagePreview
+          channel={channel}
+          subject=""
+          body=""
+          senderId={(data.smsSenderId as string) || "ClearGrid"}
+          fromName={(data.fromName as string) || "ClearGrid Collections"}
+          fromAddress={(data.fromAddress as string) || "collections@cleargrid.ae"}
+          clickTracking={data.smsClickTracking !== false}
+          device={device}
+          onDeviceChange={setDevice}
+        />
+      ) : (
+        <MessagePreviewWithSampling
+          journeyId={journeyId}
+          nodeId={nodeId}
+          channel={channel}
+          subject={subjectSource}
+          body={bodySource}
+          senderId={(data.smsSenderId as string) || "ClearGrid"}
+          fromName={(data.fromName as string) || "ClearGrid Collections"}
+          fromAddress={(data.fromAddress as string) || "collections@cleargrid.ae"}
+          clickTracking={data.smsClickTracking !== false}
+          phoneSelection={data.phoneSelection as PhoneSelection | undefined}
+          emailSelection={data.emailSelection as EmailSelection | undefined}
+          emailSendMode={(data.emailSendMode as string) ?? "one_per_contact"}
+          nodes={nodes}
+          edges={edges}
+          selectedRunId={selectedRunId ?? null}
+          device={device}
+          onDeviceChange={setDevice}
+        />
       )}
     </div>
   )
 }
 
-/** Minimal mustache-style variable renderer, used only for the preview. */
 /* ─────────── AI Call · full config (Project → Agent → Params → Delivery) ─────────── */
 
 function AICallConfig({
@@ -3655,20 +3596,6 @@ function AICallCustomParameters({
     </div>
   )
 }
-
-function renderVars(text: string, b: { name: string; phone: string; outstanding: number; product: string }): string {
-  if (!text) return ""
-  const first = b.name.split(" ")[0] ?? b.name
-  return text
-    .replace(/\{\{\s*borrower\.first_name\s*\}\}/g, first)
-    .replace(/\{\{\s*borrower\.name\s*\}\}/g, b.name)
-    .replace(/\{\{\s*borrower\.phone\s*\}\}/g, b.phone)
-    .replace(/\{\{\s*borrower\.outstanding\s*\}\}/g, `AED ${b.outstanding.toLocaleString()}`)
-    .replace(/\{\{\s*borrower\.product\s*\}\}/g, b.product)
-    .replace(/\{\{\s*first_name\s*\}\}/g, first)
-    .replace(/\{\{\s*amount\s*\}\}/g, `AED ${b.outstanding.toLocaleString()}`)
-}
-
 
 /* ─────────── Recipients control (change 2) ───────────
    Shared helper that lets authors switch between "Command borrower" (the
