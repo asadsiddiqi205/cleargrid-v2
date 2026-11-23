@@ -40,14 +40,17 @@ import {
 } from "@/data/experiments"
 import type { ExperimentConfig, ExperimentConfigVersion } from "@/data/experiments"
 import {
+  DEFAULT_SEGMENT_DIMENSIONS,
   listExperimentBorrowers,
   primaryMetricValue,
+  SEGMENT_DIMENSION_CATALOG,
   synthesizeExperimentAnalytics,
 } from "@/data/experiment-analytics"
 import type {
   ArmResult,
   BorrowerRow,
   ExperimentAnalytics,
+  SegmentDimension,
 } from "@/data/experiment-analytics"
 
 interface Props {
@@ -69,6 +72,8 @@ export function ExperimentAnalyticsTab(props: Props) {
 
   const settings = useMemo(() => loadJourneySettings(journeyId), [journeyId])
 
+  const [segmentDimensions, setSegmentDimensions] = useSegmentDimensions(journeyId, nodeId)
+
   const analytics = useMemo(
     () =>
       synthesizeExperimentAnalytics({
@@ -78,6 +83,7 @@ export function ExperimentAnalyticsTab(props: Props) {
         nodes,
         edges,
         journeyEnrolled,
+        segmentDimensions,
         costs: {
           emailPerSendAED: settings.costs.emailPerSendAED,
           smsPerSegmentAED: settings.costs.smsPerSegmentAED,
@@ -85,7 +91,7 @@ export function ExperimentAnalyticsTab(props: Props) {
           humanCallPerAttemptAED: (settings.costs as { humanCallPerAttemptAED?: number }).humanCallPerAttemptAED,
         },
       }),
-    [journeyId, nodeId, activeVersion, currentCfg, nodes, edges, journeyEnrolled, settings],
+    [journeyId, nodeId, activeVersion, currentCfg, nodes, edges, journeyEnrolled, settings, segmentDimensions],
   )
 
   return (
@@ -111,7 +117,11 @@ export function ExperimentAnalyticsTab(props: Props) {
       <ArmComparisonTable analytics={analytics} />
       <ChannelBreakdown analytics={analytics} />
       <OverTime analytics={analytics} />
-      <Segments analytics={analytics} />
+      <Segments
+        analytics={analytics}
+        selected={segmentDimensions}
+        onChange={setSegmentDimensions}
+      />
       <Borrowers journeyId={journeyId} cfg={analytics.cfg} analytics={analytics} />
     </div>
   )
@@ -558,14 +568,82 @@ function OverTime({ analytics }: { analytics: ExperimentAnalytics }) {
 
 /* ─────────── Segments ─────────── */
 
-function Segments({ analytics }: { analytics: ExperimentAnalytics }) {
+function Segments({
+  analytics,
+  selected,
+  onChange,
+}: {
+  analytics: ExperimentAnalytics
+  selected: SegmentDimension[]
+  onChange: (next: SegmentDimension[]) => void
+}) {
   const { segments, arms, cfg } = analytics
+  const toggle = (id: SegmentDimension) => {
+    if (selected.includes(id)) {
+      // Keep at least one dimension selected so the section stays useful.
+      if (selected.length === 1) return
+      onChange(selected.filter((d) => d !== id))
+    } else {
+      onChange([...selected, id])
+    }
+  }
+  const allSelected = selected.length === SEGMENT_DIMENSION_CATALOG.length
   return (
     <section>
-      <h4 className="text-xs font-semibold text-foreground">Segments</h4>
-      <p className="mt-0.5 text-[10px] text-muted-foreground">
-        Uplift per arm on {PRIMARY_METRIC_LABEL[cfg.primaryMetric]}. Slices below 100 borrowers per arm are greyed out.
-      </p>
+      <div className="flex items-start justify-between gap-2">
+        <div>
+          <h4 className="text-xs font-semibold text-foreground">Segments</h4>
+          <p className="mt-0.5 text-[10px] text-muted-foreground">
+            Uplift per arm on {PRIMARY_METRIC_LABEL[cfg.primaryMetric]}. Slices below 100 borrowers per arm are greyed out.
+          </p>
+        </div>
+        <div className="flex gap-1.5">
+          <button
+            type="button"
+            onClick={() => onChange(DEFAULT_SEGMENT_DIMENSIONS)}
+            className="rounded border border-border/60 bg-muted/20 px-2 py-0.5 text-[9px] text-muted-foreground hover:bg-muted/40"
+          >
+            Reset
+          </button>
+          <button
+            type="button"
+            onClick={() =>
+              allSelected
+                ? onChange(DEFAULT_SEGMENT_DIMENSIONS)
+                : onChange(SEGMENT_DIMENSION_CATALOG.map((d) => d.id))
+            }
+            className="rounded border border-border/60 bg-muted/20 px-2 py-0.5 text-[9px] text-muted-foreground hover:bg-muted/40"
+          >
+            {allSelected ? "Clear all" : "Select all"}
+          </button>
+        </div>
+      </div>
+      <div className="mt-2 flex flex-wrap gap-1.5">
+        {SEGMENT_DIMENSION_CATALOG.map((dim) => {
+          const on = selected.includes(dim.id)
+          return (
+            <button
+              key={dim.id}
+              type="button"
+              onClick={() => toggle(dim.id)}
+              title={dim.description}
+              className={cn(
+                "rounded-full px-2 py-0.5 text-[10px] transition-colors",
+                on
+                  ? "bg-primary-500/20 text-primary-400"
+                  : "bg-muted/20 text-muted-foreground hover:bg-muted/40",
+              )}
+            >
+              {dim.label}
+            </button>
+          )
+        })}
+      </div>
+      {segments.length === 0 ? (
+        <p className="mt-2 rounded border border-dashed border-border/60 p-3 text-center text-[10px] text-muted-foreground">
+          Pick at least one dimension above to see segment breakdowns.
+        </p>
+      ) : (
       <div className="mt-2 space-y-3">
         {segments.map((g) => (
           <div key={g.dimension} className="rounded border border-border/40">
@@ -606,6 +684,7 @@ function Segments({ analytics }: { analytics: ExperimentAnalytics }) {
           </div>
         ))}
       </div>
+      )}
     </section>
   )
 }
@@ -845,7 +924,8 @@ function deltaColor(delta: number, good: "up" | "down" | null): string {
 }
 
 function segmentLabel(dim: string): string {
-  return { dpd: "DPD bucket", lender: "Lender", nationality: "Nationality", reachable: "Reachable" }[dim] ?? dim
+  const entry = SEGMENT_DIMENSION_CATALOG.find((d) => d.id === dim)
+  return entry?.label ?? dim
 }
 
 function baselineLabel(arms: ArmResult[], baselineArmId: string): string {
@@ -924,3 +1004,38 @@ function downloadCsv(filename: string, body: string) {
 }
 
 const CHART_COLORS = ["#6366f1", "#a855f7", "#f59e0b", "#ef4444", "#10b981"]
+
+/** Persisted (per journey × node) selection of segment dimensions.
+ *  localStorage keeps it per-viewer; the picker lives inside the tab, so the
+ *  selection stays on the same experiment the next time the user opens it. */
+function useSegmentDimensions(
+  journeyId: string,
+  nodeId: string,
+): [SegmentDimension[], (next: SegmentDimension[]) => void] {
+  const storageKey = `cleargrid:exp-segments:${journeyId}:${nodeId}`
+  const [value, setValue] = useState<SegmentDimension[]>(() => {
+    if (typeof window === "undefined") return DEFAULT_SEGMENT_DIMENSIONS
+    try {
+      const raw = window.localStorage.getItem(storageKey)
+      if (!raw) return DEFAULT_SEGMENT_DIMENSIONS
+      const parsed = JSON.parse(raw) as unknown
+      if (!Array.isArray(parsed)) return DEFAULT_SEGMENT_DIMENSIONS
+      const valid = parsed.filter((d): d is SegmentDimension =>
+        SEGMENT_DIMENSION_CATALOG.some((c) => c.id === d),
+      )
+      return valid.length > 0 ? valid : DEFAULT_SEGMENT_DIMENSIONS
+    } catch {
+      return DEFAULT_SEGMENT_DIMENSIONS
+    }
+  })
+  const setPersisted = (next: SegmentDimension[]) => {
+    setValue(next)
+    if (typeof window === "undefined") return
+    try {
+      window.localStorage.setItem(storageKey, JSON.stringify(next))
+    } catch {
+      // ignore
+    }
+  }
+  return [value, setPersisted]
+}

@@ -174,10 +174,44 @@ export interface SegmentSlice {
   minPerArm: number
 }
 
+export type SegmentDimension =
+  | "dpd"
+  | "lender"
+  | "nationality"
+  | "reachable"
+  | "product"
+  | "risk_score"
+  | "outstanding_bucket"
+  | "status"
+  | "language"
+  | "channel_received"
+
 export interface SegmentGroup {
-  dimension: "dpd" | "lender" | "nationality" | "reachable"
+  dimension: SegmentDimension
   slices: SegmentSlice[]
 }
+
+/** All segment dimensions the Analytics tab can offer, with display labels
+ *  and a one-line description. The picker reads this catalog so new
+ *  dimensions only need to be added here + in `sliceLabelsFor`. */
+export const SEGMENT_DIMENSION_CATALOG: Array<{
+  id: SegmentDimension
+  label: string
+  description: string
+}> = [
+  { id: "dpd", label: "DPD bucket", description: "0-30 / 31-60 / 61-90 / 90+ days past due" },
+  { id: "lender", label: "Lender", description: "The borrower's originating bank" },
+  { id: "nationality", label: "Nationality", description: "Primary nationality on the EID" },
+  { id: "reachable", label: "Reachable", description: "Whether the borrower has at least one working phone / email" },
+  { id: "product", label: "Product", description: "Personal loan / credit card / auto / mortgage" },
+  { id: "risk_score", label: "Risk score", description: "Low / Medium / High at assignment time" },
+  { id: "outstanding_bucket", label: "Outstanding bracket", description: "AED outstanding in 4 bands" },
+  { id: "status", label: "Account status", description: "Active / Legal / Settled / Closed" },
+  { id: "language", label: "Preferred language", description: "English / Arabic / Urdu / other" },
+  { id: "channel_received", label: "Channels received", description: "Which combinations of channels the borrower got" },
+]
+
+export const DEFAULT_SEGMENT_DIMENSIONS: SegmentDimension[] = ["dpd", "lender", "nationality", "reachable"]
 
 export interface BorrowerRow {
   borrowerId: string
@@ -288,6 +322,8 @@ interface SynthesizeInputs {
   nodes: Node[]
   edges: Edge[]
   journeyEnrolled: number
+  /** Which segment dimensions to build. Omit for the default four. */
+  segmentDimensions?: SegmentDimension[]
   /** Per-channel costs from Journey Settings. Missing values → "Not available yet". */
   costs: {
     emailPerSendAED?: number
@@ -384,7 +420,15 @@ export function synthesizeExperimentAnalytics(input: SynthesizeInputs): Experime
   const overTime = buildOverTime(arms, assignments, cfg, perArm, baselineArmId, startedAt, daysElapsed)
 
   /* 9. Segments */
-  const segments = buildSegments(arms, assignments, cfg, perArm, baselineArmId, rng)
+  const segments = buildSegments(
+    arms,
+    assignments,
+    cfg,
+    perArm,
+    baselineArmId,
+    rng,
+    input.segmentDimensions ?? DEFAULT_SEGMENT_DIMENSIONS,
+  )
 
   return {
     cfg,
@@ -807,8 +851,8 @@ function buildSegments(
   perArm: Record<string, ArmResult>,
   baselineArmId: string,
   rng: () => number,
+  dimensions: SegmentDimension[],
 ): SegmentGroup[] {
-  const dimensions: Array<SegmentGroup["dimension"]> = ["dpd", "lender", "nationality", "reachable"]
   const basePrimary = primaryMetricValue(cfg.primaryMetric, perArm[baselineArmId])
   const groups: SegmentGroup[] = []
   dimensions.forEach((dim) => {
@@ -819,7 +863,7 @@ function buildSegments(
 }
 
 function segmentSlicesFor(
-  dim: SegmentGroup["dimension"],
+  dim: SegmentDimension,
   arms: ExperimentArm[],
   assignments: Record<string, Borrower[]>,
   perArm: Record<string, ArmResult>,
@@ -850,7 +894,7 @@ function segmentSlicesFor(
   return slices
 }
 
-function sliceLabelsFor(dim: SegmentGroup["dimension"]): Array<{ key: string; label: string }> {
+function sliceLabelsFor(dim: SegmentDimension): Array<{ key: string; label: string }> {
   switch (dim) {
     case "dpd":
       return [
@@ -877,6 +921,48 @@ function sliceLabelsFor(dim: SegmentGroup["dimension"]): Array<{ key: string; la
       return [
         { key: "yes", label: "Reachable" },
         { key: "no", label: "Not reachable" },
+      ]
+    case "product":
+      return [
+        { key: "pl", label: "Personal loan" },
+        { key: "cc", label: "Credit card" },
+        { key: "auto", label: "Auto loan" },
+        { key: "mortgage", label: "Mortgage" },
+      ]
+    case "risk_score":
+      return [
+        { key: "low", label: "Low risk" },
+        { key: "medium", label: "Medium risk" },
+        { key: "high", label: "High risk" },
+      ]
+    case "outstanding_bucket":
+      return [
+        { key: "0_5k", label: "AED 0 – 5k" },
+        { key: "5_15k", label: "AED 5k – 15k" },
+        { key: "15_50k", label: "AED 15k – 50k" },
+        { key: "50kp", label: "AED 50k+" },
+      ]
+    case "status":
+      return [
+        { key: "active", label: "Active" },
+        { key: "legal", label: "Legal" },
+        { key: "settled", label: "Settled" },
+        { key: "closed", label: "Closed" },
+      ]
+    case "language":
+      return [
+        { key: "en", label: "English" },
+        { key: "ar", label: "Arabic" },
+        { key: "ur", label: "Urdu" },
+        { key: "hi", label: "Hindi" },
+      ]
+    case "channel_received":
+      return [
+        { key: "email_only", label: "Email only" },
+        { key: "sms_only", label: "SMS only" },
+        { key: "email_sms", label: "Email + SMS" },
+        { key: "email_sms_call", label: "Email + SMS + Call" },
+        { key: "none", label: "No touches" },
       ]
   }
 }
