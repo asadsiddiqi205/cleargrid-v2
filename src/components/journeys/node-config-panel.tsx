@@ -80,6 +80,7 @@ import {
   ExperimentGeneralSection,
   ExperimentGoalLogicSection,
 } from "@/components/journeys/experiment-setup-form";
+import { ExperimentAnalyticsTab } from "@/components/journeys/experiment-analytics-tab";
 import { readExperimentConfig } from "@/data/experiments";
 import type { ExperimentConfig } from "@/data/experiments";
 import { BarChart3 } from "lucide-react";
@@ -1584,14 +1585,26 @@ export function NodeConfigPanel({ node, onClose, onUpdate, onDeleteNode, nodes =
         {/* Analytics tab — per-run per-node borrower list. */}
         {journeyId && node && (
           <TabsContent value="analytics" className="min-h-0 flex-1 overflow-hidden p-0">
-            <NodeAnalyticsTab
-              journeyId={journeyId}
-              runId={selectedRunId ?? null}
-              nodeId={node.id}
-              nodeLabel={(d.label as string) ?? node.id}
-              nodeType={node.type ?? "action"}
-              blockType={d.blockType as string | undefined}
-            />
+            {isExperiment ? (
+              <div className="h-full overflow-y-auto p-3">
+                <ExperimentAnalyticsTab
+                  journeyId={journeyId}
+                  nodeId={node.id}
+                  nodes={nodes}
+                  edges={edges}
+                  data={d}
+                />
+              </div>
+            ) : (
+              <NodeAnalyticsTab
+                journeyId={journeyId}
+                runId={selectedRunId ?? null}
+                nodeId={node.id}
+                nodeLabel={(d.label as string) ?? node.id}
+                nodeType={node.type ?? "action"}
+                blockType={d.blockType as string | undefined}
+              />
+            )}
           </TabsContent>
         )}
       </Tabs>
