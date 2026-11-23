@@ -57,6 +57,7 @@ import {
 import { Sliders } from "lucide-react";
 import { JourneySubNav } from "@/components/journeys/journey-sub-nav";
 import { MessageCampaignTables } from "@/components/journeys/message-campaign-tables";
+import { ExperimentsReportSection } from "@/components/journeys/experiments-report-section";
 
 /* ------------------------------------------------------------------ */
 /* Types                                                              */
@@ -601,6 +602,15 @@ export default function JourneyReportPage() {
         {/* ================== Band 2.9 · Message campaigns ================== */}
         {hasEverRun && (
           <MessageCampaignTables journeyId={journeyId} nodes={flow.nodes} />
+        )}
+
+        {/* ================== Band 2.95 · Experiments ================== */}
+        {hasEverRun && (
+          <ExperimentsReportSection
+            journeyId={journeyId}
+            nodes={flow.nodes}
+            edges={flow.edges}
+          />
         )}
 
         {/* ================== Band 3 · Per-node breakdown ================== */}
