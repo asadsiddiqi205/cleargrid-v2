@@ -21,7 +21,7 @@ import { cn } from "@/lib/utils";
 import { QuickAddButton } from "@/components/journeys/quick-add-button";
 import { NodeErrorBadge } from "@/components/journeys/nodes/node-error-badge";
 import { isBlockHiddenByFlag } from "@/data/feature-flags";
-import { getPoolForProject, getPoolById } from "@/data/project-pools";
+import { getPoolForProject, getPoolById, getGatewayById } from "@/data/project-pools";
 
 const actionIcons: Record<string, typeof Mail> = {
   email: Mail, sms: MessageSquare, whatsapp: MessageCircle, call: Phone,
@@ -60,19 +60,23 @@ export function ActionNode({ id, data, selected }: NodeProps) {
   const blockType = (data.blockType as string | undefined) ?? undefined;
   const unavailable = isBlockHiddenByFlag(blockType);
 
-  // AI Call card subtitle: "<project> · <agent> · Pool: <pool>" where
-  // available. When the project is picked but sits in no pool (and no
-  // staged assignment yet), render "No pool" in amber so the operator
-  // sees at a glance which nodes will fail to dial.
+  // AI Call card subtitle: "<project> · <agent> · Pool: <pool>" in pool
+  // mode, "<project> · <agent> · Gateway: <name>" in gateway mode, amber
+  // "No pool" / "No gateway" when the dial target isn't set yet.
   const projectId = typeof data.clearvoiceProjectId === "string" ? data.clearvoiceProjectId : null;
   const projectName = typeof data.clearvoiceProjectName === "string" ? data.clearvoiceProjectName : null;
   const agentName = typeof data.clearvoiceAgentName === "string" ? data.clearvoiceAgentName : null;
+  const gatewayId = typeof data.aiCallGateway === "string" ? data.aiCallGateway : null;
+  const explicitDialMode = typeof data.dialMode === "string" ? data.dialMode : null;
+  const aiCallDialMode = explicitDialMode ?? (gatewayId ? "gateway" : "pool");
   const stagedPoolAssignment = data._stagedPoolAssignment as { poolId?: string } | undefined;
   const livePool = actionType === "call" && projectId ? getPoolForProject(projectId) : null;
   const stagedPool = actionType === "call" && stagedPoolAssignment?.poolId ? getPoolById(stagedPoolAssignment.poolId) : null;
   const effectivePool = livePool ?? stagedPool;
+  const gateway = actionType === "call" && gatewayId ? getGatewayById(gatewayId) : null;
   const aiCallHasProject = actionType === "call" && Boolean(projectId);
-  const showNoPool = aiCallHasProject && !effectivePool;
+  const showNoPool = aiCallHasProject && aiCallDialMode === "pool" && !effectivePool;
+  const showNoGateway = aiCallHasProject && aiCallDialMode === "gateway" && !gateway;
 
   // Callback Handling badge — only on AI Call nodes with `callbackEnabled` on
   // (defaults to true per spec). Shows "Callbacks N" where N is the per-borrower cap.
@@ -129,7 +133,13 @@ export function ActionNode({ id, data, selected }: NodeProps) {
           <p className="truncate text-[11px] text-muted-foreground">
             {[projectName ?? template ?? projectId, agentName].filter(Boolean).join(" · ")}
             {" · "}
-            {effectivePool ? (
+            {aiCallDialMode === "gateway" ? (
+              gateway ? (
+                <span className="text-foreground">Gateway: {gateway.name}</span>
+              ) : (
+                <span className="text-amber-400">No gateway</span>
+              )
+            ) : effectivePool ? (
               <span className="text-foreground">Pool: {effectivePool.name}</span>
             ) : (
               <span className="text-amber-400">No pool</span>
@@ -146,7 +156,7 @@ export function ActionNode({ id, data, selected }: NodeProps) {
             Approved template
           </div>
         )}
-        {showNoPool && (
+        {(showNoPool || showNoGateway) && (
           <div className="mt-1.5 inline-flex items-center rounded bg-amber-500/15 px-1.5 py-0.5 text-[9px] font-medium text-amber-400">
             Won&apos;t be dialed
           </div>

@@ -281,6 +281,48 @@ export const POOL_PRIORITY_LABEL: Record<PoolProjectPriority, string> = {
   low: "Low",
 }
 
+/* ─────────── Gateways — direct-select universe ───────────
+   Small journeys don't need a pool; they can pick a gateway directly.
+   The gateway universe is the union of every pool's gateways plus a
+   few standalone ones not in any pool (sandbox, backup lines).
+   TODO (contract [H]): listGateways() → all gateways the lender can
+   dial on. Backed here by the pool gateways + STANDALONE_GATEWAYS. */
+
+const STANDALONE_GATEWAYS: PoolGateway[] = [
+  { id: "gw-dev-sip", name: "Dev SIP sandbox", concurrency: 2, pooledAiEnabled: true },
+  { id: "gw-backup-pstn", name: "Backup PSTN line", concurrency: 4, pooledAiEnabled: true },
+  { id: "gw-oman-gsm-1", name: "Oman GSM gateway 1", concurrency: 8, pooledAiEnabled: true },
+]
+
+export interface GatewayOption extends PoolGateway {
+  /** Pool this gateway belongs to, if any. null for standalone. */
+  poolId: string | null
+  poolName: string | null
+}
+
+export function listGateways(): GatewayOption[] {
+  const seen = new Set<string>()
+  const out: GatewayOption[] = []
+  for (const p of POOLS) {
+    for (const gw of p.gateways) {
+      if (seen.has(gw.id)) continue
+      seen.add(gw.id)
+      out.push({ ...gw, poolId: p.id, poolName: p.name })
+    }
+  }
+  for (const gw of STANDALONE_GATEWAYS) {
+    if (seen.has(gw.id)) continue
+    seen.add(gw.id)
+    out.push({ ...gw, poolId: null, poolName: null })
+  }
+  return out
+}
+
+export function getGatewayById(id: string | undefined): GatewayOption | undefined {
+  if (!id) return undefined
+  return listGateways().find((g) => g.id === id)
+}
+
 /* ─────────── Mutations (prototype only) ─────────── */
 
 /**

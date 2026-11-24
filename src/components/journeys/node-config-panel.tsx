@@ -98,6 +98,8 @@ import {
   poolEditUrl,
   canManagePools,
   assignProjectToPool,
+  listGateways,
+  getGatewayById,
   POOL_STATE_LABEL,
   POOL_PRIORITY_LABEL,
   type Pool,
@@ -3480,7 +3482,7 @@ function AICallConfig({
         </div>
       </div>
 
-      <AICallPoolSection
+      <AICallDialSection
         d={d}
         projectId={projectId}
         projectName={project?.name ?? projectId}
@@ -3496,13 +3498,18 @@ function AICallConfig({
   )
 }
 
-/* ─────────── AI Call · Pool section ───────────
-   Replaces the old Gateway concept. A pool is picked indirectly: it
-   comes from the ClearVoice project the author chose on the Logic tab.
-   This section shows the pool read-only in the common case, or an
-   assignment picker when the project sits in no pool.
+/* ─────────── AI Call · Dial section ───────────
+   Small journeys often run on a single gateway and don't need a pool.
+   This section lets authors pick either path:
+     - "Gateway" — pick one gateway directly (aiCallGateway)
+     - "Pool"    — route through the project's pool (recommended for
+                   anything shared across multiple projects)
 
-   Staged assignments live on the node as `_stagedPoolAssignment`
+   Default: "pool" when no mode has been set and no legacy gateway is
+   on the node; "gateway" when a legacy aiCallGateway is present (so an
+   existing node keeps its original behaviour).
+
+   Staged pool assignments live on the node as `_stagedPoolAssignment`
    ({ poolId, priority }). The journey save/publish flow applies them via
    assignProjectToPool() in the mock data layer.
    TODO: confirm with backend whether assignment applies on Save or
@@ -3512,6 +3519,242 @@ interface StagedPoolAssignment {
   poolId: string
   priority: PoolProjectPriority
 }
+
+type DialMode = "gateway" | "pool"
+
+function resolveDialMode(d: Record<string, unknown>): DialMode {
+  const stored = d.dialMode as DialMode | undefined
+  if (stored === "gateway" || stored === "pool") return stored
+  // Legacy nodes with an aiCallGateway and no explicit mode default to
+  // gateway — don't silently switch their behaviour out from under them.
+  if (typeof d.aiCallGateway === "string" && d.aiCallGateway) return "gateway"
+  return "pool"
+}
+
+function AICallDialSection({
+  d,
+  projectId,
+  projectName,
+  update,
+}: {
+  d: Record<string, unknown>
+  projectId: string
+  projectName: string
+  update: (field: string, value: unknown) => void
+}) {
+  const mode = resolveDialMode(d)
+
+  return (
+    <div className="space-y-3">
+      {/* Mode toggle — Gateway or Pool. Both are optional at the node
+          level; publish needs ONE of them to point somewhere valid. */}
+      <div className="rounded-lg border border-border bg-card/40 p-2.5">
+        <div className="mb-1.5 flex items-center justify-between">
+          <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+            Dial via
+          </div>
+          <span className="text-[9.5px] text-muted-foreground">Pool recommended</span>
+        </div>
+        <div className="grid grid-cols-2 gap-1 rounded-md border border-input bg-background p-1">
+          <button
+            type="button"
+            onClick={() => update("dialMode", "gateway")}
+            className={cn(
+              "rounded px-2 py-1 text-[11px] font-medium",
+              mode === "gateway"
+                ? "bg-primary text-primary-foreground"
+                : "text-muted-foreground hover:text-foreground",
+            )}
+          >
+            Gateway
+          </button>
+          <button
+            type="button"
+            onClick={() => update("dialMode", "pool")}
+            className={cn(
+              "rounded px-2 py-1 text-[11px] font-medium",
+              mode === "pool"
+                ? "bg-primary text-primary-foreground"
+                : "text-muted-foreground hover:text-foreground",
+            )}
+          >
+            Pool
+          </button>
+        </div>
+        <p className="mt-1.5 text-[10px] text-muted-foreground">
+          {mode === "gateway"
+            ? "Single-gateway mode. Skips pool routing — best for small or one-off journeys."
+            : "Pool-routed mode. Follows the project's pool so the same project behaves the same across every journey and campaign."}
+        </p>
+      </div>
+
+      {mode === "gateway" ? (
+        <AICallGatewaySection d={d} update={update} />
+      ) : (
+        <AICallPoolSection
+          d={d}
+          projectId={projectId}
+          projectName={projectName}
+          update={update}
+        />
+      )}
+    </div>
+  )
+}
+
+/* ─────────── AI Call · Gateway section (direct-select) ───────────
+   Picks a single gateway from the lender's universe (every pool's
+   gateways + standalone ones). Writes `aiCallGateway` on the node. */
+function AICallGatewaySection({
+  d,
+  update,
+}: {
+  d: Record<string, unknown>
+  update: (field: string, value: unknown) => void
+}) {
+  const [query, setQuery] = useState("")
+  const gatewayId = typeof d.aiCallGateway === "string" ? (d.aiCallGateway as string) : ""
+  const gateways = listGateways()
+  const filtered = gateways.filter((g) => {
+    const q = query.trim().toLowerCase()
+    if (!q) return true
+    return (
+      g.name.toLowerCase().includes(q) ||
+      g.id.toLowerCase().includes(q) ||
+      (g.poolName ?? "").toLowerCase().includes(q)
+    )
+  })
+  const selected = gateways.find((g) => g.id === gatewayId) ?? null
+
+  return (
+    <div
+      className="space-y-2 rounded-lg border border-border bg-card/40 p-3"
+      data-focus-field="aiCallGateway"
+    >
+      <div className="flex items-center justify-between">
+        <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+          Gateway
+        </div>
+        {selected && (
+          <button
+            type="button"
+            onClick={() => update("aiCallGateway", undefined)}
+            className="text-[10px] font-medium text-primary hover:underline"
+          >
+            Change
+          </button>
+        )}
+      </div>
+
+      {selected ? (
+        <div className="rounded-md border border-primary/40 bg-primary/[0.05] p-2.5">
+          <div className="flex items-center justify-between gap-2">
+            <div className="min-w-0">
+              <div className="truncate text-[12px] font-semibold text-foreground">
+                {selected.name}
+              </div>
+              <div className="mt-0.5 font-mono text-[10px] text-muted-foreground">
+                {selected.id}
+              </div>
+            </div>
+            <span
+              className={cn(
+                "shrink-0 rounded px-1.5 py-0.5 text-[9.5px] font-semibold uppercase tracking-wider",
+                selected.pooledAiEnabled
+                  ? "bg-primary-500/15 text-primary-300"
+                  : "bg-red-500/15 text-red-300",
+              )}
+            >
+              Pooled AI {selected.pooledAiEnabled ? "on" : "off"}
+            </span>
+          </div>
+          <div className="mt-2 grid grid-cols-2 gap-1 text-[10.5px]">
+            <div className="flex items-center justify-between">
+              <span className="text-muted-foreground">Concurrency</span>
+              <span className="tabular-nums text-foreground">{selected.concurrency}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-muted-foreground">In pool</span>
+              <span className="truncate text-foreground">
+                {selected.poolName ?? "Standalone"}
+              </span>
+            </div>
+          </div>
+          {!selected.pooledAiEnabled && (
+            <div className="mt-2 flex items-start gap-1.5 rounded border border-red-500/40 bg-red-500/10 px-2 py-1 text-[10.5px] text-red-200">
+              <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
+              <span>Pooled AI is off on this gateway. Calls won&apos;t be dialed.</span>
+            </div>
+          )}
+        </div>
+      ) : (
+        <p className="text-[11px] text-muted-foreground">
+          Pick one gateway to dial through. Best for small journeys that don&apos;t need to
+          share capacity with other projects.
+        </p>
+      )}
+
+      <input
+        type="text"
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        placeholder="Search gateways…"
+        className="h-8 w-full rounded-md border border-input bg-background px-2 text-[11.5px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      />
+      <div className="max-h-[260px] space-y-1 overflow-y-auto rounded-md border border-border/40 bg-background/20 p-1.5">
+        {filtered.map((g) => {
+          const isSelected = g.id === gatewayId
+          return (
+            <button
+              key={g.id}
+              type="button"
+              onClick={() => update("aiCallGateway", g.id)}
+              className={cn(
+                "w-full rounded-md border p-2 text-left transition-colors",
+                isSelected
+                  ? "border-primary/60 bg-primary/10"
+                  : "border-border/60 bg-background/40 hover:border-border hover:bg-accent/20",
+              )}
+            >
+              <div className="flex items-center justify-between gap-2">
+                <div className="min-w-0">
+                  <div className="truncate text-[11.5px] font-semibold text-foreground">
+                    {g.name}
+                  </div>
+                  <div className="mt-0.5 text-[10px] text-muted-foreground">
+                    {g.poolName ? `In pool ${g.poolName}` : "Standalone"} ·{" "}
+                    {g.concurrency} concurrency
+                  </div>
+                </div>
+                <span
+                  className={cn(
+                    "shrink-0 rounded px-1.5 py-0.5 text-[9.5px] font-semibold uppercase tracking-wider",
+                    g.pooledAiEnabled
+                      ? "bg-primary-500/15 text-primary-300"
+                      : "bg-neutral-500/15 text-neutral-300",
+                  )}
+                >
+                  {g.pooledAiEnabled ? "On" : "Off"}
+                </span>
+              </div>
+            </button>
+          )
+        })}
+        {filtered.length === 0 && (
+          <div className="rounded-md border border-dashed border-border/60 p-3 text-center text-[10.5px] text-muted-foreground">
+            No gateways match &quot;{query}&quot;.
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+/* ─────────── AI Call · Pool section ───────────
+   Pool-routed mode. A pool is picked indirectly: it comes from the
+   ClearVoice project the author chose on the Logic tab. This section
+   shows the pool read-only in the common case, or an assignment picker
+   when the project sits in no pool. */
 
 function AICallPoolSection({
   d,
@@ -3534,8 +3777,6 @@ function AICallPoolSection({
     ? staged?.priority ?? (livePool ? getProjectPriority(livePool, projectId) : null)
     : null
 
-  const legacyGateway = typeof d.aiCallGateway === "string" ? (d.aiCallGateway as string) : null
-
   if (!projectId) {
     return (
       <div
@@ -3548,7 +3789,6 @@ function AICallPoolSection({
         <p className="mt-2 text-[11px] text-muted-foreground">
           Pick a ClearVoice project on the Logic tab first. The pool comes from the project.
         </p>
-        {legacyGateway && <LegacyGatewayNotice gateway={legacyGateway} />}
       </div>
     )
   }
@@ -3561,7 +3801,6 @@ function AICallPoolSection({
         projectName={projectName}
         update={update}
         staged={staged}
-        legacyGateway={legacyGateway}
       />
     )
   }
@@ -3573,7 +3812,6 @@ function AICallPoolSection({
       projectName={projectName}
       priority={effectivePriority}
       stagedForNewAssignment={Boolean(staged && !livePool)}
-      legacyGateway={legacyGateway}
     />
   )
 }
@@ -3586,14 +3824,12 @@ function AICallPoolReadOnly({
   projectName,
   priority,
   stagedForNewAssignment,
-  legacyGateway,
 }: {
   pool: Pool
   projectId: string
   projectName: string
   priority: PoolProjectPriority | null
   stagedForNewAssignment: boolean
-  legacyGateway: string | null
 }) {
   const today = poolTodayState(pool.id)
   const totalQueued = poolCallsQueued(pool.id)
@@ -3806,7 +4042,6 @@ function AICallPoolReadOnly({
         </div>
       </div>
 
-      {legacyGateway && <LegacyGatewayNotice gateway={legacyGateway} />}
     </div>
   )
 }
@@ -3818,14 +4053,12 @@ function AICallPoolAssignState({
   projectName,
   update,
   staged,
-  legacyGateway,
 }: {
   d: Record<string, unknown>
   projectId: string
   projectName: string
   update: (field: string, value: unknown) => void
   staged: StagedPoolAssignment | null
-  legacyGateway: string | null
 }) {
   const [query, setQuery] = useState("")
   const canManage = canManagePools()
@@ -3994,21 +4227,6 @@ function AICallPoolAssignState({
         </>
       )}
 
-      {legacyGateway && <LegacyGatewayNotice gateway={legacyGateway} />}
-    </div>
-  )
-}
-
-/** One-line notice shown when a node still carries the legacy
- *  `aiCallGateway` field from before the Pool change. Ignored at run time;
- *  we show the notice so authors understand why their old gateway choice
- *  is no longer honoured. */
-function LegacyGatewayNotice({ gateway }: { gateway: string }) {
-  return (
-    <div className="rounded-md border border-border bg-muted/30 px-2.5 py-1.5 text-[10.5px] text-muted-foreground">
-      This node used to pick gateway{" "}
-      <span className="font-mono text-foreground">{gateway}</span> directly. Calls now
-      follow the project&apos;s pool.
     </div>
   )
 }

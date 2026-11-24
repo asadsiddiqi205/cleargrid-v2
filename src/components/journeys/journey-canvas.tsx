@@ -45,6 +45,7 @@ import {
   getProjectPriority,
   poolTodayState,
   poolHasPooledAiCapacity,
+  getGatewayById,
 } from "@/data/project-pools";
 import {
   getHybridCampaignById,
@@ -785,16 +786,9 @@ export default function JourneyCanvas({ journeyId }: JourneyCanvasProps) {
         // Reset any transient _componentInstance marker so duplicates aren't
         // mistakenly treated as live children of some other master.
         if ("_componentInstance" in dataCopy) delete dataCopy._componentInstance
-        // Pool migration: do not carry a legacy aiCallGateway field to new
-        // duplicates. The source node's gateway stays put (the legacy
-        // notice on its Pool tab explains it); the copy follows the
-        // project's pool instead. TODO: back-end clean-up migration to
-        // drop the field entirely.
-        if ((dataCopy as { actionType?: string }).actionType === "call" && "aiCallGateway" in dataCopy) {
-          delete (dataCopy as Record<string, unknown>).aiCallGateway
-        }
         // A staged pool assignment is a draft on the source node, not
-        // something to inherit.
+        // something to inherit (the live gateway / pool / dialMode fields
+        // do carry over — they are intentional config, not a draft).
         if ("_stagedPoolAssignment" in dataCopy) delete (dataCopy as Record<string, unknown>)._stagedPoolAssignment
         return {
           ...node,
@@ -1526,56 +1520,78 @@ export default function JourneyCanvas({ journeyId }: JourneyCanvasProps) {
       }
       if (actionType === "call" && d.clearvoiceProjectId) {
         const projectId = d.clearvoiceProjectId as string;
-        const livePool = getPoolForProject(projectId);
-        const staged = d._stagedPoolAssignment as { poolId?: string; priority?: string } | undefined;
-        const stagedPool = staged?.poolId ? getPoolById(staged.poolId) : null;
-        const pool = livePool ?? stagedPool;
-        if (!pool) {
-          issues.push({
-            severity: "blocker",
-            title: `"${label}" project isn't in any pool. Calls won't be dialed.`,
-            detail: "Open the Pool tab and add this project to a pool, or ask a pool admin to add it.",
-            nodeId: n.id,
-            field: "projectPool",
-          });
-        } else {
-          // Edge: pool exists but carries no pooled-AI capacity (no
-          // gateways, or every gateway with Pooled AI off). Treat as a
-          // blocker — calls would never dial.
-          if (!poolHasPooledAiCapacity(pool)) {
+        // Mirror resolveDialMode() in node-config-panel: an existing
+        // aiCallGateway with no explicit mode means the author chose
+        // Gateway mode on this node.
+        const dialMode = (d.dialMode as string | undefined) ??
+          (typeof d.aiCallGateway === "string" && d.aiCallGateway ? "gateway" : "pool");
+
+        if (dialMode === "gateway") {
+          const gwId = typeof d.aiCallGateway === "string" ? d.aiCallGateway : "";
+          const gateway = gwId ? getGatewayById(gwId) : undefined;
+          if (!gateway) {
             issues.push({
               severity: "blocker",
-              title: `"${label}" pool ${pool.name} has no pooled-AI capacity`,
-              detail: "Every gateway in this pool has Pooled AI off. Calls won't be dialed.",
+              title: `"${label}" has no gateway selected`,
+              detail: "Pick a gateway on the Gateway tab, or switch to Pool mode.",
               nodeId: n.id,
-              field: "projectPool",
+              field: "aiCallGateway",
+            });
+          } else if (!gateway.pooledAiEnabled) {
+            issues.push({
+              severity: "blocker",
+              title: `"${label}" gateway ${gateway.name} has Pooled AI off`,
+              detail: "Calls won't be dialed on a gateway with Pooled AI disabled.",
+              nodeId: n.id,
+              field: "aiCallGateway",
             });
           }
-          // Edge: pool is paused. Non-blocking — authors may publish a
-          // journey against a paused pool intentionally, but we surface
-          // it so it's not a surprise at run time.
-          if (pool.status === "paused") {
+        } else {
+          const livePool = getPoolForProject(projectId);
+          const staged = d._stagedPoolAssignment as { poolId?: string; priority?: string } | undefined;
+          const stagedPool = staged?.poolId ? getPoolById(staged.poolId) : null;
+          const pool = livePool ?? stagedPool;
+          if (!pool) {
             issues.push({
-              severity: "warning",
-              title: `"${label}" pool ${pool.name} is paused`,
-              detail: "Calls stay queued until a pool admin resumes it.",
+              severity: "blocker",
+              title: `"${label}" project isn't in any pool. Calls won't be dialed.`,
+              detail: "Open the Pool tab and add this project to a pool, or switch to Gateway mode.",
               nodeId: n.id,
               field: "projectPool",
             });
-          }
-          const priority = staged?.priority ?? getProjectPriority(pool, projectId);
-          if (
-            priority === "low" &&
-            pool.status === "active" &&
-            poolTodayState(pool.id) === "capacity_bound"
-          ) {
-            issues.push({
-              severity: "warning",
-              title: `"${label}" sits in Low priority inside a capacity-bound pool`,
-              detail: "Calls may wait behind High and Normal projects in pool " + pool.name + ".",
-              nodeId: n.id,
-              field: "projectPool",
-            });
+          } else {
+            if (!poolHasPooledAiCapacity(pool)) {
+              issues.push({
+                severity: "blocker",
+                title: `"${label}" pool ${pool.name} has no pooled-AI capacity`,
+                detail: "Every gateway in this pool has Pooled AI off. Calls won't be dialed.",
+                nodeId: n.id,
+                field: "projectPool",
+              });
+            }
+            if (pool.status === "paused") {
+              issues.push({
+                severity: "warning",
+                title: `"${label}" pool ${pool.name} is paused`,
+                detail: "Calls stay queued until a pool admin resumes it.",
+                nodeId: n.id,
+                field: "projectPool",
+              });
+            }
+            const priority = staged?.priority ?? getProjectPriority(pool, projectId);
+            if (
+              priority === "low" &&
+              pool.status === "active" &&
+              poolTodayState(pool.id) === "capacity_bound"
+            ) {
+              issues.push({
+                severity: "warning",
+                title: `"${label}" sits in Low priority inside a capacity-bound pool`,
+                detail: "Calls may wait behind High and Normal projects in pool " + pool.name + ".",
+                nodeId: n.id,
+                field: "projectPool",
+              });
+            }
           }
         }
       }
