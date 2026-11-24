@@ -778,6 +778,17 @@ export default function JourneyCanvas({ journeyId }: JourneyCanvasProps) {
         // Reset any transient _componentInstance marker so duplicates aren't
         // mistakenly treated as live children of some other master.
         if ("_componentInstance" in dataCopy) delete dataCopy._componentInstance
+        // Pool migration: do not carry a legacy aiCallGateway field to new
+        // duplicates. The source node's gateway stays put (the legacy
+        // notice on its Pool tab explains it); the copy follows the
+        // project's pool instead. TODO: back-end clean-up migration to
+        // drop the field entirely.
+        if ((dataCopy as { actionType?: string }).actionType === "call" && "aiCallGateway" in dataCopy) {
+          delete (dataCopy as Record<string, unknown>).aiCallGateway
+        }
+        // A staged pool assignment is a draft on the source node, not
+        // something to inherit.
+        if ("_stagedPoolAssignment" in dataCopy) delete (dataCopy as Record<string, unknown>)._stagedPoolAssignment
         return {
           ...node,
           id: newId,
