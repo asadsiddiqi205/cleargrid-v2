@@ -40,6 +40,12 @@ import { ComponentInstanceNode } from "@/components/journeys/nodes/component-ins
 import { SaveAsComponentModal } from "@/components/journeys/save-as-component-modal";
 import { isBlockHiddenByFlag } from "@/data/feature-flags";
 import {
+  getPoolForProject,
+  getPoolById,
+  getProjectPriority,
+  poolTodayState,
+} from "@/data/project-pools";
+import {
   getHybridCampaignById,
   readinessForGroup,
 } from "@/data/hybrid-campaigns";
@@ -1506,7 +1512,8 @@ export default function JourneyCanvas({ journeyId }: JourneyCanvasProps) {
         });
       }
 
-      // Trigger AI Call — needs a ClearVoice project
+      // Trigger AI Call — needs a ClearVoice project, and that project
+      // must sit in a pool (either live or staged for the next save).
       if (actionType === "call" && !d.clearvoiceProjectId) {
         issues.push({
           severity: "blocker",
@@ -1515,6 +1522,37 @@ export default function JourneyCanvas({ journeyId }: JourneyCanvasProps) {
           nodeId: n.id,
           field: "clearvoiceProjectId",
         });
+      }
+      if (actionType === "call" && d.clearvoiceProjectId) {
+        const projectId = d.clearvoiceProjectId as string;
+        const livePool = getPoolForProject(projectId);
+        const staged = d._stagedPoolAssignment as { poolId?: string; priority?: string } | undefined;
+        const stagedPool = staged?.poolId ? getPoolById(staged.poolId) : null;
+        const pool = livePool ?? stagedPool;
+        if (!pool) {
+          issues.push({
+            severity: "blocker",
+            title: `"${label}" project isn't in any pool. Calls won't be dialed.`,
+            detail: "Open the Pool tab and add this project to a pool, or ask a pool admin to add it.",
+            nodeId: n.id,
+            field: "projectPool",
+          });
+        } else {
+          const priority = staged?.priority ?? getProjectPriority(pool, projectId);
+          if (
+            priority === "low" &&
+            pool.status === "active" &&
+            poolTodayState(pool.id) === "capacity_bound"
+          ) {
+            issues.push({
+              severity: "warning",
+              title: `"${label}" sits in Low priority inside a capacity-bound pool`,
+              detail: "Calls may wait behind High and Normal projects in pool " + pool.name + ".",
+              nodeId: n.id,
+              field: "projectPool",
+            });
+          }
+        }
       }
 
       // Send Email / SMS — needs a template

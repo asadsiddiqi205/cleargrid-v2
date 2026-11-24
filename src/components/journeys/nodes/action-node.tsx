@@ -21,6 +21,7 @@ import { cn } from "@/lib/utils";
 import { QuickAddButton } from "@/components/journeys/quick-add-button";
 import { NodeErrorBadge } from "@/components/journeys/nodes/node-error-badge";
 import { isBlockHiddenByFlag } from "@/data/feature-flags";
+import { getPoolForProject, getPoolById } from "@/data/project-pools";
 
 const actionIcons: Record<string, typeof Mail> = {
   email: Mail, sms: MessageSquare, whatsapp: MessageCircle, call: Phone,
@@ -58,6 +59,20 @@ export function ActionNode({ id, data, selected }: NodeProps) {
   const liveCount = data._liveCount as number | undefined;
   const blockType = (data.blockType as string | undefined) ?? undefined;
   const unavailable = isBlockHiddenByFlag(blockType);
+
+  // AI Call card subtitle: "<project> · <agent> · Pool: <pool>" where
+  // available. When the project is picked but sits in no pool (and no
+  // staged assignment yet), render "No pool" in amber so the operator
+  // sees at a glance which nodes will fail to dial.
+  const projectId = typeof data.clearvoiceProjectId === "string" ? data.clearvoiceProjectId : null;
+  const projectName = typeof data.clearvoiceProjectName === "string" ? data.clearvoiceProjectName : null;
+  const agentName = typeof data.clearvoiceAgentName === "string" ? data.clearvoiceAgentName : null;
+  const stagedPoolAssignment = data._stagedPoolAssignment as { poolId?: string } | undefined;
+  const livePool = actionType === "call" && projectId ? getPoolForProject(projectId) : null;
+  const stagedPool = actionType === "call" && stagedPoolAssignment?.poolId ? getPoolById(stagedPoolAssignment.poolId) : null;
+  const effectivePool = livePool ?? stagedPool;
+  const aiCallHasProject = actionType === "call" && Boolean(projectId);
+  const showNoPool = aiCallHasProject && !effectivePool;
 
   // Callback Handling badge — only on AI Call nodes with `callbackEnabled` on
   // (defaults to true per spec). Shows "Callbacks N" where N is the per-borrower cap.
@@ -110,13 +125,30 @@ export function ActionNode({ id, data, selected }: NodeProps) {
       </div>
 
       <div className="border-t border-border/40 px-3 py-2">
-        <p className="truncate text-[11px] text-muted-foreground">
-          {template ||
-            (typeof data.description === "string" ? data.description : "Pick template...")}
-        </p>
+        {actionType === "call" && aiCallHasProject ? (
+          <p className="truncate text-[11px] text-muted-foreground">
+            {[projectName ?? template ?? projectId, agentName].filter(Boolean).join(" · ")}
+            {" · "}
+            {effectivePool ? (
+              <span className="text-foreground">Pool: {effectivePool.name}</span>
+            ) : (
+              <span className="text-amber-400">No pool</span>
+            )}
+          </p>
+        ) : (
+          <p className="truncate text-[11px] text-muted-foreground">
+            {template ||
+              (typeof data.description === "string" ? data.description : "Pick template...")}
+          </p>
+        )}
         {actionType === "whatsapp" && template && (
           <div className="mt-1.5 inline-flex items-center rounded bg-primary-500/15 px-1.5 py-0.5 text-[9px] font-medium text-primary-400">
             Approved template
+          </div>
+        )}
+        {showNoPool && (
+          <div className="mt-1.5 inline-flex items-center rounded bg-amber-500/15 px-1.5 py-0.5 text-[9px] font-medium text-amber-400">
+            Won&apos;t be dialed
           </div>
         )}
       </div>
