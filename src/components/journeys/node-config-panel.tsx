@@ -188,6 +188,12 @@ const CLEARVOICE_PROJECTS: ClearVoiceProject[] = [
   { id: "proj_004", name: "Tamara Early Delinquency AR", status: "live", tags: ["Early DPD", "AR", "UAE"] },
   { id: "proj_005", name: "Generic Collection EN", status: "draft", tags: ["Collection", "EN"] },
   { id: "proj_006", name: "FAB Final Notice EN", status: "draft", tags: ["Final Notice", "EN", "UAE"] },
+  // Projects that sit in no pool — the Pool tab opens in the
+  // assign-a-pool state when the author picks one of these.
+  { id: "proj_007", name: "Mashreq PTP Follow-up AR", status: "live", tags: ["PTP", "AR", "UAE", "Needs pool"] },
+  { id: "proj_008", name: "FAB Early Delinquency EN", status: "live", tags: ["Early DPD", "EN", "UAE", "Needs pool"] },
+  { id: "proj_009", name: "Tamara Settlement Negotiator EN", status: "live", tags: ["Settlement", "EN", "KSA", "Needs pool"] },
+  { id: "proj_010", name: "ADCB Hardship Care AR", status: "draft", tags: ["Hardship", "AR", "UAE", "Needs pool"] },
 ];
 
 interface ClearVoiceAgent {
@@ -226,6 +232,20 @@ const CLEARVOICE_AGENTS: Record<string, ClearVoiceAgent[]> = {
   proj_006: [
     { id: "agent_601", name: "Karim", org: "ClearGrid", isDefault: true },
     { id: "agent_602", name: "Karim (final)", org: "cleargrid" },
+  ],
+  proj_007: [
+    { id: "agent_701", name: "Nadia", org: "ClearGrid", isDefault: true },
+    { id: "agent_702", name: "Nadia (follow-up)", org: "cleargrid" },
+  ],
+  proj_008: [
+    { id: "agent_801", name: "Omar", org: "ClearGrid", isDefault: true },
+  ],
+  proj_009: [
+    { id: "agent_901", name: "Yara", org: "ClearGrid", isDefault: true },
+    { id: "agent_902", name: "Yara (negotiator)", org: "cleargrid" },
+  ],
+  proj_010: [
+    { id: "agent_1001", name: "Hassan", org: "ClearGrid", isDefault: true },
   ],
 };
 

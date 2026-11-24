@@ -166,11 +166,15 @@ const PROJECT_TO_POOL: Record<string, string | undefined> = {
   proj_001: "pool-tabby",
   proj_002: "pool-mashreq",
   proj_003: "pool-tabby",
-  // proj_004 and proj_005 sit in no pool today — triggers the unassigned
-  // state and the "won't be dialed" error on the Pool tab.
   proj_004: "pool-mashreq",
-  proj_005: undefined,
   proj_006: "pool-fab",
+  // Projects below sit in no pool today — picking one of them opens the
+  // Pool tab in the assign-a-pool state and the canvas shows "No pool".
+  proj_005: undefined,
+  proj_007: undefined,
+  proj_008: undefined,
+  proj_009: undefined,
+  proj_010: undefined,
 }
 
 /** TODO (contract [D]): flip this to false to exercise the read-only
