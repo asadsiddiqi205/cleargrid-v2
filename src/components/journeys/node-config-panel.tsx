@@ -85,6 +85,24 @@ import { ExperimentAnalyticsTab } from "@/components/journeys/experiment-analyti
 import { readExperimentConfig } from "@/data/experiments";
 import type { ExperimentConfig } from "@/data/experiments";
 import { BarChart3 } from "lucide-react";
+import {
+  listPools,
+  getPoolById,
+  getPoolForProject,
+  getProjectPriority,
+  poolTodayState,
+  poolCallsQueued,
+  poolProjectQueuedCount,
+  poolPooledConcurrency,
+  poolHasPooledAiCapacity,
+  poolEditUrl,
+  canManagePools,
+  assignProjectToPool,
+  POOL_STATE_LABEL,
+  POOL_PRIORITY_LABEL,
+  type Pool,
+  type PoolProjectPriority,
+} from "@/data/project-pools";
 
 /* ------------------------------------------------------------------ */
 /*  Mock data for dropdowns                                           */
@@ -3256,6 +3274,9 @@ function AICallConfig({
                   // Reset the agent when the project changes.
                   clearvoiceAgentId: "",
                   clearvoiceAgentName: "",
+                  // Any staged pool assignment belonged to the previous
+                  // project.
+                  _stagedPoolAssignment: undefined,
                 })
               }
               className="w-full rounded-lg border-2 border-border/50 p-3 text-left transition-all hover:border-border hover:bg-accent/20"
@@ -3319,6 +3340,7 @@ function AICallConfig({
             multiUpdate({
               clearvoiceProjectId: "",
               clearvoiceProjectName: "",
+              _stagedPoolAssignment: undefined,
             })
           }
           className="inline-flex items-center gap-1 text-[11px] font-medium text-primary hover:underline"
@@ -3427,6 +3449,7 @@ function AICallConfig({
                   clearvoiceProjectName: "",
                   clearvoiceAgentId: "",
                   clearvoiceAgentName: "",
+                  _stagedPoolAssignment: undefined,
                 })
               }
               className="rounded-md border border-border bg-background px-2 py-1 text-[10px] font-medium text-foreground hover:bg-muted"
@@ -3437,11 +3460,535 @@ function AICallConfig({
         </div>
       </div>
 
+      <AICallPoolSection
+        d={d}
+        projectId={projectId}
+        projectName={project?.name ?? projectId}
+        update={update}
+      />
+
       <AICallCustomParameters d={d} update={update} journeyId={journeyId} />
 
       <CallbackHandlingSection data={d} update={update} />
 
       <RedialPolicySection data={d} update={update} journeyId={journeyId} />
+    </div>
+  )
+}
+
+/* ─────────── AI Call · Pool section ───────────
+   Replaces the old Gateway concept. A pool is picked indirectly: it
+   comes from the ClearVoice project the author chose on the Logic tab.
+   This section shows the pool read-only in the common case, or an
+   assignment picker when the project sits in no pool.
+
+   Staged assignments live on the node as `_stagedPoolAssignment`
+   ({ poolId, priority }). The journey save/publish flow applies them via
+   assignProjectToPool() in the mock data layer.
+   TODO: confirm with backend whether assignment applies on Save or
+   Publish. */
+
+interface StagedPoolAssignment {
+  poolId: string
+  priority: PoolProjectPriority
+}
+
+function AICallPoolSection({
+  d,
+  projectId,
+  projectName,
+  update,
+}: {
+  d: Record<string, unknown>
+  projectId: string
+  projectName: string
+  update: (field: string, value: unknown) => void
+}) {
+  const livePool = getPoolForProject(projectId)
+  const staged = (d._stagedPoolAssignment as StagedPoolAssignment | undefined) ?? null
+  const stagedPool = staged ? getPoolById(staged.poolId) : null
+  // When a staged assignment is present, render the pool as if it were
+  // already live so the author sees the final state they're committing.
+  const pool = livePool ?? stagedPool
+  const effectivePriority: PoolProjectPriority | null = pool
+    ? staged?.priority ?? (livePool ? getProjectPriority(livePool, projectId) : null)
+    : null
+
+  const legacyGateway = typeof d.aiCallGateway === "string" ? (d.aiCallGateway as string) : null
+
+  if (!projectId) {
+    return (
+      <div
+        className="rounded-lg border border-border bg-card/40 p-3"
+        data-focus-field="projectPool"
+      >
+        <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+          Pool
+        </div>
+        <p className="mt-2 text-[11px] text-muted-foreground">
+          Pick a ClearVoice project on the Logic tab first. The pool comes from the project.
+        </p>
+        {legacyGateway && <LegacyGatewayNotice gateway={legacyGateway} />}
+      </div>
+    )
+  }
+
+  if (!pool) {
+    return (
+      <AICallPoolAssignState
+        d={d}
+        projectId={projectId}
+        projectName={projectName}
+        update={update}
+        staged={staged}
+        legacyGateway={legacyGateway}
+      />
+    )
+  }
+
+  return (
+    <AICallPoolReadOnly
+      pool={pool}
+      projectId={projectId}
+      projectName={projectName}
+      priority={effectivePriority}
+      stagedForNewAssignment={Boolean(staged && !livePool)}
+      legacyGateway={legacyGateway}
+    />
+  )
+}
+
+/** Read-only view for a project already in a pool (the common case).
+ *  Also used to preview a staged assignment before save. */
+function AICallPoolReadOnly({
+  pool,
+  projectId,
+  projectName,
+  priority,
+  stagedForNewAssignment,
+  legacyGateway,
+}: {
+  pool: Pool
+  projectId: string
+  projectName: string
+  priority: PoolProjectPriority | null
+  stagedForNewAssignment: boolean
+  legacyGateway: string | null
+}) {
+  const today = poolTodayState(pool.id)
+  const totalQueued = poolCallsQueued(pool.id)
+  const projectCount = pool.projects.length + (stagedForNewAssignment ? 1 : 0)
+  const projectQueued = priority
+    ? poolProjectQueuedCount(pool.id, projectId, priority)
+    : 0
+  const pooledConcurrency = poolPooledConcurrency(pool)
+  const hasCapacity = poolHasPooledAiCapacity(pool)
+  const isPaused = pool.status === "paused"
+
+  return (
+    <div
+      className="space-y-3 rounded-lg border border-border bg-card/40 p-3"
+      data-focus-field="projectPool"
+    >
+      <div className="flex items-center justify-between">
+        <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+          Pool
+        </div>
+        <Link
+          href={poolEditUrl(pool.id)}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-1 text-[10.5px] font-medium text-primary hover:underline"
+        >
+          Open in Project Pools
+          <ExternalLink className="h-3 w-3" />
+        </Link>
+      </div>
+
+      <p className="text-[11px] text-muted-foreground">
+        This project is dialed through pool{" "}
+        <span className="font-semibold text-foreground">{pool.name}</span>. Pool, priority
+        and gateways are managed in Project Pools and apply to every journey and campaign
+        that uses this project.
+      </p>
+
+      {stagedForNewAssignment && (
+        <div className="rounded-md border border-primary/30 bg-primary/5 px-2.5 py-1.5 text-[10.5px] text-primary-foreground/80">
+          Staged assignment — applied when the journey is saved.
+        </div>
+      )}
+
+      {/* Pool summary card */}
+      <div className="rounded-md border border-border bg-background/40 p-2.5">
+        <div className="flex items-center justify-between gap-2">
+          <div className="min-w-0">
+            <div className="truncate text-xs font-semibold text-foreground">{pool.name}</div>
+            <div className="mt-0.5 font-mono text-[10px] text-muted-foreground">{pool.id}</div>
+          </div>
+          <span
+            className={cn(
+              "shrink-0 rounded px-1.5 py-0.5 text-[9.5px] font-semibold uppercase tracking-wider",
+              isPaused
+                ? "bg-neutral-500/20 text-neutral-300"
+                : "bg-primary-500/20 text-primary-300",
+            )}
+          >
+            {isPaused ? "Paused" : "Active"}
+          </span>
+        </div>
+
+        <div className="mt-2 grid grid-cols-2 gap-x-2 gap-y-1 text-[10.5px]">
+          <div className="flex items-center justify-between">
+            <span className="text-muted-foreground">Share</span>
+            <span className="tabular-nums text-foreground">
+              {pool.sharePct}%{" "}
+              {pool.effectiveSharePct !== pool.sharePct && (
+                <span className="text-muted-foreground">
+                  (today {pool.effectiveSharePct}%)
+                </span>
+              )}
+            </span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-muted-foreground">Today</span>
+            <span
+              className={cn(
+                "tabular-nums",
+                today === "capacity_bound"
+                  ? "text-warning-300"
+                  : today === "draining"
+                  ? "text-primary-300"
+                  : "text-foreground",
+              )}
+            >
+              {POOL_STATE_LABEL[today]}
+            </span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-muted-foreground">Calls queued</span>
+            <span className="tabular-nums text-foreground">
+              {totalQueued.toLocaleString()}
+            </span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-muted-foreground">Projects</span>
+            <span className="tabular-nums text-foreground">{projectCount}</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Edge case: paused pool. */}
+      {isPaused && (
+        <div className="flex items-start gap-1.5 rounded-md border border-neutral-500/40 bg-neutral-500/10 px-2.5 py-1.5 text-[10.5px] text-neutral-200">
+          <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
+          <span>Pool is paused. Calls stay queued until a pool admin resumes it.</span>
+        </div>
+      )}
+
+      {/* Edge case: no pooled-AI capacity at all. */}
+      {!hasCapacity && (
+        <div className="flex items-start gap-1.5 rounded-md border border-red-500/40 bg-red-500/10 px-2.5 py-1.5 text-[10.5px] text-red-200">
+          <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
+          <span>
+            This pool has no pooled-AI capacity. Calls won&apos;t be dialed.
+          </span>
+        </div>
+      )}
+
+      {/* Capacity-bound + Low priority warning. */}
+      {today === "capacity_bound" && priority === "low" && hasCapacity && !isPaused && (
+        <div className="flex items-start gap-1.5 rounded-md border border-warning-500/40 bg-warning-500/10 px-2.5 py-1.5 text-[10.5px] text-warning-200">
+          <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
+          <span>
+            This pool is capacity-bound today. Normal and Low projects may wait behind High.
+          </span>
+        </div>
+      )}
+
+      {/* This project's row in the pool. */}
+      <div>
+        <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+          This project
+        </div>
+        <div className="flex items-center justify-between rounded-md border border-border bg-background/40 px-2.5 py-1.5">
+          <div className="min-w-0 truncate text-[11px] text-foreground">{projectName}</div>
+          <div className="flex items-center gap-2">
+            {priority && (
+              <span
+                className={cn(
+                  "rounded px-1.5 py-0.5 text-[9.5px] font-semibold uppercase tracking-wider",
+                  priority === "high"
+                    ? "bg-warning-500/20 text-warning-300"
+                    : priority === "normal"
+                    ? "bg-primary-500/15 text-primary-300"
+                    : "bg-neutral-500/15 text-neutral-300",
+                )}
+              >
+                {POOL_PRIORITY_LABEL[priority]}
+              </span>
+            )}
+            <span className="tabular-nums text-[10.5px] text-muted-foreground">
+              {projectQueued.toLocaleString()} queued
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* Gateways table — same columns as the Edit pool page, read-only. */}
+      <div>
+        <div className="mb-1.5 flex items-center justify-between">
+          <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+            Gateways
+          </div>
+          <div className="text-[10px] text-muted-foreground">
+            {pool.gateways.length} · {pooledConcurrency} pooled concurrency
+          </div>
+        </div>
+        <div className="overflow-hidden rounded-md border border-border">
+          <table className="w-full table-fixed text-[10.5px]">
+            <thead className="bg-muted/30 text-muted-foreground">
+              <tr>
+                <th className="w-auto px-2 py-1 text-left font-medium">Gateway</th>
+                <th className="w-16 px-2 py-1 text-right font-medium">Concurrency</th>
+                <th className="w-20 px-2 py-1 text-right font-medium">Pooled AI</th>
+              </tr>
+            </thead>
+            <tbody>
+              {pool.gateways.map((gw) => (
+                <tr key={gw.id} className="border-t border-border/60">
+                  <td className="truncate px-2 py-1 text-foreground">{gw.name}</td>
+                  <td className="px-2 py-1 text-right tabular-nums text-foreground">
+                    {gw.concurrency}
+                  </td>
+                  <td className="px-2 py-1 text-right">
+                    <span
+                      className={cn(
+                        "rounded px-1.5 py-0.5 text-[9.5px] font-semibold uppercase tracking-wider",
+                        gw.pooledAiEnabled
+                          ? "bg-primary-500/15 text-primary-300"
+                          : "bg-neutral-500/15 text-neutral-300",
+                      )}
+                    >
+                      {gw.pooledAiEnabled ? "On" : "Off"}
+                    </span>
+                  </td>
+                </tr>
+              ))}
+              {pool.gateways.length === 0 && (
+                <tr>
+                  <td colSpan={3} className="px-2 py-2 text-center text-muted-foreground">
+                    No gateways in this pool.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {legacyGateway && <LegacyGatewayNotice gateway={legacyGateway} />}
+    </div>
+  )
+}
+
+/** Assign-a-pool state — project sits in no pool. */
+function AICallPoolAssignState({
+  d: _d,
+  projectId,
+  projectName,
+  update,
+  staged,
+  legacyGateway,
+}: {
+  d: Record<string, unknown>
+  projectId: string
+  projectName: string
+  update: (field: string, value: unknown) => void
+  staged: StagedPoolAssignment | null
+  legacyGateway: string | null
+}) {
+  const [query, setQuery] = useState("")
+  const canManage = canManagePools()
+  const pools = listPools()
+  const filtered = pools.filter((p) => {
+    const q = query.trim().toLowerCase()
+    if (!q) return true
+    return (
+      p.name.toLowerCase().includes(q) ||
+      p.id.toLowerCase().includes(q)
+    )
+  })
+
+  const selectedPool = staged ? getPoolById(staged.poolId) : null
+  const priority: PoolProjectPriority = staged?.priority ?? "normal"
+
+  return (
+    <div
+      className="space-y-3 rounded-lg border border-red-500/40 bg-red-500/[0.06] p-3"
+      data-focus-field="projectPool"
+    >
+      <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+        Pool
+      </div>
+
+      <div className="flex items-start gap-1.5 rounded-md border border-red-500/40 bg-red-500/10 px-2.5 py-1.5 text-[11px] text-red-200">
+        <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
+        <span>
+          This project isn&apos;t in any pool, so its calls won&apos;t be dialed.
+          {canManage ? " Pick a pool to add it." : ""}
+        </span>
+      </div>
+
+      {!canManage ? (
+        <p className="text-[11px] text-muted-foreground">
+          Ask a pool admin to add{" "}
+          <span className="font-medium text-foreground">{projectName}</span> to a pool.
+        </p>
+      ) : (
+        <>
+          <input
+            type="text"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search pools…"
+            className="h-8 w-full rounded-md border border-input bg-background px-2 text-[11.5px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          />
+          <div className="space-y-1.5">
+            {filtered.map((p) => {
+              const selected = selectedPool?.id === p.id
+              const today = poolTodayState(p.id)
+              const pooledConcurrency = poolPooledConcurrency(p)
+              const isPaused = p.status === "paused"
+              return (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() =>
+                    update("_stagedPoolAssignment", {
+                      poolId: p.id,
+                      priority,
+                    } satisfies StagedPoolAssignment)
+                  }
+                  className={cn(
+                    "w-full rounded-md border p-2 text-left transition-colors",
+                    selected
+                      ? "border-primary/60 bg-primary/10"
+                      : "border-border/60 bg-background/40 hover:border-border hover:bg-accent/20",
+                  )}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="truncate text-[11.5px] font-semibold text-foreground">
+                        {p.name}
+                      </div>
+                      <div className="mt-0.5 text-[10px] text-muted-foreground">
+                        Share {p.sharePct}% · {POOL_STATE_LABEL[today]}
+                      </div>
+                    </div>
+                    <span
+                      className={cn(
+                        "shrink-0 rounded px-1.5 py-0.5 text-[9.5px] font-semibold uppercase tracking-wider",
+                        isPaused
+                          ? "bg-neutral-500/20 text-neutral-300"
+                          : "bg-primary-500/15 text-primary-300",
+                      )}
+                    >
+                      {isPaused ? "Paused" : "Active"}
+                    </span>
+                  </div>
+                  <div className="mt-1 text-[10px] text-muted-foreground">
+                    {p.gateways.length} gateways · {pooledConcurrency} pooled concurrency ·{" "}
+                    {p.projects.length} projects
+                  </div>
+                </button>
+              )
+            })}
+            {filtered.length === 0 && (
+              <div className="rounded-md border border-dashed border-border/60 p-3 text-center text-[10.5px] text-muted-foreground">
+                No pools match &quot;{query}&quot;.
+              </div>
+            )}
+          </div>
+
+          {selectedPool && (
+            <>
+              <div>
+                <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  Priority
+                </div>
+                <div className="flex gap-1 rounded-md border border-input bg-background p-1">
+                  {(["high", "normal", "low"] as const).map((p) => (
+                    <button
+                      key={p}
+                      type="button"
+                      onClick={() =>
+                        update("_stagedPoolAssignment", {
+                          poolId: selectedPool.id,
+                          priority: p,
+                        } satisfies StagedPoolAssignment)
+                      }
+                      className={cn(
+                        "flex-1 rounded px-2 py-1 text-[11px] font-medium capitalize",
+                        priority === p
+                          ? "bg-primary text-primary-foreground"
+                          : "text-muted-foreground hover:text-foreground",
+                      )}
+                    >
+                      {POOL_PRIORITY_LABEL[p]}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <p className="text-[10.5px] text-muted-foreground">
+                Saving adds{" "}
+                <span className="font-medium text-foreground">{projectName}</span> to{" "}
+                <span className="font-medium text-foreground">{selectedPool.name}</span> at{" "}
+                <span className="font-medium text-foreground">
+                  {POOL_PRIORITY_LABEL[priority]}
+                </span>
+                . It will apply to every journey and campaign that uses this project.
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  // Apply the assignment to the mock data layer and clear
+                  // the staged value so the section flips to the
+                  // read-only view. TODO: confirm whether this moves to
+                  // the journey save/publish pipeline server-side.
+                  assignProjectToPool(
+                    projectId,
+                    selectedPool.id,
+                    priority,
+                  )
+                  update("_stagedPoolAssignment", undefined)
+                  toast.success("Pool assigned", {
+                    description: `${projectName} → ${selectedPool.name} · ${POOL_PRIORITY_LABEL[priority]}`,
+                  })
+                }}
+                className="w-full rounded-md border border-primary bg-primary/90 px-2 py-1.5 text-[11px] font-semibold text-primary-foreground hover:bg-primary"
+              >
+                Apply assignment
+              </button>
+            </>
+          )}
+        </>
+      )}
+
+      {legacyGateway && <LegacyGatewayNotice gateway={legacyGateway} />}
+    </div>
+  )
+}
+
+/** One-line notice shown when a node still carries the legacy
+ *  `aiCallGateway` field from before the Pool change. Ignored at run time;
+ *  we show the notice so authors understand why their old gateway choice
+ *  is no longer honoured. */
+function LegacyGatewayNotice({ gateway }: { gateway: string }) {
+  return (
+    <div className="rounded-md border border-border bg-muted/30 px-2.5 py-1.5 text-[10.5px] text-muted-foreground">
+      This node used to pick gateway{" "}
+      <span className="font-mono text-foreground">{gateway}</span> directly. Calls now
+      follow the project&apos;s pool.
     </div>
   )
 }
