@@ -3873,7 +3873,7 @@ function AICallPoolAssignState({
             placeholder="Search pools…"
             className="h-8 w-full rounded-md border border-input bg-background px-2 text-[11.5px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           />
-          <div className="space-y-1.5">
+          <div className="max-h-[260px] space-y-1.5 overflow-y-auto rounded-md border border-border/40 bg-background/20 p-1.5">
             {filtered.map((p) => {
               const selected = selectedPool?.id === p.id
               const today = poolTodayState(p.id)
