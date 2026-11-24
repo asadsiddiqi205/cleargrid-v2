@@ -44,6 +44,7 @@ import {
   getPoolById,
   getProjectPriority,
   poolTodayState,
+  poolHasPooledAiCapacity,
 } from "@/data/project-pools";
 import {
   getHybridCampaignById,
@@ -1538,6 +1539,30 @@ export default function JourneyCanvas({ journeyId }: JourneyCanvasProps) {
             field: "projectPool",
           });
         } else {
+          // Edge: pool exists but carries no pooled-AI capacity (no
+          // gateways, or every gateway with Pooled AI off). Treat as a
+          // blocker — calls would never dial.
+          if (!poolHasPooledAiCapacity(pool)) {
+            issues.push({
+              severity: "blocker",
+              title: `"${label}" pool ${pool.name} has no pooled-AI capacity`,
+              detail: "Every gateway in this pool has Pooled AI off. Calls won't be dialed.",
+              nodeId: n.id,
+              field: "projectPool",
+            });
+          }
+          // Edge: pool is paused. Non-blocking — authors may publish a
+          // journey against a paused pool intentionally, but we surface
+          // it so it's not a surprise at run time.
+          if (pool.status === "paused") {
+            issues.push({
+              severity: "warning",
+              title: `"${label}" pool ${pool.name} is paused`,
+              detail: "Calls stay queued until a pool admin resumes it.",
+              nodeId: n.id,
+              field: "projectPool",
+            });
+          }
           const priority = staged?.priority ?? getProjectPriority(pool, projectId);
           if (
             priority === "low" &&
