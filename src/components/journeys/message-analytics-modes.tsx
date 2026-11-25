@@ -107,13 +107,19 @@ function emailRows(
     } else {
       senderHealthByRun[run.id] = 0
     }
-    // Share of this run's sends held for volume — same seeded derivation
-    // the single-run overlay uses so the two line up.
+    // Share of this run's sends held for volume — compute the SAME
+    // heldTotalTarget the single-run overlay uses (Math.floor rounds
+    // integer-wise), then divide by sent. The two views then print
+    // the same percentage, including on small-N runs where the
+    // nominal (seed%4+1)% doesn't round to the actual share.
     let seed = 0
     for (let i = 0; i < run.id.length; i++) seed = (seed * 31 + run.id.charCodeAt(i)) >>> 0
     const sent = data.delivery.sent || 0
-    const heldShare = ((seed % 4) + 1) / 100
-    heldPctByRun[run.id] = sent > 0 ? heldShare : 0
+    const heldTotalTarget = Math.min(
+      sent,
+      Math.max(0, Math.floor((sent * ((seed % 4) + 1)) / 100)),
+    )
+    heldPctByRun[run.id] = sent > 0 ? heldTotalTarget / sent : 0
   }
   return [
     { label: "Reached", values: by((d) => d.funnel.reached), format: "count" },
