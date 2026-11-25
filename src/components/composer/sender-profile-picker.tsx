@@ -27,6 +27,8 @@ import {
   ESP_LABEL,
   type SenderProfile,
 } from "@/data/sender-profiles"
+import { statusForDomain, STATUS_LABEL, STATUS_PILL_CLASS } from "@/data/domain-health"
+import { getSentToday, getWarmyDomainByName } from "@/data/warmy"
 
 interface SenderProfilePickerProps {
   /** Lender the campaign belongs to. Filters the list. If missing, we show
@@ -157,27 +159,65 @@ export function SenderProfilePicker({
 }
 
 function ActiveSummary({ profile }: { profile: SenderProfile }) {
+  const domain = profile.fromEmail.includes("@")
+    ? profile.fromEmail.split("@")[1]!
+    : profile.domain.domain
+  const summary = statusForDomain(domain)
+  const sent = getSentToday(domain, "gmail")
+  const rec =
+    getWarmyDomainByName(domain)?.recommended_volume_today.gmail.volume ?? null
+  const left = rec != null ? Math.max(0, rec - sent) : null
   return (
-    <div className="flex min-w-0 flex-1 items-center gap-2">
-      <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded bg-emerald-500/15 text-emerald-300">
-        <Building2 className="h-3 w-3" />
+    <div className="flex min-w-0 flex-1 flex-col gap-1">
+      <div className="flex items-center gap-2">
+        <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded bg-emerald-500/15 text-emerald-300">
+          <Building2 className="h-3 w-3" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-[12px] font-medium text-foreground">{profile.name}</p>
+          <p className="truncate text-[10px] text-muted-foreground">
+            {profile.fromEmail} · {ESP_LABEL[profile.esp]}
+          </p>
+        </div>
+        {profile.domain.verified ? (
+          <Badge className="shrink-0 border-emerald-500/30 bg-emerald-500/10 text-[9px] text-emerald-300">
+            <CheckCircle2 className="mr-0.5 h-2.5 w-2.5" />
+            Verified
+          </Badge>
+        ) : (
+          <Badge className="shrink-0 border-amber-500/30 bg-amber-500/10 text-[9px] text-amber-300">
+            Unverified
+          </Badge>
+        )}
       </div>
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-[12px] font-medium text-foreground">{profile.name}</p>
-        <p className="truncate text-[10px] text-muted-foreground">
-          {profile.fromEmail} · {ESP_LABEL[profile.esp]}
-        </p>
-      </div>
-      {profile.domain.verified ? (
-        <Badge className="shrink-0 border-emerald-500/30 bg-emerald-500/10 text-[9px] text-emerald-300">
-          <CheckCircle2 className="mr-0.5 h-2.5 w-2.5" />
-          Verified
-        </Badge>
-      ) : (
-        <Badge className="shrink-0 border-amber-500/30 bg-amber-500/10 text-[9px] text-amber-300">
-          Unverified
-        </Badge>
-      )}
+      <p className="pl-8 text-[10.5px] text-muted-foreground">
+        Sends from {profile.fromEmail} ·{" "}
+        <span
+          className={cn(
+            summary.status === "healthy" && "text-emerald-300",
+            summary.status === "watch" && "text-amber-300",
+            summary.status === "at_risk" && "text-orange-300",
+            summary.status === "blocked" && "text-red-300",
+            summary.status === "no_data" && "text-neutral-300",
+          )}
+        >
+          {summary.status === "healthy"
+            ? "Healthy"
+            : summary.status === "watch"
+            ? "Watch"
+            : summary.status === "at_risk"
+            ? "At risk"
+            : summary.status === "blocked"
+            ? "Blocked"
+            : "No data"}
+        </span>
+        {left != null && (
+          <>
+            {" · "}
+            {left.toLocaleString()} of today&apos;s Gmail volume left
+          </>
+        )}
+      </p>
     </div>
   )
 }
@@ -218,6 +258,13 @@ function ProfileRow({
           <Badge className="border-zinc-700 bg-zinc-800 text-[9px] text-zinc-300">
             {profile.lenderName}
           </Badge>
+          <ProfileDomainStatusBadge
+            domain={
+              profile.fromEmail.includes("@")
+                ? profile.fromEmail.split("@")[1]!
+                : profile.domain.domain
+            }
+          />
           {profile.domain.verified ? (
             <Badge className="border-emerald-500/30 bg-emerald-500/10 text-[9px] text-emerald-300">
               <CheckCircle2 className="mr-0.5 h-2.5 w-2.5" />
@@ -548,4 +595,13 @@ export function deriveDefaultSenderProfile(lenderId: string | null): string | nu
     (p) => p.lenderId === lenderId && p.status === "active" && p.domain.verified,
   )
   return lenderPick?.id ?? null
+}
+
+function ProfileDomainStatusBadge({ domain }: { domain: string }) {
+  const s = statusForDomain(domain)
+  return (
+    <Badge className={cn("border text-[9px]", STATUS_PILL_CLASS[s.status])}>
+      {STATUS_LABEL[s.status]}
+    </Badge>
+  )
 }

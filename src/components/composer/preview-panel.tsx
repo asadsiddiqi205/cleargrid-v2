@@ -53,6 +53,8 @@ import type { ComposerState, RecurrenceFreq, SendMode, SendSchedule } from "@/co
 import { richEmailTemplates } from "@/data/rich-email-templates"
 import { getSenderProfileById } from "@/data/sender-profiles"
 import { MessagePreview } from "@/components/shared/message-preview"
+import { statusForDomain } from "@/data/domain-health"
+import { getSentToday, getWarmyDomainByName } from "@/data/warmy"
 
 interface PreviewPanelProps {
   state: ComposerState
@@ -315,6 +317,9 @@ export function PreviewPanel({
           />
           <CheckRow kind="ok" label="Template approved by compliance" />
           <CheckRow kind="ok" label="Required legal disclosures included" />
+          {state.channel === "email" && (
+            <SenderDomainCheckRow state={state} />
+          )}
         </div>
       </section>
 
@@ -395,6 +400,15 @@ export function PreviewPanel({
                 label: `Variation splits sum to ${variationSplitSum}%, not 100%`,
                 detail: "Adjust the traffic split on each variation.",
               })
+            }
+            if (state.channel === "email") {
+              const check = computeSenderDomainCheck(state)
+              if (check.kind === "fail") {
+                blockers.push({
+                  label: check.label,
+                  detail: check.detail ?? "Pick another sender profile, or wait for the domain to clear.",
+                })
+              }
             }
             const blocked = blockers.length > 0
             return (
@@ -521,6 +535,105 @@ export function PreviewPanel({
 }
 
 // ---------- Subcomponents ----------
+
+type SenderDomainCheck = {
+  kind: "ok" | "warn" | "fail"
+  label: string
+  detail?: string
+  domain: string | null
+  profileName: string | null
+}
+
+/** Computes the Sender domain safety check for the current compose
+ *  state. Also used by the Review-and-send button to refuse Fail. */
+export function computeSenderDomainCheck(state: ComposerState): SenderDomainCheck {
+  const spId = state.senderProfileId
+  const profile = spId ? getSenderProfileById(spId) : null
+  if (!profile) {
+    return {
+      kind: "warn",
+      label: "Pick a sender profile",
+      detail: "The Sender domain check runs once you pick one.",
+      domain: null,
+      profileName: null,
+    }
+  }
+  const domain = profile.fromEmail.includes("@")
+    ? profile.fromEmail.split("@")[1]!
+    : profile.domain.domain
+  const summary = statusForDomain(domain)
+  if (summary.status === "blocked" || summary.paused) {
+    return {
+      kind: "fail",
+      label: `Sender domain ${domain} is ${summary.paused ? "paused by ops" : "Blocked"}`,
+      detail: summary.reasons[0] ?? "This domain can't send today.",
+      domain,
+      profileName: profile.name,
+    }
+  }
+  if (summary.status === "at_risk") {
+    return {
+      kind: "warn",
+      label: `Sender domain ${domain} is At risk`,
+      detail: summary.reasons[0] ?? "Delivery may dip.",
+      domain,
+      profileName: profile.name,
+    }
+  }
+  // Healthy / Watch / No data → pass. Audience cross-check below may
+  // still warn.
+  const w = getWarmyDomainByName(domain)
+  const sent = w ? getSentToday(domain, "gmail") : 0
+  const rec = w?.recommended_volume_today.gmail.volume ?? null
+  const left = rec != null ? Math.max(0, rec - sent) : null
+  const detail = left != null ? `${left.toLocaleString()} of today's Gmail volume left` : undefined
+  return {
+    kind: summary.status === "watch" ? "warn" : "ok",
+    label: `Sender domain ${domain} is ${summary.status === "watch" ? "on Watch" : summary.status === "no_data" ? "not matched in Warmy" : "Healthy"}`,
+    detail,
+    domain,
+    profileName: profile.name,
+  }
+}
+
+function SenderDomainCheckRow({ state }: { state: ComposerState }) {
+  const check = computeSenderDomainCheck(state)
+  const Icon =
+    check.kind === "ok" ? CheckCircle2 : check.kind === "fail" ? AlertTriangle : AlertTriangle
+  return (
+    <div
+      className={cn(
+        "flex items-start gap-1.5 rounded-md px-2 py-1 text-[11px]",
+        check.kind === "ok" && "bg-emerald-500/10 text-emerald-200",
+        check.kind === "warn" && "bg-amber-500/10 text-amber-300",
+        check.kind === "fail" && "bg-red-500/10 text-red-300",
+      )}
+    >
+      <Icon
+        className={cn(
+          "mt-0.5 h-3 w-3 shrink-0",
+          check.kind === "ok" && "text-emerald-300",
+          check.kind === "warn" && "text-amber-400",
+          check.kind === "fail" && "text-red-400",
+        )}
+      />
+      <div className="min-w-0 flex-1">
+        <div>{check.label}</div>
+        {check.detail && <div className="text-[10.5px] opacity-80">{check.detail}</div>}
+        {check.kind === "fail" && check.domain && (
+          <a
+            href={`/lender-config/sender-profiles?domain=${check.domain}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-[10.5px] underline"
+          >
+            Open domain
+          </a>
+        )}
+      </div>
+    </div>
+  )
+}
 
 function CheckRow({
   kind,
