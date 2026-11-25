@@ -11,20 +11,24 @@ interface PageShellProps {
     onClick?: () => void;
     icon?: LucideIcon;
   };
+  /** Arbitrary header-right slot; takes precedence over `action` when set. */
+  actions?: React.ReactNode;
   children: React.ReactNode;
 }
 
-export function PageShell({ title, description, action, children }: PageShellProps) {
+export function PageShell({ title, description, action, actions, children }: PageShellProps) {
   return (
     <div className="flex-1 space-y-6 p-6">
-      <div className="flex items-center justify-between">
-        <div>
+      <div className="flex items-start justify-between gap-3">
+        <div className="max-w-3xl">
           <h1 className="text-2xl font-bold tracking-tight">{title}</h1>
           {description && (
             <p className="text-sm text-muted-foreground mt-1">{description}</p>
           )}
         </div>
-        {action && (
+        {actions ? (
+          <div className="shrink-0">{actions}</div>
+        ) : action && (
           action.href ? (
             <Link
               href={action.href}

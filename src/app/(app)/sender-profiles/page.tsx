@@ -4,19 +4,15 @@ import * as React from "react"
 import { toast } from "sonner"
 import {
   AtSign,
-  Building2,
   CheckCircle2,
-  Cog,
+  ChevronDown,
   Plus,
   Search,
-  Shield,
-  ShieldAlert,
 } from "lucide-react"
 import { PageShell } from "@/components/shared/page-shell"
 import { DncCheck } from "@/components/shared/dnc-check"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Badge } from "@/components/ui/badge"
 import {
   Dialog,
   DialogContent,
@@ -80,56 +76,66 @@ export default function SenderProfilesPage() {
   return (
     <PageShell
       title="Sender profiles"
-      description="Governed sender identities for outbound campaigns. Admin-only. The composer picks from this list — no free-typing of from-name, from-email, or route."
-    >
-      <WarmyAlertBanner />
-
-      {/* Tabs */}
-      <div className="mb-4 flex items-center justify-between border-b border-border">
-        <div className="flex items-center gap-1">
-          <TabButton active={tab === "profiles"} onClick={() => setTab("profiles")}>
-            Profiles
-          </TabButton>
-          <TabButton active={tab === "domains"} onClick={() => setTab("domains")}>
-            Domains
-          </TabButton>
-        </div>
-        <div className="flex items-center gap-2 pb-1.5">
+      description="Governed email sender identities for outbound campaigns. Admin-only. The composer picks from this list — no free-typing of from-name, from-email, or route."
+      actions={
+        <div className="flex items-center gap-2">
           <WarmyConnectionButton />
           <Button onClick={() => setCreateOpen(true)}>
             <Plus className="h-3.5 w-3.5" />
             New sender profile
           </Button>
         </div>
+      }
+    >
+      <WarmyAlertBanner />
+
+      {/* Tabs */}
+      <div className="mb-4 flex items-center border-b border-border">
+        <TabButton active={tab === "profiles"} onClick={() => setTab("profiles")}>
+          Profiles
+        </TabButton>
+        <TabButton active={tab === "domains"} onClick={() => setTab("domains")}>
+          Domains
+        </TabButton>
       </div>
 
       {tab === "profiles" ? (
         <>
-          {/* Toolbar */}
-          <div className="mb-4 flex flex-wrap items-center gap-2">
-            <div className="relative flex-1 max-w-md">
-              <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search by name, email, or domain…"
-                className="pl-8"
-              />
+          {/* Toolbar — labelled filters, roughly half the width each */}
+          <div className="mb-4 grid gap-3 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                Search
+              </label>
+              <div className="relative">
+                <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Search by name, email, or domain…"
+                  className="pl-8"
+                />
+              </div>
             </div>
-            <Select value={lenderFilter} onValueChange={(v) => setLenderFilter(v ?? "all")}>
-              <SelectTrigger className="w-52">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All lenders</SelectItem>
-                <SelectItem value="general">General (cross-lender)</SelectItem>
-                {lenders.map((l) => (
-                  <SelectItem key={l.id} value={l.id}>
-                    {l.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                Lender
+              </label>
+              <Select value={lenderFilter} onValueChange={(v) => setLenderFilter(v ?? "all")}>
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All lenders</SelectItem>
+                  <SelectItem value="general">General (cross-lender)</SelectItem>
+                  {lenders.map((l) => (
+                    <SelectItem key={l.id} value={l.id}>
+                      {l.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
 
           {/* Table */}
@@ -190,7 +196,7 @@ export default function SenderProfilesPage() {
 
 function Th({ children }: { children: React.ReactNode }) {
   return (
-    <th className="px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+    <th className="px-4 py-3 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
       {children}
     </th>
   )
@@ -222,107 +228,90 @@ function TabButton({
 }
 
 function ProfileRow({ profile }: { profile: SenderProfile }) {
-  const verified = profile.domain.verified
   const domainStatuses = profile.domains.map((d) => statusForDomain(d.domain))
   const atRisk = domainStatuses.filter((s) => s.status === "at_risk").length
   const blocked = domainStatuses.filter((s) => s.status === "blocked").length
   const watch = domainStatuses.filter((s) => s.status === "watch").length
+  const paused = domainStatuses.filter((s) => s.paused).length
   const summary = (() => {
     const parts: string[] = [`${profile.domains.length} domain${profile.domains.length === 1 ? "" : "s"}`]
     if (blocked) parts.push(`${blocked} blocked`)
     if (atRisk) parts.push(`${atRisk} at risk`)
-    if (!blocked && !atRisk && watch) parts.push(`${watch} watch`)
+    if (paused) parts.push(`${paused} paused`)
+    if (!blocked && !atRisk && !paused && watch) parts.push(`${watch} watch`)
     return parts.join(" · ")
   })()
+  const updatedAt = new Date(profile.updatedAt)
+  const dateStr = updatedAt.toLocaleDateString("en-GB", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  })
 
   return (
-    <tr className="border-b border-border/50 last:border-0 hover:bg-muted/20">
-      <td className="max-w-[240px] px-3 py-3">
-        <div className="flex items-center gap-2">
-          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded bg-emerald-500/15 text-emerald-300">
-            <Building2 className="h-3.5 w-3.5" />
+    <tr className="border-b border-border/50 last:border-0 align-top hover:bg-muted/20">
+      <td className="px-4 py-4">
+        <div className="flex items-start gap-3">
+          <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-emerald-500/15 text-emerald-300">
+            <AtSign className="h-4 w-4" />
           </div>
           <div className="min-w-0">
-            <p className="truncate text-[13px] font-medium text-foreground">{profile.name}</p>
-            <p className="truncate text-[10px] text-muted-foreground">{profile.lenderName}</p>
+            <p className="truncate text-[14px] font-semibold text-foreground">{profile.name}</p>
+            <p className="truncate text-[11.5px] text-muted-foreground">{profile.lenderName}</p>
           </div>
         </div>
       </td>
-      <td className="max-w-[220px] px-3 py-3">
-        <p className="truncate text-[12px] text-foreground">{profile.fromName}</p>
-        <p className="truncate font-mono text-[10px] text-muted-foreground">{profile.fromEmail}</p>
+      <td className="px-4 py-4">
+        <p className="text-[12.5px] text-foreground">{profile.fromName}</p>
+        <p className="text-[11px] text-muted-foreground">{profile.fromEmail}</p>
       </td>
-      <td className="max-w-[180px] px-3 py-3">
-        <p className="truncate font-mono text-[11px] text-muted-foreground">{profile.replyTo}</p>
+      <td className="px-4 py-4">
+        <p className="text-[11.5px] text-muted-foreground">{profile.replyTo}</p>
       </td>
-      <td className="px-3 py-3">
-        <div className="space-y-1">
-          <div className="text-[11px] font-mono text-muted-foreground">
-            {profile.prefix}@
-          </div>
-          <div className="flex flex-wrap items-center gap-1.5">
-            {profile.domains.map((d) => (
-              <span
-                key={d.domain}
-                className="inline-flex items-center gap-1 rounded border border-border/60 bg-background px-1.5 py-0.5 font-mono text-[10px] text-foreground"
-              >
-                <DomainStatusDot domain={d.domain} size="xs" />
-                {d.domain}
-              </span>
-            ))}
-          </div>
-          <div className="flex flex-wrap items-center gap-1">
-            <StateChip label="SPF" state={profile.domain.spf} />
-            <StateChip label="DKIM" state={profile.domain.dkim} />
-            <StateChip label="DMARC" state={profile.domain.dmarc} />
-          </div>
-          <p className="text-[9.5px] text-muted-foreground">{summary}</p>
-        </div>
+      <td className="px-4 py-4 max-w-sm">
+        <p className="text-[12.5px] text-foreground">{profile.prefix}</p>
+        <p className="text-[11px] leading-relaxed text-muted-foreground">
+          {profile.domains.map((d, i) => (
+            <React.Fragment key={d.domain}>
+              {i > 0 && ", "}
+              <DomainTextWithDot domain={d.domain} />
+            </React.Fragment>
+          ))}
+        </p>
+        <p className="mt-1 text-[10px] text-muted-foreground/80">{summary}</p>
       </td>
-      <td className="px-3 py-3">
-        <Badge className="border-zinc-700 bg-zinc-800 text-zinc-200">{ESP_LABEL[profile.esp]}</Badge>
+      <td className="px-4 py-4 text-[12px] text-foreground">
+        {ESP_LABEL[profile.esp]}
       </td>
-      <td className="px-3 py-3">
-        {profile.status === "active" && verified ? (
-          <Badge className="border-emerald-500/30 bg-emerald-500/10 text-emerald-300">
-            <CheckCircle2 className="h-2.5 w-2.5" />
+      <td className="px-4 py-4">
+        {profile.status === "active" ? (
+          <span className="inline-flex items-center gap-1 text-[12px] text-emerald-300">
+            <CheckCircle2 className="h-3.5 w-3.5" />
             Active
-          </Badge>
-        ) : !verified ? (
-          <Badge className="border-amber-500/30 bg-amber-500/10 text-amber-300">
-            <ShieldAlert className="h-2.5 w-2.5" />
-            Domain unverified
-          </Badge>
+          </span>
         ) : (
-          <Badge className="border-zinc-700 bg-zinc-800 text-zinc-400">Inactive</Badge>
+          <span className="inline-flex items-center gap-1 text-[12px] text-muted-foreground">
+            Inactive
+          </span>
         )}
       </td>
-      <td className="px-3 py-3 text-[11px] text-muted-foreground">
-        {new Date(profile.updatedAt).toLocaleDateString()}
-        <br />
-        <span className="text-[10px]">by {profile.updatedBy}</span>
+      <td className="px-4 py-4 text-[11.5px] text-muted-foreground">
+        {dateStr}
+        <div className="text-[10.5px]">by {profile.updatedBy}</div>
       </td>
     </tr>
   )
 }
 
-function StateChip({
-  label,
-  state,
-}: {
-  label: string
-  state: "pass" | "fail" | "pending"
-}) {
+/** Domain text with a tiny health-status dot inline. Keeps the screenshot's
+ *  plain-text feel while still surfacing Warmy at a glance. */
+function DomainTextWithDot({ domain }: { domain: string }) {
+  const s = statusForDomain(domain)
+  const show = s.status !== "healthy" || s.paused
   return (
-    <span
-      className={cn(
-        "inline-flex items-center gap-0.5 rounded px-1 py-0.5 text-[9px] font-medium",
-        state === "pass" && "bg-emerald-500/15 text-emerald-300",
-        state === "fail" && "bg-red-500/15 text-red-300",
-        state === "pending" && "bg-amber-500/15 text-amber-300",
-      )}
-    >
-      {label} {state}
+    <span className="inline-flex items-center gap-1">
+      {show && <DomainStatusDot domain={domain} size="xs" />}
+      <span>{domain}</span>
     </span>
   )
 }
@@ -438,108 +427,37 @@ function NewProfileDialog({
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="max-w-xl">
+      <DialogContent className="max-w-2xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <AtSign className="h-4 w-4 text-emerald-400" />
             New sender profile
           </DialogTitle>
           <DialogDescription>
-            Governed sender identity. Domain verification is required before this profile can be
-            picked in the composer.
+            Governed email sender identity. Credentials stay on the email sender connection and
+            are loaded by configuration id.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-3">
+        <div className="space-y-4">
           <div className="grid grid-cols-2 gap-3">
             <Field label="Display name">
               <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Mashreq Collections" />
             </Field>
             <Field label="Lender">
-              <select
-                value={lenderId}
-                onChange={(e) => setLenderId(e.target.value)}
-                className="h-9 w-full rounded-md border border-border bg-background px-2 text-sm"
-              >
-                <option value="general">General (cross-lender)</option>
-                {lenders.map((l) => (
-                  <option key={l.id} value={l.id}>
-                    {l.name}
-                  </option>
-                ))}
-              </select>
-            </Field>
-          </div>
-
-          <Field label="From name (what recipients see)">
-            <Input
-              value={fromName}
-              onChange={(e) => setFromName(e.target.value)}
-              placeholder="e.g. Mashreq Collections"
-            />
-          </Field>
-
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="From email">
-              <Input
-                value={fromEmail}
-                onChange={(e) => setFromEmail(e.target.value)}
-                placeholder="collections@mashreq.com"
-                className="font-mono text-[12px]"
-              />
-              {fromEmailStatus && (
-                <FromEmailStatusLine status={fromEmailStatus} domain={domainFromEmail} />
-              )}
-            </Field>
-            <Field label="Reply-to">
-              <Input
-                value={replyTo}
-                onChange={(e) => setReplyTo(e.target.value)}
-                placeholder="reply@mashreq.com"
-                className="font-mono text-[12px]"
-              />
-            </Field>
-          </div>
-
-          <div className="grid grid-cols-[120px,1fr] gap-3">
-            <Field label="Prefix">
-              <Input
-                value={prefixInput}
-                onChange={(e) => setPrefixInput(e.target.value)}
-                placeholder={effectivePrefix || "collections"}
-                className="font-mono text-[12px]"
-              />
-            </Field>
-            <Field label="Domains (Journey rotation)">
-              <DomainMultiSelect
-                value={effectiveDomains}
-                onChange={setSelectedDomains}
-                primary={domainFromEmail}
-              />
-              <p className="mt-1 text-[10px] text-muted-foreground">
-                Journey sends rotate {effectivePrefix || "<prefix>"}@domain across these domains,
-                skipping any that are blocked, paused or out of today&apos;s volume. Composer
-                sends still use the from email above.
-              </p>
-            </Field>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="CC (comma-separated)">
-              <Input
-                value={ccList}
-                onChange={(e) => setCcList(e.target.value)}
-                placeholder="Optional"
-                className="font-mono text-[12px]"
-              />
-            </Field>
-            <Field label="BCC (comma-separated)">
-              <Input
-                value={bccList}
-                onChange={(e) => setBccList(e.target.value)}
-                placeholder="compliance-log@…"
-                className="font-mono text-[12px]"
-              />
+              <Select value={lenderId} onValueChange={(v) => setLenderId(v ?? "general")}>
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="general">General (cross-lender)</SelectItem>
+                  {lenders.map((l) => (
+                    <SelectItem key={l.id} value={l.id}>
+                      {l.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </Field>
           </div>
 
@@ -556,10 +474,76 @@ function NewProfileDialog({
                 ))}
               </SelectContent>
             </Select>
-            <p className="mt-1 text-[10px] text-muted-foreground">
-              KSA-vs-UAE routing lives here — the composer never picks a raw provider.
+            <p className="mt-1 text-[10.5px] text-muted-foreground">
+              Email routing for this profile — the composer never picks a raw provider.
             </p>
           </Field>
+
+          <Field label="From name (what recipients see)">
+            <Input
+              value={fromName}
+              onChange={(e) => setFromName(e.target.value)}
+              placeholder="e.g. Mashreq Collections"
+            />
+          </Field>
+
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="From email">
+              <Input
+                value={fromEmail}
+                onChange={(e) => setFromEmail(e.target.value)}
+                placeholder="collections@mashreq.com"
+              />
+              {fromEmailStatus && (
+                <FromEmailStatusLine status={fromEmailStatus} domain={domainFromEmail} />
+              )}
+            </Field>
+            <Field label="Reply-to">
+              <Input
+                value={replyTo}
+                onChange={(e) => setReplyTo(e.target.value)}
+                placeholder="reply@mashreq.com"
+              />
+            </Field>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Prefix">
+              <Input
+                value={prefixInput}
+                onChange={(e) => setPrefixInput(e.target.value)}
+                placeholder={effectivePrefix || "e.g. support"}
+              />
+            </Field>
+            <Field label="Domains">
+              <DomainMultiSelect
+                value={effectiveDomains}
+                onChange={setSelectedDomains}
+                primary={domainFromEmail}
+              />
+            </Field>
+          </div>
+          <p className="-mt-2 text-[10.5px] text-muted-foreground">
+            Journey sends rotate <code className="font-mono">prefix@domain</code> across the
+            domains selected here. Composer sends still use the from email above.
+          </p>
+
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="CC (comma-separated)">
+              <Input
+                value={ccList}
+                onChange={(e) => setCcList(e.target.value)}
+                placeholder="Optional"
+              />
+            </Field>
+            <Field label="BCC (comma-separated)">
+              <Input
+                value={bccList}
+                onChange={(e) => setBccList(e.target.value)}
+                placeholder="compliance-log@…"
+              />
+            </Field>
+          </div>
 
           <Field label="Description (optional)">
             <Input
@@ -568,32 +552,13 @@ function NewProfileDialog({
               placeholder="When should agents use this profile?"
             />
           </Field>
-
-          {domainFromEmail && (
-            <div className="flex items-start gap-2 rounded-md border border-amber-500/30 bg-amber-500/5 p-3 text-[11px]">
-              <Shield className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-400" />
-              <div>
-                <p className="font-medium text-amber-300">
-                  {domainFromEmail} needs to be verified before this profile can be used.
-                </p>
-                <p className="mt-1 text-amber-300/80">
-                  In production, DNS-based SPF / DKIM / DMARC checks run against the domain. In this
-                  prototype we mark the state as pending — an admin flips it once real verification
-                  completes.
-                </p>
-              </div>
-            </div>
-          )}
         </div>
 
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>
             Cancel
           </Button>
-          <Button onClick={handleSave}>
-            <Cog className="h-3 w-3" />
-            Create profile
-          </Button>
+          <Button onClick={handleSave}>Create profile</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -647,19 +612,29 @@ function DomainMultiSelect({
   onChange: (next: string[]) => void
   primary: string
 }) {
+  const [open, setOpen] = React.useState(false)
+  const rootRef = React.useRef<HTMLDivElement | null>(null)
+
+  // Close on click outside.
+  React.useEffect(() => {
+    if (!open) return
+    const onDoc = (e: MouseEvent) => {
+      if (rootRef.current && !rootRef.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener("mousedown", onDoc)
+    return () => document.removeEventListener("mousedown", onDoc)
+  }, [open])
+
   // Universe = every Warmy-known domain + every domain already on a
   // seeded profile + the current from-email domain.
   const all = React.useMemo(() => {
     const set = new Set<string>()
-    for (const w of listWarmyDomains()) {
-      set.add(w.name.toLowerCase())
-    }
+    for (const w of listWarmyDomains()) set.add(w.name.toLowerCase())
     for (const p of SEED_PROFILES) {
       for (const d of p.domains) set.add(d.domain.toLowerCase())
     }
     if (primary) set.add(primary.toLowerCase())
     const list = [...set].map((d) => statusForDomain(d))
-    // Healthiest first.
     const rank: Record<string, number> = {
       healthy: 0,
       watch: 1,
@@ -685,61 +660,76 @@ function DomainMultiSelect({
   const blocked = value.filter((v) => statusForDomain(v).status === "blocked").length
   const watch = value.filter((v) => statusForDomain(v).status === "watch").length
 
+  const label = value.length === 0
+    ? "Select one or more domains"
+    : value.length <= 2
+    ? value.join(", ")
+    : `${value.slice(0, 2).join(", ")} +${value.length - 2}`
+
   return (
-    <div className="space-y-1.5">
-      <div className="max-h-40 space-y-0.5 overflow-y-auto rounded-md border border-border bg-background/40 p-1">
-        {all.map((s) => {
-          const isSelected = selected.has(s.name.toLowerCase())
-          const isPrimary = s.name.toLowerCase() === primary.toLowerCase()
-          const w = s.warmy
-          const vol = w ? w.recommended_volume_today.gmail : null
-          return (
-            <button
-              key={s.name}
-              type="button"
-              onClick={() => toggle(s.name)}
-              className={cn(
-                "flex w-full items-center gap-2 rounded px-1.5 py-1 text-left text-[11px]",
-                isSelected ? "bg-primary/10" : "hover:bg-muted/40",
-              )}
-            >
-              <input
-                type="checkbox"
-                checked={isSelected}
-                readOnly
-                className="h-3 w-3 shrink-0"
-              />
-              <DomainStatusDot domain={s.name} size="xs" />
-              <span className="min-w-0 flex-1 truncate font-mono">{s.name}</span>
-              <span className="text-[10px] text-muted-foreground">
-                {w ? `health ${w.health_score.total}` : "no Warmy"}
-              </span>
-              {vol && vol.volume != null && (
-                <span className="text-[10px] tabular-nums text-muted-foreground">
-                  {vol.volume.toLocaleString()} today
+    <div ref={rootRef} className="relative space-y-1.5">
+      <button
+        type="button"
+        onClick={() => setOpen((s) => !s)}
+        className={cn(
+          "flex h-9 w-full items-center justify-between rounded-md border border-input bg-background px-2.5 text-sm",
+          value.length === 0 && "text-muted-foreground",
+        )}
+      >
+        <span className="min-w-0 flex-1 truncate text-left">{label}</span>
+        <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
+      </button>
+      {open && (
+        <div className="absolute left-0 right-0 top-full z-10 mt-1 max-h-64 overflow-y-auto rounded-md border border-border bg-popover p-1 shadow-lg">
+          {all.map((s) => {
+            const isSelected = selected.has(s.name.toLowerCase())
+            const isPrimary = s.name.toLowerCase() === primary.toLowerCase()
+            const w = s.warmy
+            return (
+              <button
+                key={s.name}
+                type="button"
+                onClick={() => toggle(s.name)}
+                className={cn(
+                  "flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[12px]",
+                  isSelected ? "bg-primary/10" : "hover:bg-muted/40",
+                )}
+              >
+                <input
+                  type="checkbox"
+                  checked={isSelected}
+                  readOnly
+                  className="h-3 w-3 shrink-0"
+                />
+                <DomainStatusDot domain={s.name} size="xs" />
+                <span className="min-w-0 flex-1 truncate">{s.name}</span>
+                <span className="text-[10.5px] text-muted-foreground">
+                  {w ? `health ${w.health_score.total}` : "no Warmy"}
                 </span>
-              )}
-              {isPrimary && (
-                <span className="rounded bg-primary/15 px-1 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-primary">
-                  From-email
-                </span>
-              )}
-              {s.status === "blocked" && (
-                <span className="text-[10px] text-red-300">Blocked — warn on send</span>
-              )}
-              {s.paused && (
-                <span className="text-[10px] text-neutral-300">Paused</span>
-              )}
-            </button>
-          )
-        })}
-      </div>
-      <p className="text-[10.5px] text-muted-foreground">
-        {value.length} domain{value.length === 1 ? "" : "s"} · {healthy} healthy
-        {watch ? ` · ${watch} watch` : ""}
-        {atRisk ? ` · ${atRisk} at risk` : ""}
-        {blocked ? ` · ${blocked} blocked by Gmail` : ""}
-      </p>
+                {isPrimary && (
+                  <span className="rounded bg-primary/15 px-1 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-primary">
+                    From-email
+                  </span>
+                )}
+                {s.status === "blocked" && (
+                  <span className="text-[10px] text-red-300">Blocked</span>
+                )}
+                {s.paused && (
+                  <span className="text-[10px] text-neutral-300">Paused</span>
+                )}
+              </button>
+            )
+          })}
+        </div>
+      )}
+      {value.length > 0 && (
+        <p className="text-[10.5px] text-muted-foreground">
+          {value.length} domain{value.length === 1 ? "" : "s"} · {healthy} healthy
+          {watch ? ` · ${watch} watch` : ""}
+          {atRisk ? ` · ${atRisk} at risk` : ""}
+          {blocked ? ` · ${blocked} blocked by Gmail` : ""}
+        </p>
+      )}
     </div>
   )
 }
