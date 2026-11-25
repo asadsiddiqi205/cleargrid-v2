@@ -1039,15 +1039,29 @@ function buildWarmyOverlay(
     .map((d) => getWarmyDomainByName(d.domain))
     .filter((w): w is NonNullable<typeof w> => Boolean(w))
   const providerExtras: Record<string, WarmyPerProvider> = {}
+  // Per-provider placement weighted by this run's sends per domain, so
+  // the Gmail and Outlook rows differ even when Warmy has similar
+  // averages — a domain that took most of the run's Gmail sends pulls
+  // the Gmail number toward its own placement reading.
+  const sentByDomain = new Map(
+    senderRows.map((r) => [r.domain.toLowerCase(), r.sent] as const),
+  )
   const pickPct = (key: "gmail" | "gsuite" | "outlook"): number | null => {
     if (warmyDomains.length === 0) return null
-    let sumPct = 0
+    let sumPctWeighted = 0
+    let totalWeight = 0
+    let sumPctFallback = 0
     let n = 0
     for (const w of warmyDomains) {
-      sumPct += w.placement_checker[key].inbox_pct
+      const pct = w.placement_checker[key].inbox_pct
+      const weight = sentByDomain.get(w.name.toLowerCase()) ?? 0
+      sumPctWeighted += pct * weight
+      totalWeight += weight
+      sumPctFallback += pct
       n++
     }
-    return n > 0 ? Math.round(sumPct / n) : null
+    if (totalWeight > 0) return Math.round(sumPctWeighted / totalWeight)
+    return n > 0 ? Math.round(sumPctFallback / n) : null
   }
   const gmailPct = pickPct("gmail")
   const outlookPct = pickPct("outlook")
