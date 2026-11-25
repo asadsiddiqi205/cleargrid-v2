@@ -261,7 +261,7 @@ function ScopeRow({
               useAll && "opacity-40",
             )}
           />
-          <span className="text-foreground">{itemWord}s</span>
+          <span className="text-foreground">{itemWord === "address" ? "addresses" : `${itemWord}s`}</span>
         </label>
       </div>
     </div>

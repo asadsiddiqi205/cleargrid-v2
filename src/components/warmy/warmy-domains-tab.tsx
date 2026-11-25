@@ -249,6 +249,7 @@ function DomainRow({
             recommended={worst.recommended ?? 0}
             missing={worst.missing}
             label={PROVIDER_LABEL[worst.provider]}
+            composerOver={worst.composerOver}
           />
         )}
       </td>
@@ -307,6 +308,7 @@ function worstVolume(w: WarmyDomain | null) {
   let best: {
     provider: WarmyProvider
     sent: number
+    composerOver: number
     recommended: number | null
     missing: string | undefined
     sharePct: number
@@ -315,10 +317,21 @@ function worstVolume(w: WarmyDomain | null) {
     const rv = w.recommended_volume_today[p]
     const sent = getSentToday(w.name, p)
     totalSent += sent
+    const composerOver = getComposerOvershoot(w.name, p)
+    // Journey-side sent is capped at the recommended cap; anything past
+    // that is attributed to Composer sends via the shadow counter.
+    const journeySent = rv.volume != null ? Math.min(sent - composerOver, rv.volume) : sent - composerOver
     const recommended = rv.volume
-    const sharePct = recommended != null && recommended > 0 ? sent / recommended : sent > 0 ? Infinity : 0
+    const sharePct = recommended != null && recommended > 0 ? journeySent / recommended : sent > 0 ? Infinity : 0
     if (!best || sharePct > best.sharePct) {
-      best = { provider: p, sent, recommended, missing: rv.missing_data, sharePct }
+      best = {
+        provider: p,
+        sent: Math.max(0, journeySent),
+        composerOver,
+        recommended,
+        missing: rv.missing_data,
+        sharePct,
+      }
     }
   }
   if (totalSent === 0) return { noSendsToday: true as const }
@@ -330,11 +343,13 @@ function VolumeBar({
   recommended,
   missing,
   label,
+  composerOver = 0,
 }: {
   sent: number
   recommended: number
   missing: string | undefined
   label: string
+  composerOver?: number
 }) {
   const pct = recommended > 0 ? Math.min(100, Math.round((sent / recommended) * 100)) : 0
   const used = recommended > 0 && sent >= recommended
@@ -350,6 +365,11 @@ function VolumeBar({
       <div className="mt-0.5 h-1 w-full overflow-hidden rounded bg-muted/60">
         <div className={cn("h-full", tone)} style={{ width: `${pct}%` }} />
       </div>
+      {composerOver > 0 && (
+        <p className="mt-0.5 text-[9px] font-medium text-amber-600 dark:text-amber-300">
+          +{composerOver} over from Composer sends
+        </p>
+      )}
       {missing && (
         <p className="mt-0.5 text-[9px] text-muted-foreground">{missingLabel(missing)}</p>
       )}

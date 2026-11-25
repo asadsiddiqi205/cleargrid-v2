@@ -621,9 +621,10 @@ function NewProfileDialog({
               </Field>
             </div>
             <p className="mt-1.5 text-[11px] text-muted-foreground">
-              Journey sends rotate <code className="font-mono text-foreground/80">prefix@domain</code> across these
-              domains, skipping any that are blocked, paused or out of today&apos;s volume.
-              Composer sends still use the from email above.
+              Journey sends rotate{" "}
+              <code className="font-mono text-foreground/80">prefix@domain</code>{" "}
+              across these domains, skipping any that are blocked, paused or out of
+              today&apos;s volume. Composer sends still use the from email above.
             </p>
           </div>
 

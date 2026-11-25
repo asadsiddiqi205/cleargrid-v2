@@ -637,7 +637,7 @@ export function OverTimeView({
                 )}
                 <th className="px-2 py-1.5 text-right">PTP</th>
                 <th className="px-2 py-1.5 text-right">Collection</th>
-                <th className="px-2 py-1.5">Delivered</th>
+                <th className="px-2 py-1.5">Delivered trend</th>
               </tr>
             </thead>
             <tbody>

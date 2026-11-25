@@ -55,7 +55,7 @@ function prng(seed: number) {
   }
 }
 
-const NOW = new Date("2026-08-25T09:00:00Z").getTime()
+const NOW = new Date("2026-11-24T09:00:00Z").getTime()
 const ONE_HOUR = 3_600_000
 const ONE_DAY = ONE_HOUR * 24
 
