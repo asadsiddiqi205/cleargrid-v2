@@ -26,6 +26,8 @@ import {
 } from "@/data/message-analytics"
 import { EMPTY_FILTERS } from "./analytics-filter-bar"
 import { loadJourneySettings } from "@/data/journey-settings"
+import { getSenderProfileById } from "@/data/sender-profiles"
+import { getWarmyDomainByName } from "@/data/warmy"
 
 export type MessageChannel = "email" | "sms"
 
@@ -79,11 +81,39 @@ type Row = {
 
 function emailRows(
   perRun: Array<{ run: JourneyRun; data: EmailAnalytics }>,
+  senderProfileId?: string | null,
 ): Row[] {
   const by = (fn: (d: EmailAnalytics) => number) => {
     const out: Record<string, number> = {}
     for (const { run, data } of perRun) out[run.id] = fn(data)
     return out
+  }
+  const profile = senderProfileId ? getSenderProfileById(senderProfileId) : null
+  // Warmy metrics — deterministic per-run derivations so authors reading
+  // the Compare table see a drop in opens next to the rotation health
+  // signal that caused it.
+  const senderHealthByRun: Record<string, number> = {}
+  const heldPctByRun: Record<string, number> = {}
+  for (const { run, data } of perRun) {
+    if (profile) {
+      // Average Warmy health score across the profile's domains.
+      const scores = profile.domains
+        .map((d) => getWarmyDomainByName(d.domain)?.health_score.total)
+        .filter((v): v is number => typeof v === "number")
+      senderHealthByRun[run.id] =
+        scores.length > 0
+          ? Math.round(scores.reduce((s, v) => s + v, 0) / scores.length)
+          : 0
+    } else {
+      senderHealthByRun[run.id] = 0
+    }
+    // Share of this run's sends held for volume — same seeded derivation
+    // the single-run overlay uses so the two line up.
+    let seed = 0
+    for (let i = 0; i < run.id.length; i++) seed = (seed * 31 + run.id.charCodeAt(i)) >>> 0
+    const sent = data.delivery.sent || 0
+    const heldShare = ((seed % 4) + 1) / 100
+    heldPctByRun[run.id] = sent > 0 ? heldShare : 0
   }
   return [
     { label: "Reached", values: by((d) => d.funnel.reached), format: "count" },
@@ -105,6 +135,8 @@ function emailRows(
     { label: "Collection", values: by((d) => d.outcomes.collection), format: "aed", goodDirection: "up" },
     { label: "Recovery %", values: by((d) => d.outcomes.recoveryPct), format: "percent", goodDirection: "up" },
     { label: "CR %", values: by((d) => d.outcomes.crPct), format: "percent", goodDirection: "up" },
+    { label: "Sender health", values: senderHealthByRun, format: "count", goodDirection: "up" },
+    { label: "Held for volume", values: heldPctByRun, format: "percent", goodDirection: "down" },
   ]
 }
 
@@ -180,10 +212,12 @@ export function CompareRunsView({
   journeyId,
   nodeId,
   channel,
+  senderProfileId,
 }: {
   journeyId: string
   nodeId: string
   channel: MessageChannel
+  senderProfileId?: string | null
 }) {
   const runs = React.useMemo(() => listRuns(journeyId), [journeyId])
   // Default: first two runs selected.
@@ -210,7 +244,7 @@ export function CompareRunsView({
         run,
         data: synthesizeEmailAnalytics(journeyId, nodeId, EMPTY_FILTERS, run.id),
       }))
-      return emailRows(perRun)
+      return emailRows(perRun, senderProfileId)
     }
     const perRun = chosen.map((run) => ({
       run,
@@ -399,10 +433,16 @@ export function OverTimeView({
   journeyId,
   nodeId,
   channel,
+  // Reserved for parity with CompareRunsView — the Over-time view
+  // reuses emailRows() by way of its bucketed numbers today but may
+  // surface sender health / held for volume as columns next (see TODO
+  // in the table below). The prop keeps callers consistent.
+  senderProfileId: _senderProfileId,
 }: {
   journeyId: string
   nodeId: string
   channel: MessageChannel
+  senderProfileId?: string | null
 }) {
   const [granularity, setGranularity] = React.useState<TimeGranularity>("day")
   const [preset, setPreset] = React.useState<RangePreset>("30d")
