@@ -333,7 +333,17 @@ export function MessageNodeFullEditor({
     ? getSenderProfileById(senderProfileId) ?? null
     : null
   const effectiveFromName = customFromName || resolvedProfile?.fromName || "ClearGrid Collections"
-  const effectiveFromEmail = customFromEmail || resolvedProfile?.fromEmail || "collections@cleargrid.ae"
+  // Journey sends rotate prefix@domain across the profile's domains, so
+  // the preview from line reads "prefix@<first eligible> · rotates
+  // across n domains" instead of a fixed from-email. Composer sends
+  // (which always use the full fromEmail) are previewed elsewhere.
+  const effectiveFromEmail = customFromEmail ||
+    (resolvedProfile
+      ? `${resolvedProfile.prefix}@${resolvedProfile.domains[0]?.domain ?? resolvedProfile.domain.domain}`
+      : "collections@cleargrid.ae")
+  const rotationNote = resolvedProfile && !customFromEmail
+    ? ` · rotates across ${resolvedProfile.domains.length} domain${resolvedProfile.domains.length === 1 ? "" : "s"}`
+    : ""
 
   const [tab, setTab] = React.useState<EditorTab>("compose")
   const [textDir, setTextDir] = React.useState<TextDir>("auto")
@@ -869,6 +879,11 @@ export function MessageNodeFullEditor({
             <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
               Preview · as the borrower will receive it
             </div>
+            {channel === "email" && rotationNote && (
+              <div className="text-[10.5px] text-muted-foreground">
+                From {effectiveFromName} &lt;{effectiveFromEmail}&gt;{rotationNote}
+              </div>
+            )}
             {bodySource.startsWith("(no template picked") ? (
               <MessagePreview
                 channel={channel}

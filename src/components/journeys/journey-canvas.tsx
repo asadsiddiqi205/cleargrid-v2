@@ -47,6 +47,10 @@ import {
   poolHasPooledAiCapacity,
   getGatewayById,
 } from "@/data/project-pools";
+import { getSenderProfileById } from "@/data/sender-profiles";
+import { statusForDomain } from "@/data/domain-health";
+import { evaluateProfileDomains } from "@/data/sending-rotation";
+import { getWarmyDomainByName } from "@/data/warmy";
 import {
   getHybridCampaignById,
   readinessForGroup,
@@ -1605,6 +1609,80 @@ export default function JourneyCanvas({ journeyId }: JourneyCanvasProps) {
           nodeId: n.id,
           field: "template",
         });
+      }
+
+      // Send Email — sender profile + Warmy health checks.
+      if (actionType === "email") {
+        const spId = typeof d.senderProfileId === "string" ? d.senderProfileId : "";
+        const profile = spId ? getSenderProfileById(spId) : undefined;
+        if (!profile) {
+          issues.push({
+            severity: "blocker",
+            title: `"${label}" has no sender profile picked`,
+            detail: "Pick a sender profile on the Delivery tab.",
+            nodeId: n.id,
+            field: "senderProfileId",
+          });
+        } else {
+          const rows = evaluateProfileDomains(profile, "gmail");
+          const everySkip = rows.length > 0 && rows.every((r) =>
+            !r.eligible && (r.skipReason === "blocked" || r.skipReason === "paused"),
+          );
+          if (everySkip) {
+            issues.push({
+              severity: "blocker",
+              title: `"${label}" every domain on ${profile.name} is Blocked or Paused`,
+              detail: "No domain can dial — update the pool or switch profile.",
+              nodeId: n.id,
+              field: "senderProfileId",
+            });
+          } else {
+            const statuses = profile.domains.map((dd) => statusForDomain(dd.domain));
+            const atRiskOrBlocked = statuses.some((s) => s.status === "at_risk" || s.status === "blocked");
+            if (atRiskOrBlocked) {
+              issues.push({
+                severity: "warning",
+                title: `"${label}" sender profile has an At-risk or Blocked domain`,
+                detail: `${profile.name} will route around the affected domain.`,
+                nodeId: n.id,
+                field: "senderProfileId",
+              });
+            }
+            const unmatched = profile.domains.every((dd) => !getWarmyDomainByName(dd.domain));
+            if (unmatched) {
+              issues.push({
+                severity: "warning",
+                title: `"${label}" sender profile has no domain matched in Warmy`,
+                detail: "Volume falls back to ops caps; add the domain in Warmy to see health.",
+                nodeId: n.id,
+                field: "senderProfileId",
+              });
+            }
+            // Volume vs audience preview — if the node carries a sampled
+            // audience size (set by the sample picker), compare to today's
+            // total volume left across the profile.
+            const audience = typeof d._audienceSampleCount === "number"
+              ? (d._audienceSampleCount as number)
+              : typeof d._audienceTotal === "number"
+              ? (d._audienceTotal as number)
+              : null;
+            if (audience != null) {
+              const totalLeft = rows.reduce(
+                (sum, r) => sum + (r.volumeLeft ?? Infinity),
+                0,
+              );
+              if (Number.isFinite(totalLeft) && totalLeft < audience) {
+                issues.push({
+                  severity: "warning",
+                  title: `"${label}" today's volume may not cover this audience`,
+                  detail: "Some emails will wait until tomorrow.",
+                  nodeId: n.id,
+                  field: "senderProfileId",
+                });
+              }
+            }
+          }
+        }
       }
 
       // Human Campaign — needs a campaign id in existing mode

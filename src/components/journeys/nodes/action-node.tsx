@@ -22,6 +22,8 @@ import { QuickAddButton } from "@/components/journeys/quick-add-button";
 import { NodeErrorBadge } from "@/components/journeys/nodes/node-error-badge";
 import { isBlockHiddenByFlag } from "@/data/feature-flags";
 import { getPoolForProject, getPoolById, getGatewayById } from "@/data/project-pools";
+import { getSenderProfileById } from "@/data/sender-profiles";
+import { describeProfileHealth, worstDomainState } from "@/components/warmy/sending-domains-list";
 
 const actionIcons: Record<string, typeof Mail> = {
   email: Mail, sms: MessageSquare, whatsapp: MessageCircle, call: Phone,
@@ -78,6 +80,13 @@ export function ActionNode({ id, data, selected }: NodeProps) {
   const showNoPool = aiCallHasProject && aiCallDialMode === "pool" && !effectivePool;
   const showNoGateway = aiCallHasProject && aiCallDialMode === "gateway" && !gateway;
 
+  // Send Email subtitle: profile name + the worst domain state across
+  // its domain list. Composer-picked only; no profile → fall through.
+  const senderProfileId = typeof data.senderProfileId === "string" ? data.senderProfileId : null;
+  const senderProfile = actionType === "email" && senderProfileId ? getSenderProfileById(senderProfileId) : null;
+  const emailWorstState = senderProfile ? worstDomainState(senderProfile) : null;
+  const emailSummary = senderProfile ? describeProfileHealth(senderProfile) : null;
+
   // Callback Handling badge — only on AI Call nodes with `callbackEnabled` on
   // (defaults to true per spec). Shows "Callbacks N" where N is the per-borrower cap.
   const callbackEnabled =
@@ -129,7 +138,23 @@ export function ActionNode({ id, data, selected }: NodeProps) {
       </div>
 
       <div className="border-t border-border/40 px-3 py-2">
-        {actionType === "call" && aiCallHasProject ? (
+        {actionType === "email" && senderProfile ? (
+          <p className="truncate text-[11px] text-muted-foreground">
+            <span className="text-foreground">{senderProfile.name}</span>
+            {" · "}
+            <span
+              className={cn(
+                emailWorstState === "blocked" && "text-red-400",
+                emailWorstState === "at_risk" && "text-orange-300",
+                emailWorstState === "watch" && "text-amber-300",
+                emailWorstState === "healthy" && "text-emerald-300",
+                emailWorstState === "no_data" && "text-muted-foreground",
+              )}
+            >
+              {emailSummary}
+            </span>
+          </p>
+        ) : actionType === "call" && aiCallHasProject ? (
           <p className="truncate text-[11px] text-muted-foreground">
             {[projectName ?? template ?? projectId, agentName].filter(Boolean).join(" · ")}
             {" · "}

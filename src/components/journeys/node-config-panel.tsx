@@ -86,6 +86,14 @@ import { readExperimentConfig } from "@/data/experiments";
 import type { ExperimentConfig } from "@/data/experiments";
 import { BarChart3 } from "lucide-react";
 import {
+  senderProfiles as SP_SEED,
+  getSenderProfileById,
+} from "@/data/sender-profiles"
+import {
+  SendingDomainsList,
+  describeProfileHealth,
+} from "@/components/warmy/sending-domains-list"
+import {
   listPools,
   getPoolById,
   getPoolForProject,
@@ -711,14 +719,18 @@ export function NodeConfigPanel({ node, onClose, onUpdate, onDeleteNode, nodes =
         {/* Delivery tab — for action / channel nodes only */}
         {isActionNode && (
           <TabsContent value="delivery" className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
-            <Section title="Provider / sender">
-              <p className="text-[11px] text-muted-foreground">
-                Delivery provider and sender ID are set inside the Logic tab for this action.
-                See <span className="font-medium text-foreground">From</span> /{" "}
-                <span className="font-medium text-foreground">Sender ID</span> /{" "}
-                <span className="font-medium text-foreground">Provider</span>.
-              </p>
-            </Section>
+            {(d.actionType as string) === "email" ? (
+              <EmailDeliveryPanel d={d} update={update} journeyId={journeyId} />
+            ) : (
+              <Section title="Provider / sender">
+                <p className="text-[11px] text-muted-foreground">
+                  Delivery provider and sender ID are set inside the Logic tab for this action.
+                  See <span className="font-medium text-foreground">From</span> /{" "}
+                  <span className="font-medium text-foreground">Sender ID</span> /{" "}
+                  <span className="font-medium text-foreground">Provider</span>.
+                </p>
+              </Section>
+            )}
             <Section title="Send window">
               <NativeSelect
                 value={(d.sendWindow as string) ?? "anytime"}
@@ -3494,6 +3506,51 @@ function AICallConfig({
       <CallbackHandlingSection data={d} update={update} />
 
       <RedialPolicySection data={d} update={update} journeyId={journeyId} />
+    </div>
+  )
+}
+
+/* ─────────── Send Email · Delivery tab panel ───────────
+   Replaces the old "delivery provider is set on Logic tab" blurb with
+   the sender profile picker + the Sending domains list. */
+function EmailDeliveryPanel({
+  d,
+  update,
+  journeyId: _journeyId,
+}: {
+  d: Record<string, unknown>
+  update: (field: string, value: unknown) => void
+  journeyId?: string
+}) {
+  const senderProfileId = (d.senderProfileId as string | undefined) ?? null
+  const profile = senderProfileId ? getSenderProfileById(senderProfileId) ?? null : null
+  const profiles = SP_SEED.filter((p) => p.status === "active")
+  return (
+    <div className="space-y-3">
+      <Section title="Sender profile">
+        <p className="text-[11px] text-muted-foreground">
+          Delivery route and sender identity come from the sender profile below.
+        </p>
+        <select
+          value={senderProfileId ?? ""}
+          onChange={(e) => update("senderProfileId", e.target.value || undefined)}
+          className="mt-2 h-8 w-full rounded-md border border-input bg-background px-2 text-[12px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          <option value="">Pick a sender profile…</option>
+          {profiles.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.name} · {p.lenderName} · {p.fromEmail}{" "}
+              — {describeProfileHealth(p)}
+            </option>
+          ))}
+        </select>
+      </Section>
+
+      {profile && (
+        <Section title="Sending domains">
+          <SendingDomainsList profileId={profile.id} />
+        </Section>
+      )}
     </div>
   )
 }
