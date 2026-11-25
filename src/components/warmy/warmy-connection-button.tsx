@@ -82,10 +82,10 @@ export function WarmyConnectionButton() {
         className={cn(
           "inline-flex h-8 items-center gap-1.5 rounded-md border px-2.5 text-[11.5px] font-medium",
           label.tone === "disconnected" && "border-neutral-700 bg-neutral-800 text-neutral-200",
-          label.tone === "error" && "border-red-500/40 bg-red-500/10 text-red-300",
-          label.tone === "stale" && "border-amber-500/40 bg-amber-500/10 text-amber-300",
+          label.tone === "error" && "border-red-500/40 bg-red-500/10 text-red-700 dark:text-red-300",
+          label.tone === "stale" && "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300",
           (label.tone === "connected" || label.tone === "fresh") &&
-            "border-emerald-500/40 bg-emerald-500/10 text-emerald-300",
+            "border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
         )}
       >
         <Activity className="h-3.5 w-3.5" />
@@ -105,7 +105,7 @@ export function WarmyConnectionButton() {
 
         <div className="space-y-5 overflow-y-auto px-4 pb-6 pt-2">
           {!admin && (
-            <div className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-200">
+            <div className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-700 dark:text-amber-200">
               Admin-only. Ask a Sender profile admin to connect or sync.
             </div>
           )}
@@ -256,7 +256,7 @@ function DomainMatchingPanel() {
         Domain matching
       </h3>
       <div className="rounded-md border border-border bg-muted/20 p-3 text-[11px]">
-        <div className="flex items-center gap-1 text-emerald-300">
+        <div className="flex items-center gap-1 text-emerald-700 dark:text-emerald-300">
           <CheckCircle2 className="h-3 w-3" />
           <span>{matched.length} of {commandDomains.length} Command domains matched</span>
         </div>
@@ -360,7 +360,7 @@ function LastSyncPanel({ state }: { state: ConnectionState }) {
           </span>
         </div>
         {state.lastError && (
-          <div className="flex items-start gap-1.5 rounded border border-red-500/30 bg-red-500/10 px-2 py-1 text-[10.5px] text-red-200">
+          <div className="flex items-start gap-1.5 rounded border border-red-500/30 bg-red-500/10 px-2 py-1 text-[10.5px] text-red-700 dark:text-red-200">
             <AlertCircle className="mt-0.5 h-3 w-3 shrink-0" />
             <span>{state.lastError}</span>
           </div>

@@ -54,13 +54,13 @@ export function WarmyAlertBanner() {
 
   if (problems.length === 0) return null
   return (
-    <div className="mb-4 flex items-start gap-2 rounded-md border border-red-500/40 bg-red-500/10 p-3 text-[11.5px] text-red-200">
+    <div className="mb-4 flex items-start gap-2 rounded-md border border-red-500/40 bg-red-500/10 p-3 text-[11.5px] text-red-700 dark:text-red-200">
       <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
       <div className="flex-1">
         <p className="font-medium">
           {problems.length} sender domain{problems.length === 1 ? "" : "s"} need attention
         </p>
-        <p className="mt-0.5 text-[10.5px] text-red-200/80">
+        <p className="mt-0.5 text-[10.5px] text-red-700/80 dark:text-red-200/80">
           {problems
             .slice(0, 4)
             .map((p) => `${p.domain} · ${p.reason}`)

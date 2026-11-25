@@ -86,8 +86,8 @@ export function NodeAnalyticsTab({
         <AlertCircle className="h-5 w-5 text-warning-300" />
         <p className="text-[12px] font-medium text-foreground">No run selected</p>
         <p className="max-w-[240px] text-[10px] leading-relaxed text-muted-foreground">
-          Pick a run from the <span className="text-foreground">Analytics</span> chip at
-          the top of the canvas to see this node&apos;s message analytics.
+          Pick a run from the <span className="text-foreground">Analytics</span>{" "}
+          chip at the top of the canvas to see this node&apos;s message analytics.
         </p>
       </div>
     )
@@ -197,8 +197,8 @@ export function NodeAnalyticsTab({
         <AlertCircle className="h-5 w-5 text-warning-300" />
         <p className="text-[12px] font-medium text-foreground">No run selected</p>
         <p className="max-w-[240px] text-[10px] leading-relaxed text-muted-foreground">
-          Pick a run from the <span className="text-foreground">Analytics</span> chip at
-          the top of the canvas to see who entered this node during that run.
+          Pick a run from the <span className="text-foreground">Analytics</span>{" "}
+          chip at the top of the canvas to see who entered this node during that run.
         </p>
       </div>
     )

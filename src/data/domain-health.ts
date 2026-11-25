@@ -154,11 +154,11 @@ export const STATUS_DOT_CLASS: Record<DomainStatus, string> = {
 }
 
 export const STATUS_PILL_CLASS: Record<DomainStatus, string> = {
-  healthy: "bg-emerald-500/15 text-emerald-300 border-emerald-500/30",
-  watch: "bg-amber-500/15 text-amber-300 border-amber-500/30",
-  at_risk: "bg-orange-500/15 text-orange-300 border-orange-500/30",
-  blocked: "bg-red-500/15 text-red-300 border-red-500/30",
-  no_data: "bg-neutral-500/15 text-neutral-300 border-neutral-500/30",
+  healthy: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30",
+  watch: "bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30",
+  at_risk: "bg-orange-500/15 text-orange-700 dark:text-orange-300 border-orange-500/30",
+  blocked: "bg-red-500/15 text-red-700 dark:text-red-300 border-red-500/30",
+  no_data: "bg-neutral-500/15 text-neutral-700 dark:text-neutral-300 border-neutral-500/30",
 }
 
 /** Rank for "worst-first" sort on the Domains tab. Lower = worse. */

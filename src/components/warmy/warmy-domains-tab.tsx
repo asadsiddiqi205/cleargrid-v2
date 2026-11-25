@@ -188,7 +188,7 @@ function DomainRow({
               <p className="text-[9.5px] text-neutral-400">Paused by ops</p>
             )}
             {noVolumeLimit && (
-              <p className="text-[9.5px] text-amber-300">No volume limit</p>
+              <p className="text-[9.5px] text-amber-700 dark:text-amber-300">No volume limit</p>
             )}
           </div>
         </div>
@@ -254,7 +254,7 @@ function DomainRow({
       </td>
       <td className="px-2.5 py-2.5 tabular-nums text-[11px]">
         {alerts.length > 0 ? (
-          <span className="rounded bg-red-500/15 px-1.5 py-0.5 text-red-300">
+          <span className="rounded bg-red-500/15 px-1.5 py-0.5 text-red-700 dark:text-red-300">
             {alerts.length}
           </span>
         ) : (
@@ -271,10 +271,10 @@ function DomainRow({
 function PlacementChip({ label, title, pct }: { label: string; title: string; pct: number }) {
   const tone =
     pct >= 90
-      ? "bg-emerald-500/15 text-emerald-300"
+      ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300"
       : pct >= 70
-      ? "bg-amber-500/15 text-amber-300"
-      : "bg-red-500/15 text-red-300"
+      ? "bg-amber-500/15 text-amber-700 dark:text-amber-300"
+      : "bg-red-500/15 text-red-700 dark:text-red-300"
   return (
     <span className={cn("rounded px-1 py-0.5 tabular-nums", tone)} title={`${title}: ${pct}% inbox placement`}>
       {label} {pct}
@@ -291,10 +291,10 @@ function DnsChip({
 }) {
   const tone =
     state === "valid"
-      ? "bg-emerald-500/15 text-emerald-300"
+      ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300"
       : state === "not_received"
-      ? "bg-neutral-500/15 text-neutral-300"
-      : "bg-red-500/15 text-red-300"
+      ? "bg-neutral-500/15 text-neutral-700 dark:text-neutral-300"
+      : "bg-red-500/15 text-red-700 dark:text-red-300"
   return <span className={cn("rounded px-1 py-0.5", tone)}>{label}</span>
 }
 
@@ -697,10 +697,10 @@ function DnsBlock({ w }: { w: WarmyDomain }) {
               className={cn(
                 "mt-0.5 text-[12px] font-semibold capitalize",
                 w.dns_records[k] === "valid"
-                  ? "text-emerald-300"
+                  ? "text-emerald-700 dark:text-emerald-300"
                   : w.dns_records[k] === "not_received"
-                  ? "text-neutral-300"
-                  : "text-red-300",
+                  ? "text-neutral-700 dark:text-neutral-300"
+                  : "text-red-700 dark:text-red-300",
               )}
             >
               {w.dns_records[k].replace("_", " ")}
@@ -762,7 +762,7 @@ function AlertsBlock({ alerts }: { alerts: ReturnType<typeof listAlertsForDomain
             {a.next_steps.map((s, i) => (
               <li
                 key={i}
-                className={cn(s.done && "text-emerald-300 line-through decoration-emerald-400/50")}
+                className={cn(s.done && "text-emerald-700 dark:text-emerald-300 line-through decoration-emerald-400/50")}
               >
                 {s.text}
               </li>

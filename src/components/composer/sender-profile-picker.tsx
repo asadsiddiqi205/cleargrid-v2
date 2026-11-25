@@ -236,7 +236,7 @@ function ActiveSummary({
           {left != null && (
             <>
               {" · "}
-              {left.toLocaleString()} of today&apos;s Gmail volume left
+              {left.toLocaleString()}{" "}of today&apos;s Gmail volume left
             </>
           )}
         </p>

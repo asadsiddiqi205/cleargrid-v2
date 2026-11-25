@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { Suspense } from "react"
 import { useSearchParams } from "next/navigation"
 import { toast } from "sonner"
 import {
@@ -55,14 +56,6 @@ export default function SenderProfilesPage() {
   const [editingId, setEditingId] = React.useState<string | null>(null)
   const editingProfile = editingId ? profiles.find((p) => p.id === editingId) ?? null : null
 
-  // Open the Domains tab when the URL carries ?tab=domains — used by
-  // the alert banner's "Open Domains" button.
-  const searchParams = useSearchParams()
-  React.useEffect(() => {
-    const t = searchParams.get("tab")
-    if (t === "domains" || t === "profiles") setTab(t)
-  }, [searchParams])
-
   const filtered = profiles.filter((p) => {
     if (lenderFilter !== "all" && p.lenderId !== lenderFilter) return false
     if (
@@ -100,6 +93,9 @@ export default function SenderProfilesPage() {
         </div>
       }
     >
+      <Suspense fallback={null}>
+        <TabQueryBridge onTab={setTab} />
+      </Suspense>
       <WarmyAlertBanner />
 
       {/* Tabs — sit as a small inline nav above the filters */}
@@ -215,6 +211,18 @@ export default function SenderProfilesPage() {
   )
 }
 
+/** Small client child that reads ?tab=domains from the URL and reports
+ *  it to the page. Lives in its own Suspense boundary so Next's
+ *  prerender doesn't complain about useSearchParams at the page root. */
+function TabQueryBridge({ onTab }: { onTab: (t: MainTab) => void }) {
+  const searchParams = useSearchParams()
+  React.useEffect(() => {
+    const t = searchParams.get("tab")
+    if (t === "domains" || t === "profiles") onTab(t)
+  }, [searchParams, onTab])
+  return null
+}
+
 /** Helpers for labelled Select values — show "General (cross-lender)"
  *  instead of "general" and "All lenders" instead of "all". */
 function lenderLabel(id: string): string {
@@ -288,7 +296,7 @@ function ProfileRow({ profile, onEdit }: { profile: SenderProfile; onEdit: () =>
     >
       <td className="px-4 py-4">
         <div className="flex items-start gap-3">
-          <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-emerald-500/15 text-emerald-300">
+          <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-emerald-500/15 text-emerald-600 dark:text-emerald-300">
             <AtSign className="h-4 w-4" />
           </div>
           <div className="min-w-0">
@@ -321,7 +329,7 @@ function ProfileRow({ profile, onEdit }: { profile: SenderProfile; onEdit: () =>
       </td>
       <td className="px-4 py-4">
         {profile.status === "active" ? (
-          <span className="inline-flex items-center gap-1 text-[12px] text-emerald-300">
+          <span className="inline-flex items-center gap-1 text-[12px] text-emerald-700 dark:text-emerald-300">
             <CheckCircle2 className="h-3.5 w-3.5" />
             Active
           </span>
@@ -673,11 +681,11 @@ function FromEmailStatusLine({
       <span className="text-muted-foreground">·</span>
       <span
         className={cn(
-          status.status === "healthy" && "text-emerald-300",
-          status.status === "watch" && "text-amber-300",
-          status.status === "at_risk" && "text-orange-300",
-          status.status === "blocked" && "text-red-300",
-          status.status === "no_data" && "text-neutral-300",
+          status.status === "healthy" && "text-emerald-700 dark:text-emerald-300",
+          status.status === "watch" && "text-amber-700 dark:text-amber-300",
+          status.status === "at_risk" && "text-orange-700 dark:text-orange-300",
+          status.status === "blocked" && "text-red-700 dark:text-red-300",
+          status.status === "no_data" && "text-neutral-700 dark:text-neutral-300",
         )}
       >
         {status.status === "healthy"
@@ -691,7 +699,7 @@ function FromEmailStatusLine({
           : "No data"}
       </span>
       {status.status === "blocked" && (
-        <span className="text-[10px] text-red-300">· Composer sends will fail safety checks</span>
+        <span className="text-[10px] text-red-700 dark:text-red-300">· Composer sends will fail safety checks</span>
       )}
     </div>
   )
