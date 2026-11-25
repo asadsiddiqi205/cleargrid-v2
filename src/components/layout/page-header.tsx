@@ -5,6 +5,7 @@ import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Search, Phone } from "lucide-react";
+import { WarmyNotificationsBell } from "@/components/warmy/warmy-alerts";
 
 export function PageHeader() {
   return (
@@ -20,6 +21,7 @@ export function PageHeader() {
       </form>
 
       <div className="ml-auto flex items-center gap-2">
+        <WarmyNotificationsBell />
         <Button variant="ghost" size="icon-sm">
           <Phone className="h-4 w-4" />
         </Button>

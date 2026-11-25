@@ -35,6 +35,7 @@ import {
 } from "@/data/warmy"
 import { WARMY_THRESHOLDS } from "@/data/warmy-thresholds"
 import { senderProfiles } from "@/data/sender-profiles"
+import { WarmyDevFireEvent } from "@/components/warmy/warmy-alerts"
 
 /** TODO: swap for the real app URL when the webhook endpoint lands. */
 const WEBHOOK_URL = "https://command.cleargrid.co/api/warmy/webhook"
@@ -113,6 +114,11 @@ export function WarmyConnectionButton() {
           <DomainMatchingPanel />
           <WebhookPanel />
           <LastSyncPanel state={state} />
+          {admin && (
+            <div className="pt-1">
+              <WarmyDevFireEvent />
+            </div>
+          )}
         </div>
       </SheetContent>
     </Sheet>

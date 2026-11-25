@@ -41,6 +41,7 @@ import {
 } from "@/data/sender-profiles"
 import { lenders } from "@/data/lenders"
 import { WarmyConnectionButton } from "@/components/warmy/warmy-connection-button"
+import { WarmyAlertBanner } from "@/components/warmy/warmy-alerts"
 import { DomainStatusDot } from "@/components/warmy/domain-status-dot"
 import { WarmyDomainsTab, WarmyDomainsToolbar } from "@/components/warmy/warmy-domains-tab"
 import { statusForDomain } from "@/data/domain-health"
@@ -81,6 +82,8 @@ export default function SenderProfilesPage() {
       title="Sender profiles"
       description="Governed sender identities for outbound campaigns. Admin-only. The composer picks from this list — no free-typing of from-name, from-email, or route."
     >
+      <WarmyAlertBanner />
+
       {/* Tabs */}
       <div className="mb-4 flex items-center justify-between border-b border-border">
         <div className="flex items-center gap-1">
