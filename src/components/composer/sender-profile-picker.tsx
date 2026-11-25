@@ -413,17 +413,21 @@ function ResolvedIdentity({
     <div className="space-y-1.5 rounded-md border border-border bg-muted/10 px-3 py-2.5">
       <ResolvedRow icon={<AtSign className="h-3 w-3" />} label="From">
         <span className="text-foreground">
-          {effectiveFromName} &lt;{effectiveFromEmail}&gt;
+          {context === "journey"
+            ? `${effectiveFromName} <${profile.prefix}@<rotating domain>>`
+            : `${effectiveFromName} <${effectiveFromEmail}>`}
         </span>
         {hasCustom && (
-          <span className="ml-1.5 rounded bg-amber-500/15 px-1 py-px text-[9px] font-medium uppercase tracking-wider text-amber-300">
+          <span className="ml-1.5 rounded bg-amber-500/15 px-1 py-px text-[9px] font-medium uppercase tracking-wider text-amber-700 dark:text-amber-300">
             Custom
           </span>
         )}
       </ResolvedRow>
-      <ResolvedRow icon={<Reply className="h-3 w-3" />} label="Reply-to">
-        <span className="text-foreground">{effectiveReplyTo}</span>
-      </ResolvedRow>
+      {context === "composer" && (
+        <ResolvedRow icon={<Reply className="h-3 w-3" />} label="Reply-to">
+          <span className="text-foreground">{effectiveReplyTo}</span>
+        </ResolvedRow>
+      )}
       {context === "composer" && (
         <ResolvedRow icon={<Shield className="h-3 w-3" />} label="Domain">
           <span className="inline-flex items-center gap-1 text-foreground">
