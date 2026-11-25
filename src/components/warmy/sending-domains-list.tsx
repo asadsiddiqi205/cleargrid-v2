@@ -5,25 +5,32 @@ import Link from "next/link"
 import { ExternalLink } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { getSenderProfileById, type SenderProfile } from "@/data/sender-profiles"
-import { evaluateProfileDomains, detectBorrowerProvider } from "@/data/sending-rotation"
+import {
+  evaluateProfileDomains,
+  detectBorrowerProvider,
+  type BorrowerProvider,
+} from "@/data/sending-rotation"
 import {
   STATUS_DOT_CLASS,
   STATUS_LABEL,
   statusForDomain,
   STATUS_PILL_CLASS,
 } from "@/data/domain-health"
-import { getSentToday } from "@/data/warmy"
+import { getSentToday, getWarmyDomainByName, type DnsState } from "@/data/warmy"
 
 /** Compact "Sending domains" list shown under the sender profile picker
  *  on the Send Email node's Delivery tab. One row per domain with its
  *  prefix@address, status, volume left for the worst provider, and
- *  In rotation / Skipped. */
+ *  In rotation / Skipped. Set `showDns` to append SPF / DKIM / DMARC /
+ *  MX chips from Warmy on each row. */
 export function SendingDomainsList({
   profileId,
   previewEmail = "preview@gmail.com",
+  showDns = false,
 }: {
   profileId: string | null
   previewEmail?: string
+  showDns?: boolean
 }) {
   const profile: SenderProfile | undefined = profileId
     ? getSenderProfileById(profileId)
@@ -63,6 +70,7 @@ export function SendingDomainsList({
               <th className="px-2 py-1 text-left font-medium">Status</th>
               <th className="px-2 py-1 text-right font-medium">Volume left</th>
               <th className="px-2 py-1 text-left font-medium">In rotation</th>
+              {showDns && <th className="px-2 py-1 text-left font-medium">DNS</th>}
             </tr>
           </thead>
           <tbody>
@@ -71,6 +79,7 @@ export function SendingDomainsList({
               const w = summary.warmy
               const gmailSent = w ? getSentToday(r.domain, "gmail") : 0
               const gmailRec = w?.recommended_volume_today.gmail.volume ?? null
+              const gmailLeft = gmailRec != null ? Math.max(0, gmailRec - gmailSent) : null
               const left = r.volumeLeft
               return (
                 <tr key={r.domain} className="border-t border-border/60">
@@ -92,7 +101,7 @@ export function SendingDomainsList({
                         {STATUS_LABEL[summary.status]}
                       </span>
                       {r.paused && (
-                        <span className="rounded bg-neutral-500/20 px-1 text-[9px] uppercase text-neutral-200">
+                        <span className="rounded bg-neutral-500/20 px-1 text-[9px] uppercase text-neutral-700 dark:text-neutral-200">
                           Paused
                         </span>
                       )}
@@ -101,19 +110,24 @@ export function SendingDomainsList({
                   <td className="px-2 py-1 text-right tabular-nums text-foreground">
                     {left === null
                       ? "Unlimited"
-                      : gmailRec != null
-                      ? `${(gmailRec - gmailSent).toLocaleString()} / ${gmailRec.toLocaleString()}`
+                      : gmailLeft != null && gmailRec != null
+                      ? `${gmailLeft.toLocaleString()} / ${gmailRec.toLocaleString()}`
                       : left.toLocaleString()}
                   </td>
                   <td className="px-2 py-1">
                     {r.eligible ? (
-                      <span className="text-emerald-300">In rotation</span>
+                      <span className="text-emerald-600 dark:text-emerald-300">In rotation</span>
                     ) : (
                       <span className="text-muted-foreground">
                         Skipped — {skipLabel(r.skipReason)}
                       </span>
                     )}
                   </td>
+                  {showDns && (
+                    <td className="px-2 py-1">
+                      <DnsChipRow dns={w?.dns_records} />
+                    </td>
+                  )}
                 </tr>
               )
             })}
@@ -122,6 +136,32 @@ export function SendingDomainsList({
       </div>
     </div>
   )
+}
+
+function DnsChipRow({
+  dns,
+}: {
+  dns: { spf: DnsState; dkim: DnsState; dmarc: DnsState; mx: DnsState } | undefined
+}) {
+  if (!dns) return <span className="text-[10px] text-muted-foreground">—</span>
+  return (
+    <div className="flex gap-0.5">
+      <DnsChip label="SPF" s={dns.spf} />
+      <DnsChip label="DKIM" s={dns.dkim} />
+      <DnsChip label="DMARC" s={dns.dmarc} />
+      <DnsChip label="MX" s={dns.mx} />
+    </div>
+  )
+}
+
+function DnsChip({ label, s }: { label: string; s: DnsState }) {
+  const tone =
+    s === "valid"
+      ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300"
+      : s === "not_received"
+      ? "bg-neutral-500/15 text-neutral-700 dark:text-neutral-300"
+      : "bg-red-500/15 text-red-700 dark:text-red-300"
+  return <span className={cn("rounded px-1 py-0.5 text-[9px]", tone)} title={s}>{label}</span>
 }
 
 function skipLabel(reason: string | undefined): string {
@@ -156,6 +196,33 @@ export function describeProfileHealth(profile: SenderProfile): string {
   if (paused) parts.push(`${paused} paused`)
   if (usedUp) parts.push(`${usedUp} used up for Gmail`)
   if (!blocked && !paused && !usedUp) parts.push(`${sending} sending`)
+  return parts.join(" · ")
+}
+
+/** Rotation-aware summary for Journey sends: "Rotates across N domains ·
+ *  3 sending · 1 blocked (support.cleararabia.ai)". Fed to the Compose
+ *  tab preview and the Send Email canvas subtitle on journey nodes. */
+export function describeProfileRotationHealth(
+  profile: SenderProfile,
+  provider: BorrowerProvider = "gmail",
+): string {
+  const rows = evaluateProfileDomains(profile, provider)
+  const total = rows.length
+  const sending = rows.filter((r) => r.eligible).length
+  const blockedRows = rows.filter((r) => r.skipReason === "blocked")
+  const pausedRows = rows.filter((r) => r.skipReason === "paused")
+  const usedUpRows = rows.filter(
+    (r) => r.skipReason === "used_up" || r.skipReason === "warmy_zero",
+  )
+  const parts: string[] = [
+    `Rotates across ${total} domain${total === 1 ? "" : "s"}`,
+    `${sending} sending`,
+  ]
+  const joinNames = (rs: typeof rows) =>
+    rs.length === 1 ? rs[0]!.domain : `${rs.length}`
+  if (blockedRows.length) parts.push(`${blockedRows.length} blocked (${joinNames(blockedRows)})`)
+  if (pausedRows.length) parts.push(`${pausedRows.length} paused (${joinNames(pausedRows)})`)
+  if (usedUpRows.length) parts.push(`${usedUpRows.length} used up for Gmail`)
   return parts.join(" · ")
 }
 

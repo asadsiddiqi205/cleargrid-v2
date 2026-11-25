@@ -46,6 +46,7 @@ import { MessagePreviewWithSampling } from "@/components/journeys/message-previe
 import { borrowers } from "@/data/borrowers"
 import { TemplateEditor } from "@/components/templates/template-editor"
 import { NodeAnalyticsTab } from "@/components/journeys/node-analytics-tab"
+import { SendingDomainsList, describeProfileRotationHealth } from "@/components/warmy/sending-domains-list"
 import { DirectionToggle, type TextDir } from "@/components/shared/direction-toggle"
 import { ChannelContactPicker } from "@/components/shared/channel-contact-picker"
 import { ContactSelector } from "@/components/shared/contact-selector"
@@ -1241,36 +1242,23 @@ function EmailDeliveryFields({
   d: Record<string, unknown>
   set: (field: string, value: unknown) => void
 }) {
-  const warmupPool = (d.emailWarmupPool as string) ?? "shared"
-  const dkim = (d.emailDkimStatus as string) ?? "verified"
   const unsubPos = (d.emailUnsubPosition as string) ?? "footer"
   const trackOpens = (d.emailTrackOpens as boolean) ?? true
   const trackClicks = (d.emailTrackClicks as boolean) ?? true
+  const senderProfileId = typeof d.senderProfileId === "string" ? d.senderProfileId : null
   return (
     <SectionCard title="Email plumbing">
-      <div className="grid gap-3 sm:grid-cols-2">
-        <FieldBlock label="Sending pool">
-          <select
-            value={warmupPool}
-            onChange={(e) => set("emailWarmupPool", e.target.value)}
-            className="h-9 w-full rounded-md border border-input bg-background px-2 text-[13px] outline-none focus-visible:border-ring"
-          >
-            <option value="shared">Shared warm pool</option>
-            <option value="dedicated">Dedicated IP</option>
-            <option value="transactional">Transactional only</option>
-          </select>
-        </FieldBlock>
-        <FieldBlock label="DKIM / SPF">
-          <select
-            value={dkim}
-            onChange={(e) => set("emailDkimStatus", e.target.value)}
-            className="h-9 w-full rounded-md border border-input bg-background px-2 text-[13px] outline-none focus-visible:border-ring"
-          >
-            <option value="verified">Verified · sender.cleargrid.co</option>
-            <option value="pending">Pending verification</option>
-            <option value="none">Not configured</option>
-          </select>
-        </FieldBlock>
+      <p className="text-[11.5px] text-muted-foreground">
+        Delivery route, sender identity and rotation come from the sender profile.
+      </p>
+
+      {senderProfileId && (
+        <div className="mt-3">
+          <SendingDomainsList profileId={senderProfileId} showDns />
+        </div>
+      )}
+
+      <div className="mt-3 grid gap-3 sm:grid-cols-2">
         <FieldBlock label="Unsubscribe link">
           <select
             value={unsubPos}
@@ -1293,12 +1281,6 @@ function EmailDeliveryFields({
           label="Track link clicks"
           checked={trackClicks}
           onChange={(v) => set("emailTrackClicks", v)}
-        />
-      </div>
-      <div className="mt-3">
-        <SenderRotationEditor
-          value={(d.emailSenderRotation as string[] | undefined) ?? []}
-          onChange={(next) => set("emailSenderRotation", next)}
         />
       </div>
     </SectionCard>
