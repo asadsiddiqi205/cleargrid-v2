@@ -48,6 +48,13 @@ import {
   getGatewayById,
 } from "@/data/project-pools";
 import { getSenderProfileById } from "@/data/sender-profiles";
+import {
+  loadJourneyNodeOverrides,
+  saveJourneyNodeOverrides,
+  applyOverrideToData,
+  diffNodePatch,
+  type JourneyNodeOverrides,
+} from "@/data/journey-node-overrides";
 import { statusForDomain } from "@/data/domain-health";
 import { evaluateProfileDomains } from "@/data/sending-rotation";
 import { getWarmyDomainByName } from "@/data/warmy";
@@ -387,7 +394,45 @@ export default function JourneyCanvas({ journeyId }: JourneyCanvasProps) {
   const journeyMeta = getJourneyById(journeyId);
   const journeyName = journeyMeta?.name ?? "New Journey";
 
-  const [nodes, setNodes, onNodesChange] = useNodesState(flow.nodes);
+  // Seed nodes with any persisted overrides from localStorage so edits
+  // (picking a sender profile, swapping template, etc.) survive a
+  // reload. Overrides are keyed by (journeyId, nodeId) and only cover
+  // the allowlisted PERSISTED_FIELDS.
+  const seededNodes = React.useMemo(() => {
+    const overrides = loadJourneyNodeOverrides(journeyId);
+    if (Object.keys(overrides).length === 0) return flow.nodes;
+    return flow.nodes.map((n) => {
+      const patch = overrides[n.id];
+      if (!patch) return n;
+      return {
+        ...n,
+        data: applyOverrideToData(n.data as Record<string, unknown>, patch),
+      };
+    });
+    // Only re-seed on journey id — editing a node calls setNodes, not
+    // this memo.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [journeyId]);
+
+  const [nodes, setNodes, onNodesChange] = useNodesState(seededNodes);
+
+  // Persist node-data edits whenever nodes change. The diff-based patch
+  // keeps storage small and ignores transient fields (sim counts, etc.).
+  React.useEffect(() => {
+    const seedById = new Map(flow.nodes.map((n) => [n.id, n]));
+    const next: JourneyNodeOverrides = {};
+    for (const n of nodes) {
+      const seed = seedById.get(n.id);
+      const patch = diffNodePatch(
+        seed?.data as Record<string, unknown> | undefined,
+        n.data as Record<string, unknown> | undefined,
+      );
+      if (Object.keys(patch).length > 0) {
+        next[n.id] = patch;
+      }
+    }
+    saveJourneyNodeOverrides(journeyId, next);
+  }, [nodes, flow.nodes, journeyId]);
   const [edges, setEdges, onEdgesChange] = useEdgesState(flow.edges);
   const [selectedNode, setSelectedNode] = useState<Node | null>(null);
   const [isSimulating, setIsSimulating] = useState(false);
