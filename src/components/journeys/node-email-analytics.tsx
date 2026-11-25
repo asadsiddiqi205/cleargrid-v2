@@ -378,7 +378,7 @@ export function NodeEmailAnalytics({
                 </tbody>
               </table>
             ) : (
-              <EmptyRow>Pick a sender profile on the Delivery tab to see the breakdown.</EmptyRow>
+              <EmptyRow>Pick a sender profile on the Compose tab to see the breakdown.</EmptyRow>
             )}
           </SubBlock>
 

@@ -732,7 +732,11 @@ function buildRecipientLine(args: {
     emailSendMode === "one_with_cc" && row.ccEmails.length > 0
       ? ` · CC ${row.ccEmails.join(", ")}`
       : ""
-  const from = `${fromName ?? "ClearGrid"} <${fromAddress ?? "collections@cleargrid.ae"}>`
+  // With no profile picked, drop the empty angle-brackets segment and
+  // let the From read as just the name.
+  const name = fromName ?? "ClearGrid"
+  const addr = fromAddress && fromAddress.trim().length > 0 ? fromAddress : null
+  const from = addr ? `${name} <${addr}>` : name
   return `From ${from} · To ${to}${cc} · Subject "${subject}"`
 }
 

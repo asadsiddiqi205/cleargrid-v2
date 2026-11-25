@@ -105,7 +105,9 @@ function EmailPreview({
           </div>
           <div className="min-w-0 flex-1">
             <div className="truncate text-[11px] font-medium text-foreground">{fromName}</div>
-            <div className="truncate text-[10px] text-muted-foreground">{fromAddress}</div>
+            {fromAddress && fromAddress.trim().length > 0 && (
+              <div className="truncate text-[10px] text-muted-foreground">{fromAddress}</div>
+            )}
           </div>
           <Clock className="h-3 w-3 text-muted-foreground" />
         </div>
