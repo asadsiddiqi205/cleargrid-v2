@@ -24,12 +24,23 @@ import { WARMY_THRESHOLDS } from "@/data/warmy-thresholds"
 const GMAIL = /^(gmail\.com|googlemail\.com)$/i
 const OUTLOOK = /^(outlook\.(com|co\.[a-z]{2,3})|hotmail\..+|live\..+|msn\.com)$/i
 const YAHOO = /^yahoo\./i
+const ICLOUD = /^(icloud\.com|me\.com|mac\.com)$/i
 
+/** The provider we address at the recipient. "iCloud" is a reporting
+ *  bucket on the Analytics tab but still counts under "other" for
+ *  volume because Warmy doesn't price iCloud separately. */
 export type BorrowerProvider =
   | "gmail"
   | "outlook"
   | "yahoo"
+  | "icloud"
   | "other"
+
+/** Which provider lane volume should be drawn from. iCloud draws from
+ *  "other" because Warmy has no separate iCloud recommendation. */
+export function volumeProviderFor(p: BorrowerProvider): Exclude<BorrowerProvider, "icloud"> {
+  return p === "icloud" ? "other" : p
+}
 
 export function detectBorrowerProvider(email: string): BorrowerProvider {
   const at = email.lastIndexOf("@")
@@ -38,6 +49,7 @@ export function detectBorrowerProvider(email: string): BorrowerProvider {
   if (GMAIL.test(d)) return "gmail"
   if (OUTLOOK.test(d)) return "outlook"
   if (YAHOO.test(d)) return "yahoo"
+  if (ICLOUD.test(d)) return "icloud"
   // TODO: MX lookup to split Other into Google Workspace / Microsoft 365.
   return "other"
 }
@@ -51,8 +63,10 @@ function volumeLeft(domain: string, provider: BorrowerProvider): number | null {
     // (zero caps today — the senderProfile doesn't carry it).
     return null
   }
+  // iCloud draws from the Other bucket.
+  const bucket = volumeProviderFor(provider)
   let recommended: number | null
-  if (provider === "other") {
+  if (bucket === "other") {
     const gw = w.recommended_volume_today.google_workspace
     const ms = w.recommended_volume_today.microsoft_365
     // Lower of the two numbers; null if one of them is missing_data.
@@ -62,10 +76,10 @@ function volumeLeft(domain: string, provider: BorrowerProvider): number | null {
       recommended = Math.min(gw.volume, ms.volume)
     }
   } else {
-    const rv = w.recommended_volume_today[provider]
+    const rv = w.recommended_volume_today[bucket]
     recommended = rv.volume
   }
-  const warmyProvider: WarmyProvider = provider === "other" ? "google_workspace" : provider
+  const warmyProvider: WarmyProvider = bucket === "other" ? "google_workspace" : bucket
   const sent = getSentToday(domain, warmyProvider)
   // Warmy says 0 → no volume for that provider.
   if (recommended === 0) return 0
@@ -142,11 +156,12 @@ export function evaluateProfileDomains(
     } else if (left === 0) {
       // Warmy says 0 vs out-of-budget — distinguish for the UI.
       const w = s.warmy
+      const bucket = volumeProviderFor(provider)
       const rv =
         w &&
-        (provider === "other"
+        (bucket === "other"
           ? w.recommended_volume_today.google_workspace
-          : w.recommended_volume_today[provider])
+          : w.recommended_volume_today[bucket])
       skipReason = rv && rv.volume === 0 ? "warmy_zero" : "used_up"
       eligible = false
     }
@@ -259,8 +274,8 @@ export function recordRotationSend(
 ): PickResult {
   const result = pickSendingDomain(profile, borrowerEmail)
   if (result.pickedDomain) {
-    const provider: WarmyProvider =
-      result.provider === "other" ? "google_workspace" : result.provider
+    const bucket = volumeProviderFor(result.provider)
+    const provider: WarmyProvider = bucket === "other" ? "google_workspace" : bucket
     recordCommandSend(result.pickedDomain, provider, delta)
   }
   return result
