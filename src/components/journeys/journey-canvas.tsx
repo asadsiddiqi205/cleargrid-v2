@@ -1190,6 +1190,49 @@ export default function JourneyCanvas({ journeyId }: JourneyCanvasProps) {
       });
     }
 
+    // Send Email nodes must have a sender profile; the profile must have
+    // at least one eligible domain; At-risk / Blocked or unmatched domains
+    // warn.
+    nodes.forEach((n) => {
+      const d = (n.data ?? {}) as Record<string, unknown>;
+      if (d.actionType !== "email") return;
+      const label = String(d.label ?? n.id);
+      const spId = typeof d.senderProfileId === "string" ? d.senderProfileId : "";
+      const profile = spId ? getSenderProfileById(spId) : undefined;
+      if (!profile) {
+        errors.push(`"${label}" has no sender profile picked`);
+        problemNodeIds.push(n.id);
+        return;
+      }
+      const rows = evaluateProfileDomains(profile, "gmail");
+      const everySkip = rows.length > 0 && rows.every((r) =>
+        !r.eligible && (r.skipReason === "blocked" || r.skipReason === "paused"),
+      );
+      if (everySkip) {
+        errors.push(`"${label}" every domain on ${profile.name} is Blocked or Paused`);
+        problemNodeIds.push(n.id);
+        return;
+      }
+      const statuses = profile.domains.map((dd) => statusForDomain(dd.domain));
+      if (statuses.some((s) => s.status === "at_risk" || s.status === "blocked")) {
+        warnings.push(`"${label}" sender profile ${profile.name} has an At-risk or Blocked domain`);
+      }
+      if (profile.domains.every((dd) => !getWarmyDomainByName(dd.domain))) {
+        warnings.push(`"${label}" sender profile has no domain matched in Warmy`);
+      }
+      const audience = typeof d._audienceSampleCount === "number"
+        ? (d._audienceSampleCount as number)
+        : typeof d._audienceTotal === "number"
+        ? (d._audienceTotal as number)
+        : null;
+      if (audience != null) {
+        const totalLeft = rows.reduce((sum, r) => sum + (r.volumeLeft ?? Infinity), 0);
+        if (Number.isFinite(totalLeft) && totalLeft < audience) {
+          warnings.push(`"${label}" today's volume may not cover this audience. Some emails will wait until tomorrow.`);
+        }
+      }
+    });
+
     // Experiment nodes must have a name, a primary metric, arms totalling 100%,
     // every non-Control arm wired to downstream nodes, and a duration ≥ the
     // attribution window. Also warn on sticky-off and nested experiments.
