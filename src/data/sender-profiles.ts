@@ -43,8 +43,17 @@ export interface SenderProfile {
   /** Optional CC / BCC — governed at the profile level, not per-campaign. */
   cc?: string[]
   bcc?: string[]
-  /** The sending domain the from-email lives on, plus its verification state. */
+  /** The from-email's own sending domain, plus its verification state.
+   *  Kept for backwards compat: every Composer send uses the full
+   *  fromEmail, so this is the one the Composer scores. */
   domain: SendingDomain
+  /** Journey sends rotate `prefix@domain` across this list of warmed
+   *  sending domains. Must include `domain.domain` itself as the first
+   *  entry so existing behaviour is preserved. */
+  domains: SendingDomain[]
+  /** Local-part used by Journey rotation sends. Composer sends still
+   *  use `fromEmail` verbatim. */
+  prefix: string
   /** Which ESP/route will actually deliver mail through this profile. */
   esp: EspRoute
   /** Active profiles are pickable in the composer; inactive are hidden. */
@@ -56,7 +65,25 @@ export interface SenderProfile {
   updatedBy: string
 }
 
+/** Small helper so callers that only know the from-email can still
+ *  address the profile's domain pool. */
+export function senderProfileDomainNames(p: SenderProfile): string[] {
+  return p.domains.map((d) => d.domain)
+}
+
 /* ─────────────────────────── Seeded profiles ─────────────────────────── */
+
+const DOM = {
+  mashreq: { domain: "mashreq.com", verified: true, verifiedAt: "2026-05-20T09:14:00Z", spf: "pass", dkim: "pass", dmarc: "pass" } as SendingDomain,
+  tamaraCo: { domain: "tamara.co", verified: true, verifiedAt: "2026-05-18T14:00:00Z", spf: "pass", dkim: "pass", dmarc: "pass" } as SendingDomain,
+  tamaraSa: { domain: "tamara.sa", verified: true, verifiedAt: "2026-06-01T10:00:00Z", spf: "pass", dkim: "pass", dmarc: "pass" } as SendingDomain,
+  cashnow: { domain: "cashnow.ae", verified: true, verifiedAt: "2026-05-15T08:00:00Z", spf: "pass", dkim: "pass", dmarc: "pass" } as SendingDomain,
+  enbd: { domain: "emiratesnbd.com", verified: true, verifiedAt: "2026-05-25T16:00:00Z", spf: "pass", dkim: "pass", dmarc: "pass" } as SendingDomain,
+  bankfab: { domain: "bankfab.com", verified: false, spf: "pass", dkim: "pending", dmarc: "pending" } as SendingDomain,
+  cleargridCo: { domain: "cleargrid.co", verified: true, verifiedAt: "2026-05-01T10:00:00Z", spf: "pass", dkim: "pass", dmarc: "pass" } as SendingDomain,
+  cleargridAi: { domain: "s.cleargrid.ai", verified: true, verifiedAt: "2026-05-01T10:00:00Z", spf: "pass", dkim: "pass", dmarc: "pass" } as SendingDomain,
+  cleargridAe: { domain: "cleargrid.ae", verified: true, verifiedAt: "2026-05-01T10:00:00Z", spf: "pass", dkim: "pass", dmarc: "pass" } as SendingDomain,
+}
 
 export const senderProfiles: SenderProfile[] = [
   {
@@ -69,14 +96,9 @@ export const senderProfiles: SenderProfile[] = [
     replyTo: "collections-reply@mashreq.com",
     cc: [],
     bcc: ["compliance-log@mashreq.com"],
-    domain: {
-      domain: "mashreq.com",
-      verified: true,
-      verifiedAt: "2026-05-20T09:14:00Z",
-      spf: "pass",
-      dkim: "pass",
-      dmarc: "pass",
-    },
+    prefix: "collections",
+    domain: DOM.mashreq,
+    domains: [DOM.mashreq, DOM.cleargridCo, DOM.cleargridAi],
     esp: "infobip_uae",
     status: "active",
     description: "Primary Mashreq collections sender — UAE routing.",
@@ -92,14 +114,9 @@ export const senderProfiles: SenderProfile[] = [
     fromName: "Mashreq Customer Care",
     fromEmail: "care@mashreq.com",
     replyTo: "care@mashreq.com",
-    domain: {
-      domain: "mashreq.com",
-      verified: true,
-      verifiedAt: "2026-05-20T09:14:00Z",
-      spf: "pass",
-      dkim: "pass",
-      dmarc: "pass",
-    },
+    prefix: "care",
+    domain: DOM.mashreq,
+    domains: [DOM.mashreq, DOM.cleargridCo],
     esp: "infobip_uae",
     status: "active",
     description: "Softer voice — hardship + welcome outreach.",
@@ -115,14 +132,9 @@ export const senderProfiles: SenderProfile[] = [
     fromName: "Tamara Care",
     fromEmail: "care@tamara.co",
     replyTo: "care@tamara.co",
-    domain: {
-      domain: "tamara.co",
-      verified: true,
-      verifiedAt: "2026-05-18T14:00:00Z",
-      spf: "pass",
-      dkim: "pass",
-      dmarc: "pass",
-    },
+    prefix: "care",
+    domain: DOM.tamaraCo,
+    domains: [DOM.tamaraCo, DOM.cleargridCo, DOM.cleargridAi],
     esp: "sendgrid",
     status: "active",
     description: "Default Tamara sender — friendly BNPL voice.",
@@ -138,14 +150,9 @@ export const senderProfiles: SenderProfile[] = [
     fromName: "Tamara",
     fromEmail: "hello@tamara.sa",
     replyTo: "hello@tamara.sa",
-    domain: {
-      domain: "tamara.sa",
-      verified: true,
-      verifiedAt: "2026-06-01T10:00:00Z",
-      spf: "pass",
-      dkim: "pass",
-      dmarc: "pass",
-    },
+    prefix: "hello",
+    domain: DOM.tamaraSa,
+    domains: [DOM.tamaraSa, DOM.cleargridAi],
     esp: "infobip_ksa",
     status: "active",
     description: "KSA sender — routes via Infobip KSA for local deliverability.",
@@ -161,14 +168,9 @@ export const senderProfiles: SenderProfile[] = [
     fromName: "CashNow",
     fromEmail: "collections@cashnow.ae",
     replyTo: "support@cashnow.ae",
-    domain: {
-      domain: "cashnow.ae",
-      verified: true,
-      verifiedAt: "2026-05-15T08:00:00Z",
-      spf: "pass",
-      dkim: "pass",
-      dmarc: "pass",
-    },
+    prefix: "collections",
+    domain: DOM.cashnow,
+    domains: [DOM.cashnow, DOM.cleargridAe],
     esp: "sendgrid",
     status: "active",
     createdAt: "2026-04-05T09:00:00Z",
@@ -183,14 +185,9 @@ export const senderProfiles: SenderProfile[] = [
     fromName: "Emirates NBD Care",
     fromEmail: "care@emiratesnbd.com",
     replyTo: "care@emiratesnbd.com",
-    domain: {
-      domain: "emiratesnbd.com",
-      verified: true,
-      verifiedAt: "2026-05-25T16:00:00Z",
-      spf: "pass",
-      dkim: "pass",
-      dmarc: "pass",
-    },
+    prefix: "care",
+    domain: DOM.enbd,
+    domains: [DOM.enbd, DOM.cleargridCo],
     esp: "ses",
     status: "active",
     description: "ENBD hardship + care outreach.",
@@ -206,13 +203,9 @@ export const senderProfiles: SenderProfile[] = [
     fromName: "First Abu Dhabi Bank",
     fromEmail: "notices@bankfab.com",
     replyTo: "notices-reply@bankfab.com",
-    domain: {
-      domain: "bankfab.com",
-      verified: false,
-      spf: "pass",
-      dkim: "pending",
-      dmarc: "pending",
-    },
+    prefix: "notices",
+    domain: DOM.bankfab,
+    domains: [DOM.bankfab],
     esp: "infobip_uae",
     status: "inactive",
     description: "Pending domain verification — DKIM + DMARC not yet passing.",
@@ -228,14 +221,9 @@ export const senderProfiles: SenderProfile[] = [
     fromName: "ClearGrid Collections",
     fromEmail: "collections@cleargrid.co",
     replyTo: "support@cleargrid.co",
-    domain: {
-      domain: "cleargrid.co",
-      verified: true,
-      verifiedAt: "2026-05-01T10:00:00Z",
-      spf: "pass",
-      dkim: "pass",
-      dmarc: "pass",
-    },
+    prefix: "collections",
+    domain: DOM.cleargridCo,
+    domains: [DOM.cleargridCo, DOM.cleargridAi, DOM.cleargridAe],
     esp: "sendgrid",
     status: "active",
     description: "Cross-lender fallback sender.",

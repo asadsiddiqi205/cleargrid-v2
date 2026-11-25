@@ -282,6 +282,14 @@ function NewProfileDialog({
     }
     const now = new Date().toISOString()
     const lender = lenders.find((l) => l.id === lenderId)
+    const prefix = fromEmail.includes("@") ? fromEmail.split("@")[0]! : fromEmail
+    const seedDomain = {
+      domain: domainFromEmail,
+      verified: willBeVerified,
+      spf: "pending" as const,
+      dkim: "pending" as const,
+      dmarc: "pending" as const,
+    }
     const profile: SenderProfile = {
       id: `sp-new-${Date.now().toString(36)}`,
       lenderId,
@@ -298,13 +306,9 @@ function NewProfileDialog({
         .split(",")
         .map((s) => s.trim())
         .filter(Boolean),
-      domain: {
-        domain: domainFromEmail,
-        verified: willBeVerified,
-        spf: "pending",
-        dkim: "pending",
-        dmarc: "pending",
-      },
+      prefix,
+      domain: seedDomain,
+      domains: [seedDomain],
       esp,
       status: willBeVerified ? "active" : "inactive",
       description: description.trim() || undefined,
