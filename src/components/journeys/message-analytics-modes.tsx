@@ -485,8 +485,22 @@ export function OverTimeView({
       uniqueClicks: number
       ptp: number
       collection: number
+      heldForVolume: number
+      senderHealthSum: number
+      senderHealthRuns: number
     }
     const map = new Map<string, Bucket>()
+    const profile = _senderProfileId ? getSenderProfileById(_senderProfileId) : null
+    const healthAverage = profile
+      ? (() => {
+          const scores = profile.domains
+            .map((d) => getWarmyDomainByName(d.domain)?.health_score.total)
+            .filter((v): v is number => typeof v === "number")
+          return scores.length > 0
+            ? Math.round(scores.reduce((s, v) => s + v, 0) / scores.length)
+            : 0
+        })()
+      : 0
     for (const run of runsInWindow) {
       const k = bucketKey(new Date(run.startedAt), granularity)
       let b = map.get(k)
@@ -500,6 +514,9 @@ export function OverTimeView({
           uniqueClicks: 0,
           ptp: 0,
           collection: 0,
+          heldForVolume: 0,
+          senderHealthSum: 0,
+          senderHealthRuns: 0,
         }
         map.set(k, b)
       }
@@ -517,6 +534,21 @@ export function OverTimeView({
         b.uniqueClicks += a.engagement.uniqueClicks
         b.ptp += a.outcomes.ptpCount
         b.collection += a.outcomes.collection
+        // Warmy columns for the Over-time view. Held for volume uses
+        // the same per-run seeded derivation the single-run overlay
+        // uses; sender health is the average Warmy score across the
+        // profile's domains.
+        if (profile) {
+          let seed = 0
+          for (let i = 0; i < run.id.length; i++) seed = (seed * 31 + run.id.charCodeAt(i)) >>> 0
+          const held = Math.min(
+            a.funnel.sent,
+            Math.max(0, Math.floor((a.funnel.sent * ((seed % 4) + 1)) / 100)),
+          )
+          b.heldForVolume += held
+          b.senderHealthSum += healthAverage
+          b.senderHealthRuns += 1
+        }
       } else {
         const a = synthesizeSmsAnalytics(
           journeyId,
@@ -637,6 +669,12 @@ export function OverTimeView({
                 )}
                 <th className="px-2 py-1.5 text-right">PTP</th>
                 <th className="px-2 py-1.5 text-right">Collection</th>
+                {channel === "email" && (
+                  <>
+                    <th className="px-2 py-1.5 text-right">Sender health</th>
+                    <th className="px-2 py-1.5 text-right">Held / vol</th>
+                  </>
+                )}
                 <th className="px-2 py-1.5">Delivered trend</th>
               </tr>
             </thead>
@@ -679,6 +717,18 @@ export function OverTimeView({
                     <td className="px-2 py-1 text-right tabular-nums">
                       {formatAED(b.collection)}
                     </td>
+                    {channel === "email" && (
+                      <>
+                        <td className="px-2 py-1 text-right tabular-nums">
+                          {b.senderHealthRuns > 0
+                            ? Math.round(b.senderHealthSum / b.senderHealthRuns)
+                            : "—"}
+                        </td>
+                        <td className="px-2 py-1 text-right tabular-nums">
+                          {b.sent > 0 ? `${((b.heldForVolume / b.sent) * 100).toFixed(1)}%` : "—"}
+                        </td>
+                      </>
+                    )}
                     <td className="px-2 py-1">
                       <div className="h-1.5 w-28 overflow-hidden rounded bg-muted/40">
                         <div
