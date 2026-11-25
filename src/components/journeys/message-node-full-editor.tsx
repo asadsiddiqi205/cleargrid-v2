@@ -342,8 +342,8 @@ export function MessageNodeFullEditor({
     (resolvedProfile
       ? `${resolvedProfile.prefix}@${resolvedProfile.domains[0]?.domain ?? resolvedProfile.domain.domain}`
       : "collections@cleargrid.ae")
-  const rotationNote = resolvedProfile && !customFromEmail
-    ? ` · rotates across ${resolvedProfile.domains.length} domain${resolvedProfile.domains.length === 1 ? "" : "s"}`
+  const rotationSummary = resolvedProfile
+    ? describeProfileRotationHealth(resolvedProfile, "gmail")
     : ""
 
   const [tab, setTab] = React.useState<EditorTab>("compose")
@@ -823,13 +823,12 @@ export function MessageNodeFullEditor({
                   customFromName={customFromName}
                   customFromEmail={customFromEmail}
                   customReplyTo={customReplyTo}
+                  context="journey"
                   onCustomChange={(patch) => {
+                    // Journey nodes only accept from-name overrides; strip
+                    // any attempt to change the address or reply-to.
                     if (patch.customFromName !== undefined)
                       set("senderFromName", patch.customFromName)
-                    if (patch.customFromEmail !== undefined)
-                      set("senderFromEmail", patch.customFromEmail)
-                    if (patch.customReplyTo !== undefined)
-                      set("senderReplyTo", patch.customReplyTo)
                   }}
                 />
               </div>
@@ -881,9 +880,9 @@ export function MessageNodeFullEditor({
             <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
               Preview · as the borrower will receive it
             </div>
-            {channel === "email" && rotationNote && (
+            {channel === "email" && rotationSummary && (
               <div className="text-[10.5px] text-muted-foreground">
-                From {effectiveFromName} &lt;{effectiveFromEmail}&gt;{rotationNote}
+                From {effectiveFromName} · {rotationSummary}
               </div>
             )}
             {bodySource.startsWith("(no template picked") ? (

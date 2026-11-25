@@ -91,7 +91,7 @@ import {
 } from "@/data/sender-profiles"
 import {
   SendingDomainsList,
-  describeProfileHealth,
+  describeProfileRotationHealth,
 } from "@/components/warmy/sending-domains-list"
 import {
   listPools,
@@ -3541,7 +3541,7 @@ function EmailDeliveryPanel({
           {profiles.map((p) => (
             <option key={p.id} value={p.id}>
               {p.name} · {p.lenderName} · {p.fromEmail}{" "}
-              — {describeProfileHealth(p)}
+              — {describeProfileRotationHealth(p)}
             </option>
           ))}
         </select>

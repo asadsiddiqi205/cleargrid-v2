@@ -29,6 +29,7 @@ import {
 } from "@/data/sender-profiles"
 import { statusForDomain, STATUS_LABEL, STATUS_PILL_CLASS } from "@/data/domain-health"
 import { getSentToday, getWarmyDomainByName } from "@/data/warmy"
+import { describeProfileRotationHealth, worstDomainState } from "@/components/warmy/sending-domains-list"
 
 interface SenderProfilePickerProps {
   /** Lender the campaign belongs to. Filters the list. If missing, we show
@@ -50,6 +51,13 @@ interface SenderProfilePickerProps {
   compact?: boolean
   /** Optional label override. */
   label?: string
+  /** "journey": every option's health summary + the active summary line
+   *  describe the profile's rotation (across every warmed domain), not
+   *  the single from-email domain. Overrides only let the author change
+   *  the from name — address + domain are locked.
+   *  "composer" (default): keeps the Composer behaviour where the
+   *  from-email domain IS what every send uses. */
+  context?: "composer" | "journey"
 }
 
 export function SenderProfilePicker({
@@ -62,6 +70,7 @@ export function SenderProfilePicker({
   onCustomChange,
   compact = false,
   label,
+  context = "composer",
 }: SenderProfilePickerProps) {
   const [open, setOpen] = React.useState(false)
   const profiles = React.useMemo(
@@ -92,7 +101,7 @@ export function SenderProfilePicker({
           }
         >
           {active ? (
-            <ActiveSummary profile={active} />
+            <ActiveSummary profile={active} context={context} />
           ) : (
             <div className="flex min-w-0 flex-1 items-center gap-2 text-[12px] text-muted-foreground">
               <AtSign className="h-3.5 w-3.5" />
@@ -101,7 +110,7 @@ export function SenderProfilePicker({
           )}
           <ChevronDown className="ml-auto h-3.5 w-3.5 shrink-0 text-muted-foreground" />
         </PopoverTrigger>
-        <PopoverContent align="start" className="w-[380px] p-1">
+        <PopoverContent align="start" className="w-[380px] border border-border bg-popover p-1 shadow-lg">
           <div className="max-h-72 space-y-0.5 overflow-y-auto">
             {profiles.length === 0 ? (
               <div className="space-y-2 px-3 py-4 text-center">
@@ -119,6 +128,7 @@ export function SenderProfilePicker({
                   key={p.id}
                   profile={p}
                   active={value === p.id}
+                  context={context}
                   onClick={() => {
                     onChange(p.id)
                     setOpen(false)
@@ -139,6 +149,7 @@ export function SenderProfilePicker({
           customReplyTo={customReplyTo}
           onCustomChange={onCustomChange}
           compact={compact}
+          context={context}
         />
       )}
 
@@ -158,7 +169,13 @@ export function SenderProfilePicker({
   )
 }
 
-function ActiveSummary({ profile }: { profile: SenderProfile }) {
+function ActiveSummary({
+  profile,
+  context,
+}: {
+  profile: SenderProfile
+  context: "composer" | "journey"
+}) {
   const domain = profile.fromEmail.includes("@")
     ? profile.fromEmail.split("@")[1]!
     : profile.domain.domain
@@ -170,7 +187,7 @@ function ActiveSummary({ profile }: { profile: SenderProfile }) {
   return (
     <div className="flex min-w-0 flex-1 flex-col gap-1">
       <div className="flex items-center gap-2">
-        <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded bg-emerald-500/15 text-emerald-300">
+        <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded bg-emerald-500/15 text-emerald-600 dark:text-emerald-300">
           <Building2 className="h-3 w-3" />
         </div>
         <div className="min-w-0 flex-1">
@@ -180,44 +197,50 @@ function ActiveSummary({ profile }: { profile: SenderProfile }) {
           </p>
         </div>
         {profile.domain.verified ? (
-          <Badge className="shrink-0 border-emerald-500/30 bg-emerald-500/10 text-[9px] text-emerald-300">
+          <Badge className="shrink-0 border-emerald-500/30 bg-emerald-500/10 text-[9px] text-emerald-700 dark:text-emerald-300">
             <CheckCircle2 className="mr-0.5 h-2.5 w-2.5" />
             Verified
           </Badge>
         ) : (
-          <Badge className="shrink-0 border-amber-500/30 bg-amber-500/10 text-[9px] text-amber-300">
+          <Badge className="shrink-0 border-amber-500/30 bg-amber-500/10 text-[9px] text-amber-700 dark:text-amber-300">
             Unverified
           </Badge>
         )}
       </div>
-      <p className="pl-8 text-[10.5px] text-muted-foreground">
-        Sends from {profile.fromEmail} ·{" "}
-        <span
-          className={cn(
-            summary.status === "healthy" && "text-emerald-300",
-            summary.status === "watch" && "text-amber-300",
-            summary.status === "at_risk" && "text-orange-300",
-            summary.status === "blocked" && "text-red-300",
-            summary.status === "no_data" && "text-neutral-300",
+      {context === "journey" ? (
+        <p className="pl-8 text-[10.5px] text-muted-foreground">
+          {describeProfileRotationHealth(profile, "gmail")}
+        </p>
+      ) : (
+        <p className="pl-8 text-[10.5px] text-muted-foreground">
+          Sends from {profile.fromEmail} ·{" "}
+          <span
+            className={cn(
+              summary.status === "healthy" && "text-emerald-600 dark:text-emerald-300",
+              summary.status === "watch" && "text-amber-600 dark:text-amber-300",
+              summary.status === "at_risk" && "text-orange-600 dark:text-orange-300",
+              summary.status === "blocked" && "text-red-600 dark:text-red-300",
+              summary.status === "no_data" && "text-neutral-500 dark:text-neutral-300",
+            )}
+          >
+            {summary.status === "healthy"
+              ? "Healthy"
+              : summary.status === "watch"
+              ? "Watch"
+              : summary.status === "at_risk"
+              ? "At risk"
+              : summary.status === "blocked"
+              ? "Blocked"
+              : "No data"}
+          </span>
+          {left != null && (
+            <>
+              {" · "}
+              {left.toLocaleString()} of today&apos;s Gmail volume left
+            </>
           )}
-        >
-          {summary.status === "healthy"
-            ? "Healthy"
-            : summary.status === "watch"
-            ? "Watch"
-            : summary.status === "at_risk"
-            ? "At risk"
-            : summary.status === "blocked"
-            ? "Blocked"
-            : "No data"}
-        </span>
-        {left != null && (
-          <>
-            {" · "}
-            {left.toLocaleString()} of today&apos;s Gmail volume left
-          </>
-        )}
-      </p>
+        </p>
+      )}
     </div>
   )
 }
@@ -226,11 +249,15 @@ function ProfileRow({
   profile,
   active,
   onClick,
+  context,
 }: {
   profile: SenderProfile
   active: boolean
   onClick: () => void
+  context: "composer" | "journey"
 }) {
+  const rotationHealth = describeProfileRotationHealth(profile, "gmail")
+  const rotationWorst = worstDomainState(profile)
   return (
     <button
       type="button"
@@ -240,40 +267,45 @@ function ProfileRow({
         active ? "bg-emerald-500/10" : "hover:bg-muted",
       )}
     >
-      <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded bg-zinc-800 text-zinc-300">
+      <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded bg-zinc-200 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
         <Building2 className="h-3.5 w-3.5" />
       </div>
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-1.5">
           <p className="truncate text-[12px] font-medium text-foreground">{profile.name}</p>
-          {active && <Check className="h-3 w-3 text-emerald-400" />}
+          {active && <Check className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />}
         </div>
         <p className="truncate text-[10px] text-muted-foreground">
           {profile.fromName} &lt;{profile.fromEmail}&gt;
         </p>
         <div className="mt-0.5 flex flex-wrap items-center gap-1">
-          <Badge className="border-zinc-700 bg-zinc-800 text-[9px] text-zinc-300">
+          <Badge className="border-zinc-300 bg-zinc-100 text-[9px] text-zinc-700 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
             {ESP_LABEL[profile.esp]}
           </Badge>
-          <Badge className="border-zinc-700 bg-zinc-800 text-[9px] text-zinc-300">
+          <Badge className="border-zinc-300 bg-zinc-100 text-[9px] text-zinc-700 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
             {profile.lenderName}
           </Badge>
-          <ProfileDomainStatusBadge
-            domain={
-              profile.fromEmail.includes("@")
-                ? profile.fromEmail.split("@")[1]!
-                : profile.domain.domain
-            }
-          />
-          {profile.domain.verified ? (
-            <Badge className="border-emerald-500/30 bg-emerald-500/10 text-[9px] text-emerald-300">
-              <CheckCircle2 className="mr-0.5 h-2.5 w-2.5" />
-              {profile.domain.domain}
+          {context === "journey" ? (
+            <Badge
+              className={cn(
+                "border text-[9px]",
+                rotationWorst === "healthy" && "border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+                rotationWorst === "watch" && "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300",
+                rotationWorst === "at_risk" && "border-orange-500/40 bg-orange-500/10 text-orange-700 dark:text-orange-300",
+                rotationWorst === "blocked" && "border-red-500/40 bg-red-500/10 text-red-700 dark:text-red-300",
+                rotationWorst === "no_data" && "border-neutral-500/40 bg-neutral-500/10 text-neutral-700 dark:text-neutral-300",
+              )}
+            >
+              {rotationHealth}
             </Badge>
           ) : (
-            <Badge className="border-amber-500/30 bg-amber-500/10 text-[9px] text-amber-300">
-              {profile.domain.domain} · unverified
-            </Badge>
+            <ProfileDomainStatusBadge
+              domain={
+                profile.fromEmail.includes("@")
+                  ? profile.fromEmail.split("@")[1]!
+                  : profile.domain.domain
+              }
+            />
           )}
         </div>
         {profile.description && (
@@ -293,6 +325,7 @@ function ResolvedIdentity({
   customReplyTo,
   onCustomChange,
   compact,
+  context,
 }: {
   profile: SenderProfile
   customFromName: string
@@ -304,6 +337,7 @@ function ResolvedIdentity({
     customReplyTo?: string
   }) => void
   compact: boolean
+  context: "composer" | "journey"
 }) {
   const hasCustom = Boolean(customFromName || customFromEmail || customReplyTo)
   const [expanded, setExpanded] = React.useState(hasCustom)
@@ -390,21 +424,23 @@ function ResolvedIdentity({
       <ResolvedRow icon={<Reply className="h-3 w-3" />} label="Reply-to">
         <span className="text-foreground">{effectiveReplyTo}</span>
       </ResolvedRow>
-      <ResolvedRow icon={<Shield className="h-3 w-3" />} label="Domain">
-        <span className="inline-flex items-center gap-1 text-foreground">
-          {customDomain || profile.domain.domain}
-          {profile.domain.verified && !domainMismatch ? (
-            <Badge className="border-emerald-500/30 bg-emerald-500/10 text-[9px] text-emerald-300">
-              <CheckCircle2 className="mr-0.5 h-2.5 w-2.5" />
-              Verified
-            </Badge>
-          ) : (
-            <Badge className="border-amber-500/30 bg-amber-500/10 text-[9px] text-amber-300">
-              {domainMismatch ? "Unverified · SPF/DKIM will fail" : "Unverified"}
-            </Badge>
-          )}
-        </span>
-      </ResolvedRow>
+      {context === "composer" && (
+        <ResolvedRow icon={<Shield className="h-3 w-3" />} label="Domain">
+          <span className="inline-flex items-center gap-1 text-foreground">
+            {customDomain || profile.domain.domain}
+            {profile.domain.verified && !domainMismatch ? (
+              <Badge className="border-emerald-500/30 bg-emerald-500/10 text-[9px] text-emerald-700 dark:text-emerald-300">
+                <CheckCircle2 className="mr-0.5 h-2.5 w-2.5" />
+                Verified
+              </Badge>
+            ) : (
+              <Badge className="border-amber-500/30 bg-amber-500/10 text-[9px] text-amber-700 dark:text-amber-300">
+                {domainMismatch ? "Unverified · SPF/DKIM will fail" : "Unverified"}
+              </Badge>
+            )}
+          </span>
+        </ResolvedRow>
+      )}
       {!compact && (
         <>
           <ResolvedRow icon={<Cog className="h-3 w-3" />} label="Route">
@@ -459,24 +495,33 @@ function ResolvedIdentity({
                   className="h-7 w-full rounded border border-input bg-transparent px-2 text-[11px] outline-none focus-visible:border-ring dark:bg-input/30"
                 />
               </FieldRow>
-              <FieldRow label="From email">
-                <input
-                  type="email"
-                  value={draft.fromEmail}
-                  onChange={(e) => setDraft((d) => ({ ...d, fromEmail: e.target.value }))}
-                  placeholder={profile.fromEmail}
-                  className="h-7 w-full rounded border border-input bg-transparent px-2 font-mono text-[11px] outline-none focus-visible:border-ring dark:bg-input/30"
-                />
-              </FieldRow>
-              <FieldRow label="Reply-to">
-                <input
-                  type="email"
-                  value={draft.replyTo}
-                  onChange={(e) => setDraft((d) => ({ ...d, replyTo: e.target.value }))}
-                  placeholder={profile.replyTo}
-                  className="h-7 w-full rounded border border-input bg-transparent px-2 font-mono text-[11px] outline-none focus-visible:border-ring dark:bg-input/30"
-                />
-              </FieldRow>
+              {context === "composer" ? (
+                <>
+                  <FieldRow label="From email">
+                    <input
+                      type="email"
+                      value={draft.fromEmail}
+                      onChange={(e) => setDraft((d) => ({ ...d, fromEmail: e.target.value }))}
+                      placeholder={profile.fromEmail}
+                      className="h-7 w-full rounded border border-input bg-transparent px-2 font-mono text-[11px] outline-none focus-visible:border-ring dark:bg-input/30"
+                    />
+                  </FieldRow>
+                  <FieldRow label="Reply-to">
+                    <input
+                      type="email"
+                      value={draft.replyTo}
+                      onChange={(e) => setDraft((d) => ({ ...d, replyTo: e.target.value }))}
+                      placeholder={profile.replyTo}
+                      className="h-7 w-full rounded border border-input bg-transparent px-2 font-mono text-[11px] outline-none focus-visible:border-ring dark:bg-input/30"
+                    />
+                  </FieldRow>
+                </>
+              ) : (
+                <p className="rounded border border-border/60 bg-muted/30 px-2 py-1.5 text-[10.5px] text-muted-foreground">
+                  From email, reply-to and the rotation domains are governed by the profile on
+                  journey nodes — only the From name can be overridden.
+                </p>
+              )}
 
               {/* Live preview of the resolved From identity if the draft is confirmed. */}
               <div className="rounded-md border border-primary/25 bg-primary/[0.06] px-2 py-1.5">
