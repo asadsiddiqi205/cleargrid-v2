@@ -89,8 +89,8 @@ export default function SenderProfilesPage() {
     >
       <WarmyAlertBanner />
 
-      {/* Tabs */}
-      <div className="mb-4 flex items-center border-b border-border">
+      {/* Tabs — sit as a small inline nav above the filters */}
+      <div className="mb-5 inline-flex items-center gap-1 rounded-md border border-border bg-muted/20 p-1">
         <TabButton active={tab === "profiles"} onClick={() => setTab("profiles")}>
           Profiles
         </TabButton>
@@ -216,10 +216,10 @@ function TabButton({
       type="button"
       onClick={onClick}
       className={cn(
-        "-mb-px border-b-2 px-3 py-2 text-[12px] font-medium transition-colors",
+        "rounded px-2.5 py-1 text-[12px] font-medium transition-colors",
         active
-          ? "border-primary text-primary"
-          : "border-transparent text-muted-foreground hover:text-foreground",
+          ? "bg-background text-foreground shadow-sm"
+          : "text-muted-foreground hover:text-foreground",
       )}
     >
       {children}
@@ -427,26 +427,33 @@ function NewProfileDialog({
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="sm:max-w-3xl">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <AtSign className="h-4 w-4 text-emerald-400" />
+          <DialogTitle className="flex items-center gap-2.5 text-base">
+            <span className="flex h-8 w-8 items-center justify-center rounded-md bg-emerald-500/15 text-emerald-300">
+              <AtSign className="h-4 w-4" />
+            </span>
             New sender profile
           </DialogTitle>
-          <DialogDescription>
+          <DialogDescription className="text-[12.5px]">
             Governed email sender identity. Credentials stay on the email sender connection and
             are loaded by configuration id.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-5">
+          <div className="grid grid-cols-2 gap-4">
             <Field label="Display name">
-              <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Mashreq Collections" />
+              <Input
+                className="h-10"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="e.g. Mashreq Collections"
+              />
             </Field>
             <Field label="Lender">
               <Select value={lenderId} onValueChange={(v) => setLenderId(v ?? "general")}>
-                <SelectTrigger className="w-full">
+                <SelectTrigger className="h-10 w-full">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -463,7 +470,7 @@ function NewProfileDialog({
 
           <Field label="ESP / route">
             <Select value={esp} onValueChange={(v) => setEsp((v as EspRoute) ?? "infobip_uae")}>
-              <SelectTrigger className="w-full">
+              <SelectTrigger className="h-10 w-full">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -474,22 +481,24 @@ function NewProfileDialog({
                 ))}
               </SelectContent>
             </Select>
-            <p className="mt-1 text-[10.5px] text-muted-foreground">
+            <p className="mt-1.5 text-[11px] text-muted-foreground">
               Email routing for this profile — the composer never picks a raw provider.
             </p>
           </Field>
 
           <Field label="From name (what recipients see)">
             <Input
+              className="h-10"
               value={fromName}
               onChange={(e) => setFromName(e.target.value)}
               placeholder="e.g. Mashreq Collections"
             />
           </Field>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 gap-4">
             <Field label="From email">
               <Input
+                className="h-10"
                 value={fromEmail}
                 onChange={(e) => setFromEmail(e.target.value)}
                 placeholder="collections@mashreq.com"
@@ -500,6 +509,7 @@ function NewProfileDialog({
             </Field>
             <Field label="Reply-to">
               <Input
+                className="h-10"
                 value={replyTo}
                 onChange={(e) => setReplyTo(e.target.value)}
                 placeholder="reply@mashreq.com"
@@ -507,30 +517,34 @@ function NewProfileDialog({
             </Field>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Prefix">
-              <Input
-                value={prefixInput}
-                onChange={(e) => setPrefixInput(e.target.value)}
-                placeholder={effectivePrefix || "e.g. support"}
-              />
-            </Field>
-            <Field label="Domains">
-              <DomainMultiSelect
-                value={effectiveDomains}
-                onChange={setSelectedDomains}
-                primary={domainFromEmail}
-              />
-            </Field>
+          <div>
+            <div className="grid grid-cols-2 gap-4">
+              <Field label="Prefix">
+                <Input
+                  className="h-10"
+                  value={prefixInput}
+                  onChange={(e) => setPrefixInput(e.target.value)}
+                  placeholder={effectivePrefix || "e.g. support"}
+                />
+              </Field>
+              <Field label="Domains">
+                <DomainMultiSelect
+                  value={effectiveDomains}
+                  onChange={setSelectedDomains}
+                  primary={domainFromEmail}
+                />
+              </Field>
+            </div>
+            <p className="mt-1.5 text-[11px] text-muted-foreground">
+              Journey sends rotate <code className="font-mono text-foreground/80">prefix@domain</code> across the
+              domains selected here. Composer sends still use the from email above.
+            </p>
           </div>
-          <p className="-mt-2 text-[10.5px] text-muted-foreground">
-            Journey sends rotate <code className="font-mono">prefix@domain</code> across the
-            domains selected here. Composer sends still use the from email above.
-          </p>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 gap-4">
             <Field label="CC (comma-separated)">
               <Input
+                className="h-10"
                 value={ccList}
                 onChange={(e) => setCcList(e.target.value)}
                 placeholder="Optional"
@@ -538,6 +552,7 @@ function NewProfileDialog({
             </Field>
             <Field label="BCC (comma-separated)">
               <Input
+                className="h-10"
                 value={bccList}
                 onChange={(e) => setBccList(e.target.value)}
                 placeholder="compliance-log@…"
@@ -547,6 +562,7 @@ function NewProfileDialog({
 
           <Field label="Description (optional)">
             <Input
+              className="h-10"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder="When should agents use this profile?"
@@ -554,7 +570,7 @@ function NewProfileDialog({
           </Field>
         </div>
 
-        <DialogFooter>
+        <DialogFooter className="gap-2">
           <Button variant="outline" onClick={onClose}>
             Cancel
           </Button>
@@ -672,7 +688,7 @@ function DomainMultiSelect({
         type="button"
         onClick={() => setOpen((s) => !s)}
         className={cn(
-          "flex h-9 w-full items-center justify-between rounded-md border border-input bg-background px-2.5 text-sm",
+          "flex h-10 w-full items-center justify-between rounded-lg border border-input bg-transparent px-2.5 text-sm dark:bg-input/30",
           value.length === 0 && "text-muted-foreground",
         )}
       >
@@ -735,12 +751,14 @@ function DomainMultiSelect({
 }
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  // Field wrapper used throughout the create/edit sender-profile modal.
   return (
-    <div className="space-y-1">
-      <label className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+    <div className="space-y-1.5">
+      <label className="text-[10.5px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
         {label}
       </label>
       {children}
     </div>
   )
 }
+
