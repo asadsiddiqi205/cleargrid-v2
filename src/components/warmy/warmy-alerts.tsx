@@ -69,8 +69,8 @@ export function WarmyAlertBanner() {
         </p>
       </div>
       <Link
-        href="/sender-profiles"
-        className="shrink-0 rounded border border-red-500/40 bg-red-500/20 px-2 py-0.5 text-[10.5px] font-medium text-red-100 hover:bg-red-500/30"
+        href="/sender-profiles?tab=domains"
+        className="shrink-0 rounded border border-red-500/40 bg-red-500/20 px-2 py-0.5 text-[10.5px] font-medium text-red-700 hover:bg-red-500/30 dark:text-red-100"
       >
         Open Domains
       </Link>

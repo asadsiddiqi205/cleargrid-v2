@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { useSearchParams } from "next/navigation"
 import { toast } from "sonner"
 import {
   AtSign,
@@ -41,7 +42,7 @@ import { WarmyAlertBanner } from "@/components/warmy/warmy-alerts"
 import { DomainStatusDot } from "@/components/warmy/domain-status-dot"
 import { WarmyDomainsTab, WarmyDomainsToolbar } from "@/components/warmy/warmy-domains-tab"
 import { statusForDomain } from "@/data/domain-health"
-import { listWarmyDomains } from "@/data/warmy"
+import { listWarmyDomains, getSentToday } from "@/data/warmy"
 
 type MainTab = "profiles" | "domains"
 
@@ -51,6 +52,16 @@ export default function SenderProfilesPage() {
   const [lenderFilter, setLenderFilter] = React.useState<string>("all")
   const [createOpen, setCreateOpen] = React.useState(false)
   const [tab, setTab] = React.useState<MainTab>("profiles")
+  const [editingId, setEditingId] = React.useState<string | null>(null)
+  const editingProfile = editingId ? profiles.find((p) => p.id === editingId) ?? null : null
+
+  // Open the Domains tab when the URL carries ?tab=domains — used by
+  // the alert banner's "Open Domains" button.
+  const searchParams = useSearchParams()
+  React.useEffect(() => {
+    const t = searchParams.get("tab")
+    if (t === "domains" || t === "profiles") setTab(t)
+  }, [searchParams])
 
   const filtered = profiles.filter((p) => {
     if (lenderFilter !== "all" && p.lenderId !== lenderFilter) return false
@@ -66,11 +77,13 @@ export default function SenderProfilesPage() {
 
   function handleCreate(p: SenderProfile) {
     setProfiles((prev) => [p, ...prev])
-    toast.success(`Sender profile "${p.name}" created`, {
-      description: p.domain.verified
-        ? `Ready to use — routes via ${ESP_LABEL[p.esp]}.`
-        : "Domain verification pending — profile will remain inactive until SPF / DKIM / DMARC pass.",
-    })
+    toast.success(`Sender profile "${p.name}" created`)
+  }
+
+  function handleUpdate(p: SenderProfile) {
+    setProfiles((prev) => prev.map((x) => (x.id === p.id ? p : x)))
+    toast.success(`Sender profile "${p.name}" saved`)
+    setEditingId(null)
   }
 
   return (
@@ -123,7 +136,7 @@ export default function SenderProfilesPage() {
               </label>
               <Select value={lenderFilter} onValueChange={(v) => setLenderFilter(v ?? "all")}>
                 <SelectTrigger className="w-full">
-                  <SelectValue />
+                  <SelectValue>{lenderFilterLabel(lenderFilter)}</SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All lenders</SelectItem>
@@ -160,7 +173,9 @@ export default function SenderProfilesPage() {
                     </td>
                   </tr>
                 ) : (
-                  filtered.map((p) => <ProfileRow key={p.id} profile={p} />)
+                  filtered.map((p) => (
+                    <ProfileRow key={p.id} profile={p} onEdit={() => setEditingId(p.id)} />
+                  ))
                 )}
               </tbody>
             </table>
@@ -190,8 +205,26 @@ export default function SenderProfilesPage() {
         onClose={() => setCreateOpen(false)}
         onCreate={handleCreate}
       />
+      <NewProfileDialog
+        open={editingProfile !== null}
+        onClose={() => setEditingId(null)}
+        onCreate={handleUpdate}
+        initial={editingProfile}
+      />
     </PageShell>
   )
+}
+
+/** Helpers for labelled Select values — show "General (cross-lender)"
+ *  instead of "general" and "All lenders" instead of "all". */
+function lenderLabel(id: string): string {
+  if (id === "general") return "General (cross-lender)"
+  const l = lenders.find((x) => x.id === id)
+  return l?.name ?? id
+}
+function lenderFilterLabel(id: string): string {
+  if (id === "all") return "All lenders"
+  return lenderLabel(id)
 }
 
 function Th({ children }: { children: React.ReactNode }) {
@@ -227,7 +260,7 @@ function TabButton({
   )
 }
 
-function ProfileRow({ profile }: { profile: SenderProfile }) {
+function ProfileRow({ profile, onEdit }: { profile: SenderProfile; onEdit: () => void }) {
   const domainStatuses = profile.domains.map((d) => statusForDomain(d.domain))
   const atRisk = domainStatuses.filter((s) => s.status === "at_risk").length
   const blocked = domainStatuses.filter((s) => s.status === "blocked").length
@@ -249,7 +282,10 @@ function ProfileRow({ profile }: { profile: SenderProfile }) {
   })
 
   return (
-    <tr className="border-b border-border/50 last:border-0 align-top hover:bg-muted/20">
+    <tr
+      className="cursor-pointer border-b border-border/50 last:border-0 align-top hover:bg-muted/20"
+      onClick={onEdit}
+    >
       <td className="px-4 py-4">
         <div className="flex items-start gap-3">
           <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-emerald-500/15 text-emerald-300">
@@ -320,11 +356,14 @@ function NewProfileDialog({
   open,
   onClose,
   onCreate,
+  initial,
 }: {
   open: boolean
   onClose: () => void
   onCreate: (p: SenderProfile) => void
+  initial?: SenderProfile | null
 }) {
+  const isEdit = Boolean(initial)
   const [name, setName] = React.useState("")
   const [lenderId, setLenderId] = React.useState("general")
   const [fromName, setFromName] = React.useState("")
@@ -336,9 +375,24 @@ function NewProfileDialog({
   const [bccList, setBccList] = React.useState("")
   const [prefixInput, setPrefixInput] = React.useState("")
   const [selectedDomains, setSelectedDomains] = React.useState<string[]>([])
+  const [active, setActive] = React.useState(true)
 
   React.useEffect(() => {
-    if (open) {
+    if (!open) return
+    if (initial) {
+      setName(initial.name)
+      setLenderId(initial.lenderId)
+      setFromName(initial.fromName)
+      setFromEmail(initial.fromEmail)
+      setReplyTo(initial.replyTo)
+      setEsp(initial.esp)
+      setDescription(initial.description ?? "")
+      setCcList((initial.cc ?? []).join(", "))
+      setBccList((initial.bcc ?? []).join(", "))
+      setPrefixInput(initial.prefix)
+      setSelectedDomains(initial.domains.map((d) => d.domain))
+      setActive(initial.status === "active")
+    } else {
       setName("")
       setLenderId("general")
       setFromName("")
@@ -350,8 +404,9 @@ function NewProfileDialog({
       setBccList("")
       setPrefixInput("")
       setSelectedDomains([])
+      setActive(true)
     }
-  }, [open])
+  }, [open, initial])
 
   const domainFromEmail = fromEmail.includes("@") ? fromEmail.split("@")[1]! : ""
   const effectivePrefix = (prefixInput.trim() || (fromEmail.includes("@") ? fromEmail.split("@")[0]! : fromEmail)).trim()
@@ -390,9 +445,9 @@ function NewProfileDialog({
         dmarc: "pass" as const,
       }))
     const profile: SenderProfile = {
-      id: `sp-new-${Date.now().toString(36)}`,
+      id: initial?.id ?? `sp-new-${Date.now().toString(36)}`,
       lenderId,
-      lenderName: lender?.name ?? "ClearGrid",
+      lenderName: lenderId === "general" ? "General (cross-lender)" : lender?.name ?? "ClearGrid",
       name: name.trim(),
       fromName: fromName.trim(),
       fromEmail: fromEmail.trim(),
@@ -409,7 +464,7 @@ function NewProfileDialog({
       domain: seedDomain,
       domains: [seedDomain, ...extraDomains],
       esp,
-      status: willBeVerified ? "active" : "inactive",
+      status: active ? "active" : "inactive",
       description: description.trim() || undefined,
       createdAt: now,
       updatedAt: now,
@@ -430,16 +485,38 @@ function NewProfileDialog({
       <DialogContent className="sm:max-w-3xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2.5 text-base">
-            <span className="flex h-8 w-8 items-center justify-center rounded-md bg-emerald-500/15 text-emerald-300">
+            <span className="flex h-8 w-8 items-center justify-center rounded-md bg-emerald-500/15 text-emerald-600 dark:text-emerald-300">
               <AtSign className="h-4 w-4" />
             </span>
-            New sender profile
+            {isEdit ? "Edit sender profile" : "New sender profile"}
           </DialogTitle>
           <DialogDescription className="text-[12.5px]">
             Governed email sender identity. Credentials stay on the email sender connection and
             are loaded by configuration id.
           </DialogDescription>
         </DialogHeader>
+
+        {isEdit && (
+          <div className="flex items-center justify-between rounded-md border border-border bg-muted/20 px-3 py-2">
+            <div>
+              <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                Status
+              </div>
+              <div className="text-[12px] text-foreground">
+                {active ? "Active — pickable in the composer" : "Inactive — hidden from pickers"}
+              </div>
+            </div>
+            <label className="inline-flex items-center gap-2 text-[12px]">
+              <input
+                type="checkbox"
+                checked={active}
+                onChange={(e) => setActive(e.target.checked)}
+                className="h-4 w-4"
+              />
+              Active
+            </label>
+          </div>
+        )}
 
         <div className="space-y-5">
           <div className="grid grid-cols-2 gap-4">
@@ -454,7 +531,7 @@ function NewProfileDialog({
             <Field label="Lender">
               <Select value={lenderId} onValueChange={(v) => setLenderId(v ?? "general")}>
                 <SelectTrigger className="h-10 w-full">
-                  <SelectValue />
+                  <SelectValue>{lenderLabel(lenderId)}</SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="general">General (cross-lender)</SelectItem>
@@ -471,7 +548,7 @@ function NewProfileDialog({
           <Field label="ESP / route">
             <Select value={esp} onValueChange={(v) => setEsp((v as EspRoute) ?? "infobip_uae")}>
               <SelectTrigger className="h-10 w-full">
-                <SelectValue />
+                <SelectValue>{ESP_LABEL[esp]}</SelectValue>
               </SelectTrigger>
               <SelectContent>
                 {(Object.entries(ESP_LABEL) as Array<[EspRoute, string]>).map(([id, label]) => (
@@ -536,8 +613,9 @@ function NewProfileDialog({
               </Field>
             </div>
             <p className="mt-1.5 text-[11px] text-muted-foreground">
-              Journey sends rotate <code className="font-mono text-foreground/80">prefix@domain</code> across the
-              domains selected here. Composer sends still use the from email above.
+              Journey sends rotate <code className="font-mono text-foreground/80">prefix@domain</code> across these
+              domains, skipping any that are blocked, paused or out of today&apos;s volume.
+              Composer sends still use the from email above.
             </p>
           </div>
 
@@ -574,7 +652,7 @@ function NewProfileDialog({
           <Button variant="outline" onClick={onClose}>
             Cancel
           </Button>
-          <Button onClick={handleSave}>Create profile</Button>
+          <Button onClick={handleSave}>{isEdit ? "Save" : "Create profile"}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -696,11 +774,17 @@ function DomainMultiSelect({
         <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
       </button>
       {open && (
-        <div className="absolute left-0 right-0 top-full z-10 mt-1 max-h-64 overflow-y-auto rounded-md border border-border bg-popover p-1 shadow-lg">
+        <div
+          className="absolute left-0 right-0 top-full z-50 mt-1 overflow-y-auto rounded-md border border-border bg-popover p-1 shadow-lg"
+          style={{ maxHeight: "min(16rem, 40vh)" }}
+        >
           {all.map((s) => {
             const isSelected = selected.has(s.name.toLowerCase())
             const isPrimary = s.name.toLowerCase() === primary.toLowerCase()
             const w = s.warmy
+            const gmailRec = w?.recommended_volume_today.gmail.volume ?? null
+            const gmailSent = w ? getSentToday(w.name, "gmail") : 0
+            const gmailLeft = gmailRec != null ? Math.max(0, gmailRec - gmailSent) : null
             return (
               <button
                 key={s.name}
@@ -722,16 +806,21 @@ function DomainMultiSelect({
                 <span className="text-[10.5px] text-muted-foreground">
                   {w ? `health ${w.health_score.total}` : "no Warmy"}
                 </span>
+                {gmailLeft != null && (
+                  <span className="text-[10.5px] tabular-nums text-muted-foreground">
+                    {gmailLeft.toLocaleString()} left
+                  </span>
+                )}
                 {isPrimary && (
                   <span className="rounded bg-primary/15 px-1 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-primary">
                     From-email
                   </span>
                 )}
                 {s.status === "blocked" && (
-                  <span className="text-[10px] text-red-300">Blocked</span>
+                  <span className="text-[10px] text-red-600 dark:text-red-300">Blocked</span>
                 )}
                 {s.paused && (
-                  <span className="text-[10px] text-neutral-300">Paused</span>
+                  <span className="text-[10px] text-neutral-600 dark:text-neutral-300">Paused</span>
                 )}
               </button>
             )

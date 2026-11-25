@@ -43,6 +43,8 @@ import {
 } from "@/data/domain-health"
 import { lenders } from "@/data/lenders"
 import { senderProfiles, type SenderProfile } from "@/data/sender-profiles"
+import { journeysList } from "@/data/journeys"
+import { listRotationLog } from "@/data/sending-rotation"
 import { DomainStatusDot } from "@/components/warmy/domain-status-dot"
 
 const PROVIDERS: WarmyProvider[] = [
@@ -210,9 +212,9 @@ function DomainRow({
       <td className="px-2.5 py-2.5">
         {w ? (
           <div className="flex gap-1 text-[9.5px]">
-            <PlacementChip label="Gm" pct={w.placement_checker.gmail.inbox_pct} />
-            <PlacementChip label="Wk" pct={w.placement_checker.gsuite.inbox_pct} />
-            <PlacementChip label="Ot" pct={w.placement_checker.outlook.inbox_pct} />
+            <PlacementChip label="Gm" title="Gmail" pct={w.placement_checker.gmail.inbox_pct} />
+            <PlacementChip label="Ws" title="Google Workspace" pct={w.placement_checker.gsuite.inbox_pct} />
+            <PlacementChip label="Ol" title="Outlook" pct={w.placement_checker.outlook.inbox_pct} />
           </div>
         ) : (
           "—"
@@ -237,15 +239,17 @@ function DomainRow({
         {w ? `${w.mailboxes.active}/${w.mailboxes.paused}/${w.mailboxes.blocked}` : "—"}
       </td>
       <td className="px-2.5 py-2.5">
-        {worst ? (
+        {!worst ? (
+          "—"
+        ) : "noSendsToday" in worst ? (
+          <span className="text-[11px] text-muted-foreground">0 sent today</span>
+        ) : (
           <VolumeBar
             sent={worst.sent}
             recommended={worst.recommended ?? 0}
             missing={worst.missing}
             label={PROVIDER_LABEL[worst.provider]}
           />
-        ) : (
-          "—"
         )}
       </td>
       <td className="px-2.5 py-2.5 tabular-nums text-[11px]">
@@ -264,7 +268,7 @@ function DomainRow({
   )
 }
 
-function PlacementChip({ label, pct }: { label: string; pct: number }) {
+function PlacementChip({ label, title, pct }: { label: string; title: string; pct: number }) {
   const tone =
     pct >= 90
       ? "bg-emerald-500/15 text-emerald-300"
@@ -272,7 +276,7 @@ function PlacementChip({ label, pct }: { label: string; pct: number }) {
       ? "bg-amber-500/15 text-amber-300"
       : "bg-red-500/15 text-red-300"
   return (
-    <span className={cn("rounded px-1 py-0.5 tabular-nums", tone)}>
+    <span className={cn("rounded px-1 py-0.5 tabular-nums", tone)} title={`${title}: ${pct}% inbox placement`}>
       {label} {pct}
     </span>
   )
@@ -294,25 +298,31 @@ function DnsChip({
   return <span className={cn("rounded px-1 py-0.5", tone)}>{label}</span>
 }
 
+/** Picks the provider with the highest share of today's recommended
+ *  volume used. Returns null when NO provider has been sent to today —
+ *  the row then renders "0 sent today" instead of a random Yahoo 0/347. */
 function worstVolume(w: WarmyDomain | null) {
   if (!w) return null
-  let worst: {
+  let totalSent = 0
+  let best: {
     provider: WarmyProvider
     sent: number
     recommended: number | null
     missing: string | undefined
-    left: number
+    sharePct: number
   } | null = null
   for (const p of PROVIDERS) {
     const rv = w.recommended_volume_today[p]
     const sent = getSentToday(w.name, p)
+    totalSent += sent
     const recommended = rv.volume
-    const left = recommended == null ? Infinity : Math.max(0, recommended - sent)
-    if (!worst || left < worst.left) {
-      worst = { provider: p, sent, recommended, missing: rv.missing_data, left }
+    const sharePct = recommended != null && recommended > 0 ? sent / recommended : sent > 0 ? Infinity : 0
+    if (!best || sharePct > best.sharePct) {
+      best = { provider: p, sent, recommended, missing: rv.missing_data, sharePct }
     }
   }
-  return worst
+  if (totalSent === 0) return { noSendsToday: true as const }
+  return best
 }
 
 function VolumeBar({
@@ -459,6 +469,7 @@ function DomainDrawer({
 
           <AlertsBlock alerts={alerts} />
           <UsedInBlock profiles={profiles} domain={domain} />
+          <DomainRotationLogBlock domain={domain} />
 
           {admin && (
             <section className="space-y-2">
@@ -776,12 +787,24 @@ function UsedInBlock({ profiles, domain }: { profiles: SenderProfile[]; domain: 
       </section>
     )
   }
+  // Live journeys using any of these profiles, by lender (prototype
+  // approximation; a production build would walk every journey's nodes
+  // and match node.data.senderProfileId directly).
+  const profileLenders = new Set(profiles.map((p) => p.lenderId))
+  const liveJourneys = journeysList.filter(
+    (j) =>
+      (j.status === "running" || j.status === "scheduled") &&
+      (profileLenders.has(j.lenderId) || profileLenders.has("general")),
+  )
   return (
     <section className="space-y-2">
       <h3 className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
         Used in
       </h3>
       <div className="divide-y divide-border rounded-md border border-border bg-muted/20">
+        <div className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+          Sender profiles ({profiles.length})
+        </div>
         {profiles.map((p) => (
           <div key={p.id} className="flex items-center justify-between px-3 py-2 text-[11px]">
             <div className="min-w-0">
@@ -799,6 +822,89 @@ function UsedInBlock({ profiles, domain }: { profiles: SenderProfile[]; domain: 
             </Link>
           </div>
         ))}
+        <div className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+          Live journeys ({liveJourneys.length})
+        </div>
+        {liveJourneys.length === 0 ? (
+          <p className="px-3 py-2 text-[10.5px] text-muted-foreground">
+            No live journeys are using these profiles today.
+          </p>
+        ) : (
+          liveJourneys.map((j) => (
+            <div key={j.id} className="flex items-center justify-between px-3 py-2 text-[11px]">
+              <div className="min-w-0">
+                <p className="truncate text-foreground">{j.name}</p>
+                <p className="truncate text-[10px] text-muted-foreground">
+                  {j.status === "running" ? "Running" : "Scheduled"} ·{" "}
+                  {j.enrolled.toLocaleString()} enrolled
+                </p>
+              </div>
+              <Link
+                href={`/journeys/${j.id}`}
+                className="inline-flex items-center gap-1 text-[10.5px] font-medium text-primary hover:underline"
+              >
+                Open
+                <ExternalLink className="h-3 w-3" />
+              </Link>
+            </div>
+          ))
+        )}
+      </div>
+    </section>
+  )
+}
+
+function DomainRotationLogBlock({ domain }: { domain: string }) {
+  const entries = listRotationLog({ domain })
+  if (entries.length === 0) {
+    return (
+      <section className="space-y-2">
+        <h3 className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+          Rotation log
+        </h3>
+        <p className="text-[11px] text-muted-foreground">
+          No rotation events logged for {domain} today.
+        </p>
+      </section>
+    )
+  }
+  return (
+    <section className="space-y-2">
+      <h3 className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+        Rotation log
+      </h3>
+      <div className="overflow-hidden rounded-md border border-border">
+        <table className="w-full text-[10.5px]">
+          <thead className="bg-muted/30 text-[9.5px] uppercase tracking-wider text-muted-foreground">
+            <tr>
+              <th className="px-2 py-1 text-left">When</th>
+              <th className="px-2 py-1 text-left">Profile</th>
+              <th className="px-2 py-1 text-left">Provider</th>
+              <th className="px-2 py-1 text-left">Reason</th>
+              <th className="px-2 py-1 text-right">Emails moved</th>
+            </tr>
+          </thead>
+          <tbody>
+            {entries.slice(0, 20).map((e) => (
+              <tr key={e.at + e.profileId} className="border-t border-border/40">
+                <td className="px-2 py-1 text-muted-foreground">
+                  {new Date(e.at).toLocaleString("en-US", {
+                    month: "short",
+                    day: "numeric",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}
+                </td>
+                <td className="px-2 py-1 text-foreground">{e.profileName}</td>
+                <td className="px-2 py-1 text-muted-foreground">{e.provider}</td>
+                <td className="px-2 py-1 text-muted-foreground">{e.reason.replace(/_/g, " ")}</td>
+                <td className="px-2 py-1 text-right tabular-nums text-foreground">
+                  {e.emailsMoved.toLocaleString()}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
     </section>
   )
