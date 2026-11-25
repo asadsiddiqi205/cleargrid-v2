@@ -41,12 +41,18 @@ import {
 } from "@/data/sender-profiles"
 import { lenders } from "@/data/lenders"
 import { WarmyConnectionButton } from "@/components/warmy/warmy-connection-button"
+import { DomainStatusDot } from "@/components/warmy/domain-status-dot"
+import { WarmyDomainsTab, WarmyDomainsToolbar } from "@/components/warmy/warmy-domains-tab"
+import { statusForDomain } from "@/data/domain-health"
+
+type MainTab = "profiles" | "domains"
 
 export default function SenderProfilesPage() {
   const [profiles, setProfiles] = React.useState<SenderProfile[]>(SEED_PROFILES)
   const [search, setSearch] = React.useState("")
   const [lenderFilter, setLenderFilter] = React.useState<string>("all")
   const [createOpen, setCreateOpen] = React.useState(false)
+  const [tab, setTab] = React.useState<MainTab>("profiles")
 
   const filtered = profiles.filter((p) => {
     if (lenderFilter !== "all" && p.lenderId !== lenderFilter) return false
@@ -74,32 +80,17 @@ export default function SenderProfilesPage() {
       title="Sender profiles"
       description="Governed sender identities for outbound campaigns. Admin-only. The composer picks from this list — no free-typing of from-name, from-email, or route."
     >
-      {/* Toolbar */}
-      <div className="mb-4 flex flex-wrap items-center gap-2">
-        <div className="relative flex-1 max-w-md">
-          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search by name, email, or domain…"
-            className="pl-8"
-          />
+      {/* Tabs */}
+      <div className="mb-4 flex items-center justify-between border-b border-border">
+        <div className="flex items-center gap-1">
+          <TabButton active={tab === "profiles"} onClick={() => setTab("profiles")}>
+            Profiles
+          </TabButton>
+          <TabButton active={tab === "domains"} onClick={() => setTab("domains")}>
+            Domains
+          </TabButton>
         </div>
-        <Select value={lenderFilter} onValueChange={(v) => setLenderFilter(v ?? "all")}>
-          <SelectTrigger className="w-52">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All lenders</SelectItem>
-            <SelectItem value="general">General (cross-lender)</SelectItem>
-            {lenders.map((l) => (
-              <SelectItem key={l.id} value={l.id}>
-                {l.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <div className="ml-auto flex items-center gap-2">
+        <div className="flex items-center gap-2 pb-1.5">
           <WarmyConnectionButton />
           <Button onClick={() => setCreateOpen(true)}>
             <Plus className="h-3.5 w-3.5" />
@@ -108,33 +99,74 @@ export default function SenderProfilesPage() {
         </div>
       </div>
 
-      {/* Table */}
-      <div className="overflow-hidden rounded-lg border border-border">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-border bg-muted/30 text-left">
-              <Th>Profile</Th>
-              <Th>From</Th>
-              <Th>Reply-to</Th>
-              <Th>Domain</Th>
-              <Th>Route</Th>
-              <Th>Status</Th>
-              <Th>Updated</Th>
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.length === 0 ? (
-              <tr>
-                <td colSpan={7} className="py-10 text-center text-sm text-muted-foreground">
-                  No sender profiles match those filters.
-                </td>
-              </tr>
-            ) : (
-              filtered.map((p) => <ProfileRow key={p.id} profile={p} />)
-            )}
-          </tbody>
-        </table>
-      </div>
+      {tab === "profiles" ? (
+        <>
+          {/* Toolbar */}
+          <div className="mb-4 flex flex-wrap items-center gap-2">
+            <div className="relative flex-1 max-w-md">
+              <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search by name, email, or domain…"
+                className="pl-8"
+              />
+            </div>
+            <Select value={lenderFilter} onValueChange={(v) => setLenderFilter(v ?? "all")}>
+              <SelectTrigger className="w-52">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All lenders</SelectItem>
+                <SelectItem value="general">General (cross-lender)</SelectItem>
+                {lenders.map((l) => (
+                  <SelectItem key={l.id} value={l.id}>
+                    {l.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Table */}
+          <div className="overflow-hidden rounded-lg border border-border">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border bg-muted/30 text-left">
+                  <Th>Profile</Th>
+                  <Th>From</Th>
+                  <Th>Reply-to</Th>
+                  <Th>Prefix / Domains</Th>
+                  <Th>Route</Th>
+                  <Th>Status</Th>
+                  <Th>Updated</Th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="py-10 text-center text-sm text-muted-foreground">
+                      No sender profiles match those filters.
+                    </td>
+                  </tr>
+                ) : (
+                  filtered.map((p) => <ProfileRow key={p.id} profile={p} />)
+                )}
+              </tbody>
+            </table>
+          </div>
+        </>
+      ) : (
+        <>
+          <WarmyDomainsToolbar
+            search={search}
+            setSearch={setSearch}
+            lenderFilter={lenderFilter}
+            setLenderFilter={setLenderFilter}
+          />
+          <WarmyDomainsTab search={search} lenderFilter={lenderFilter} />
+        </>
+      )}
 
       {/* Ambient tool: DNC check. Paste phone numbers, get the subset that's
           on the ClearVoice DNC list. Sits alongside sender-profile governance
@@ -160,8 +192,45 @@ function Th({ children }: { children: React.ReactNode }) {
   )
 }
 
+function TabButton({
+  children,
+  active,
+  onClick,
+}: {
+  children: React.ReactNode
+  active: boolean
+  onClick: () => void
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "-mb-px border-b-2 px-3 py-2 text-[12px] font-medium transition-colors",
+        active
+          ? "border-primary text-primary"
+          : "border-transparent text-muted-foreground hover:text-foreground",
+      )}
+    >
+      {children}
+    </button>
+  )
+}
+
 function ProfileRow({ profile }: { profile: SenderProfile }) {
   const verified = profile.domain.verified
+  const domainStatuses = profile.domains.map((d) => statusForDomain(d.domain))
+  const atRisk = domainStatuses.filter((s) => s.status === "at_risk").length
+  const blocked = domainStatuses.filter((s) => s.status === "blocked").length
+  const watch = domainStatuses.filter((s) => s.status === "watch").length
+  const summary = (() => {
+    const parts: string[] = [`${profile.domains.length} domain${profile.domains.length === 1 ? "" : "s"}`]
+    if (blocked) parts.push(`${blocked} blocked`)
+    if (atRisk) parts.push(`${atRisk} at risk`)
+    if (!blocked && !atRisk && watch) parts.push(`${watch} watch`)
+    return parts.join(" · ")
+  })()
+
   return (
     <tr className="border-b border-border/50 last:border-0 hover:bg-muted/20">
       <td className="max-w-[240px] px-3 py-3">
@@ -184,12 +253,26 @@ function ProfileRow({ profile }: { profile: SenderProfile }) {
       </td>
       <td className="px-3 py-3">
         <div className="space-y-1">
-          <span className="text-[11px] font-medium text-foreground">{profile.domain.domain}</span>
+          <div className="text-[11px] font-mono text-muted-foreground">
+            {profile.prefix}@
+          </div>
+          <div className="flex flex-wrap items-center gap-1.5">
+            {profile.domains.map((d) => (
+              <span
+                key={d.domain}
+                className="inline-flex items-center gap-1 rounded border border-border/60 bg-background px-1.5 py-0.5 font-mono text-[10px] text-foreground"
+              >
+                <DomainStatusDot domain={d.domain} size="xs" />
+                {d.domain}
+              </span>
+            ))}
+          </div>
           <div className="flex flex-wrap items-center gap-1">
             <StateChip label="SPF" state={profile.domain.spf} />
             <StateChip label="DKIM" state={profile.domain.dkim} />
             <StateChip label="DMARC" state={profile.domain.dmarc} />
           </div>
+          <p className="text-[9.5px] text-muted-foreground">{summary}</p>
         </div>
       </td>
       <td className="px-3 py-3">
