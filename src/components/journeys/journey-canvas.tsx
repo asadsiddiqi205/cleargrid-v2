@@ -223,6 +223,21 @@ import {
  * references with its source. Uses structuredClone when available
  * (modern browsers + Node 17+), falls back to JSON for the demo.
  */
+/** Pick a human-friendly label for a node in validation / publish
+ *  messages. Prefers description / template, since many seeded nodes
+ *  share the generic `label: "Send Email"`, and falls back to the node
+ *  id so the reader can always locate the node. */
+function humanNodeLabel(d: Record<string, unknown>, nodeId: string): string {
+  const description = typeof d.description === "string" ? d.description.trim() : ""
+  const template = typeof d.template === "string" ? d.template.trim() : ""
+  const label = typeof d.label === "string" ? d.label.trim() : ""
+  const GENERIC = new Set(["Send Email", "Send SMS", "Send WhatsApp", "Start AI Call", "Trigger AI Call"])
+  if (description && !GENERIC.has(description)) return description
+  if (template && !GENERIC.has(template)) return template
+  if (label && !GENERIC.has(label)) return label
+  return description || template || label || nodeId
+}
+
 function deepCloneData(data: Record<string, unknown>): Record<string, unknown> {
   try {
     if (typeof structuredClone === "function") return structuredClone(data) as Record<string, unknown>
@@ -1192,15 +1207,17 @@ export default function JourneyCanvas({ journeyId }: JourneyCanvasProps) {
 
     // Send Email nodes must have a sender profile; the profile must have
     // at least one eligible domain; At-risk / Blocked or unmatched domains
-    // warn.
+    // warn, as does an audience preview that exceeds today's volume left.
+    // Labels prefer description / template so authors read "Payment
+    // Reminder Email" instead of the generic "Send Email" node-type name.
     nodes.forEach((n) => {
       const d = (n.data ?? {}) as Record<string, unknown>;
       if (d.actionType !== "email") return;
-      const label = String(d.label ?? n.id);
+      const nodeLabel = humanNodeLabel(d, n.id);
       const spId = typeof d.senderProfileId === "string" ? d.senderProfileId : "";
       const profile = spId ? getSenderProfileById(spId) : undefined;
       if (!profile) {
-        errors.push(`"${label}" has no sender profile picked`);
+        errors.push(`"${nodeLabel}" has no sender profile picked`);
         problemNodeIds.push(n.id);
         return;
       }
@@ -1209,16 +1226,18 @@ export default function JourneyCanvas({ journeyId }: JourneyCanvasProps) {
         !r.eligible && (r.skipReason === "blocked" || r.skipReason === "paused"),
       );
       if (everySkip) {
-        errors.push(`"${label}" every domain on ${profile.name} is Blocked or Paused`);
+        errors.push(`"${nodeLabel}" every domain on ${profile.name} is Blocked or Paused`);
         problemNodeIds.push(n.id);
         return;
       }
       const statuses = profile.domains.map((dd) => statusForDomain(dd.domain));
-      if (statuses.some((s) => s.status === "at_risk" || s.status === "blocked")) {
-        warnings.push(`"${label}" sender profile ${profile.name} has an At-risk or Blocked domain`);
+      const atRiskOrBlocked = statuses.filter((s) => s.status === "at_risk" || s.status === "blocked");
+      if (atRiskOrBlocked.length > 0) {
+        const names = atRiskOrBlocked.map((s) => s.name).join(", ");
+        warnings.push(`"${nodeLabel}" sender profile ${profile.name} has At-risk / Blocked domain(s): ${names}`);
       }
       if (profile.domains.every((dd) => !getWarmyDomainByName(dd.domain))) {
-        warnings.push(`"${label}" sender profile has no domain matched in Warmy`);
+        warnings.push(`"${nodeLabel}" sender profile has no domain matched in Warmy`);
       }
       const audience = typeof d._audienceSampleCount === "number"
         ? (d._audienceSampleCount as number)
@@ -1228,7 +1247,7 @@ export default function JourneyCanvas({ journeyId }: JourneyCanvasProps) {
       if (audience != null) {
         const totalLeft = rows.reduce((sum, r) => sum + (r.volumeLeft ?? Infinity), 0);
         if (Number.isFinite(totalLeft) && totalLeft < audience) {
-          warnings.push(`"${label}" today's volume may not cover this audience. Some emails will wait until tomorrow.`);
+          warnings.push(`"${nodeLabel}" today's volume may not cover this audience. Some emails will wait until tomorrow.`);
         }
       }
     });
@@ -1534,7 +1553,7 @@ export default function JourneyCanvas({ journeyId }: JourneyCanvasProps) {
       const d = (n.data as Record<string, unknown>) ?? {};
       const isEnd = n.type === "end";
       const isTrigger = n.type === "trigger" || String(d.blockType ?? "").endsWith("_trigger");
-      const label = String(d.label ?? n.type ?? n.id);
+      const label = humanNodeLabel(d, n.id);
       const actionType = d.actionType as string | undefined;
 
       if (!isEnd && (outgoing.get(n.id) ?? 0) === 0) {
