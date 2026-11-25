@@ -603,20 +603,43 @@ let connectionState: ConnectionState = { ...DEFAULT_CONNECTION }
 
 /** Shadow "sent today" counters, keyed by `${domain}|${provider}`. The
  *  rotation function reads these to know how much volume is left.
+ *  Journey sends never push these above Warmy's recommended volume for
+ *  the domain + provider — the rotation function caps every pick.
  *  TODO: backend owns the real counter; this shadow is frontend-only. */
 const sentToday: Map<string, number> = new Map()
 
-/** A small deterministic burn so one domain (cleargrid.ae × Gmail) is
- *  already near its cap when the prototype loads around 11:00 local. */
+/** Composer sends, kept separately so the UI can surface any overshoot
+ *  past Warmy's recommended volume as an explicit "N over from Composer
+ *  sends" line instead of a normal-looking "sent" count. Journey sends
+ *  are not written here. */
+const sentTodayComposer: Map<string, number> = new Map()
+
+function clampBelowRecommended(domain: string, provider: WarmyProvider, value: number): number {
+  const d = MOCK_DOMAINS.find((x) => x.name === domain)
+  const cap = d?.recommended_volume_today[provider]?.volume
+  if (cap == null) return Math.max(0, value)
+  return Math.max(0, Math.min(cap, value))
+}
+
+/** A small deterministic burn so one domain (d.cleargrid.ae × Gmail)
+ *  is already near its cap when the prototype loads around 11:00
+ *  local. Journey-side counters never exceed the Warmy cap; any
+ *  overshoot is attributed to Composer sends. */
 function seedShadowCounters() {
   const h = new Date().getHours()
   const burn = Math.max(0, Math.min(1, (h - 6) / (WARMY_THRESHOLDS.simulatedGmailBurnoutHour - 6)))
-  // d.cleargrid.ae has the small Gmail cap and burns through mid-day.
-  sentToday.set("d.cleargrid.ae|gmail", Math.round(400 * (0.9 + 0.2 * burn)))
-  sentToday.set("legal.cleararabia.ai|gmail", Math.round(1800 * 0.4 * burn))
-  sentToday.set("cleargrid.co|gmail", Math.round(2000 * 0.25 * burn))
-  sentToday.set("h.cleargrid.ae|gmail", Math.round(400 * 0.6 * burn))
-  sentToday.set("s.cleargrid.ai|gmail", Math.round(1500 * 0.2 * burn))
+  const put = (domain: string, provider: WarmyProvider, journey: number, composerOver = 0) => {
+    const capped = clampBelowRecommended(domain, provider, journey)
+    sentToday.set(`${domain}|${provider}`, capped + composerOver)
+    if (composerOver > 0) sentTodayComposer.set(`${domain}|${provider}`, composerOver)
+  }
+  // d.cleargrid.ae is the small-Gmail-cap burnout case — the journey
+  // side hits the cap and the extra 40 is attributed to Composer.
+  put("d.cleargrid.ae", "gmail", Math.round(400 * (0.9 + 0.2 * burn)), 40)
+  put("legal.cleararabia.ai", "gmail", Math.round(1800 * 0.4 * burn))
+  put("cleargrid.co", "gmail", Math.round(2000 * 0.25 * burn))
+  put("h.cleargrid.ae", "gmail", Math.round(400 * 0.6 * burn))
+  put("s.cleargrid.ai", "gmail", Math.round(1500 * 0.2 * burn))
 }
 seedShadowCounters()
 
@@ -653,13 +676,63 @@ export function getSentToday(domain: string, provider: WarmyProvider): number {
   return sentToday.get(`${domain}|${provider}`) ?? 0
 }
 
+/** Record a journey send. Cannot push the counter past Warmy's
+ *  recommended volume for the (domain, provider) — rotation is expected
+ *  to have prevented that. The return value is what actually moved
+ *  (the clamped delta) so callers know when they were blocked. */
 export function recordCommandSend(
+  domain: string,
+  provider: WarmyProvider,
+  delta = 1,
+): number {
+  const key = `${domain}|${provider}`
+  const current = sentToday.get(key) ?? 0
+  const composerOver = sentTodayComposer.get(key) ?? 0
+  const d = MOCK_DOMAINS.find((x) => x.name === domain)
+  const cap = d?.recommended_volume_today[provider]?.volume
+  if (cap != null) {
+    // Journey-side current = total - composer overshoot
+    const journeyCurrent = Math.max(0, current - composerOver)
+    const room = Math.max(0, cap - journeyCurrent)
+    const applied = Math.min(delta, room)
+    sentToday.set(key, current + applied)
+    return applied
+  }
+  sentToday.set(key, current + delta)
+  return delta
+}
+
+/** Record a Composer send. Overshoot past the recommended volume is
+ *  allowed and surfaced to the UI through getComposerOvershoot. */
+export function recordComposerSend(
   domain: string,
   provider: WarmyProvider,
   delta = 1,
 ): void {
   const key = `${domain}|${provider}`
-  sentToday.set(key, (sentToday.get(key) ?? 0) + delta)
+  const current = sentToday.get(key) ?? 0
+  const composerOver = sentTodayComposer.get(key) ?? 0
+  const d = MOCK_DOMAINS.find((x) => x.name === domain)
+  const cap = d?.recommended_volume_today[provider]?.volume
+  if (cap != null) {
+    const journeyCurrent = Math.max(0, current - composerOver)
+    const headroom = Math.max(0, cap - journeyCurrent - composerOver)
+    const over = Math.max(0, delta - headroom)
+    sentToday.set(key, current + delta)
+    if (over > 0) sentTodayComposer.set(key, composerOver + over)
+  } else {
+    sentToday.set(key, current + delta)
+  }
+}
+
+/** Composer sends that pushed this (domain, provider) past the
+ *  Warmy recommended volume today. Zero when the counter is at or
+ *  below the cap. */
+export function getComposerOvershoot(
+  domain: string,
+  provider: WarmyProvider,
+): number {
+  return sentTodayComposer.get(`${domain}|${provider}`) ?? 0
 }
 
 export function takeDomainOutOfRotation(

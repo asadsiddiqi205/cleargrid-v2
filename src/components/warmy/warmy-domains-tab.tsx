@@ -25,6 +25,7 @@ import {
   listWarmyDomains,
   listAlertsForDomain,
   getSentToday,
+  getComposerOvershoot,
   takeDomainOutOfRotation,
   putDomainBackInRotation,
   setOpsDailyCap,
@@ -565,6 +566,7 @@ function TodayVolumeBlock({ w }: { w: WarmyDomain }) {
         label: "Other",
         recommended: minVol,
         sent: 0,
+        composerOver: 0,
         missing: gw.missing_data ?? ms.missing_data,
       }
     }
@@ -574,6 +576,7 @@ function TodayVolumeBlock({ w }: { w: WarmyDomain }) {
       label: PROVIDER_LABEL[p],
       recommended: rv.volume,
       sent: getSentToday(w.name, p),
+      composerOver: getComposerOvershoot(w.name, p),
       missing: rv.missing_data,
     }
   })
@@ -595,7 +598,11 @@ function TodayVolumeBlock({ w }: { w: WarmyDomain }) {
           </thead>
           <tbody>
             {rows.map((r) => {
-              const left = r.recommended == null ? null : Math.max(0, r.recommended - r.sent)
+              // Journey-side sent never goes past Warmy's recommended. Any
+              // excess is attributed to Composer sends and shown on its
+              // own amber line.
+              const journeySent = r.recommended == null ? r.sent : Math.min(r.sent - r.composerOver, r.recommended)
+              const left = r.recommended == null ? null : Math.max(0, r.recommended - journeySent)
               const state =
                 r.missing
                   ? "Missing data"
@@ -608,7 +615,12 @@ function TodayVolumeBlock({ w }: { w: WarmyDomain }) {
                 <tr key={r.provider} className="border-t border-border/50">
                   <td className="px-2 py-1 text-foreground">{r.label}</td>
                   <td className="px-2 py-1 text-right tabular-nums text-foreground">
-                    {r.sent.toLocaleString()}
+                    {journeySent.toLocaleString()}
+                    {r.composerOver > 0 && (
+                      <div className="text-[10px] font-medium text-amber-600 dark:text-amber-300">
+                        +{r.composerOver} over from Composer sends
+                      </div>
+                    )}
                   </td>
                   <td className="px-2 py-1 text-right tabular-nums text-foreground">
                     {r.recommended == null ? "—" : r.recommended.toLocaleString()}
@@ -619,7 +631,7 @@ function TodayVolumeBlock({ w }: { w: WarmyDomain }) {
                   <td className="px-2 py-1 text-muted-foreground">
                     {state}
                     {r.missing && (
-                      <span className="ml-1 text-amber-300">· {missingLabel(r.missing)}</span>
+                      <span className="ml-1 text-amber-600 dark:text-amber-300">· {missingLabel(r.missing)}</span>
                     )}
                   </td>
                 </tr>

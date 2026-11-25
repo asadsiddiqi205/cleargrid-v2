@@ -16,7 +16,7 @@ import {
   statusForDomain,
   STATUS_PILL_CLASS,
 } from "@/data/domain-health"
-import { getSentToday, getWarmyDomainByName, type DnsState } from "@/data/warmy"
+import { getSentToday, getWarmyDomainByName, getComposerOvershoot, type DnsState } from "@/data/warmy"
 
 /** Compact "Sending domains" list shown under the sender profile picker
  *  on the Send Email node's Delivery tab. One row per domain with its
@@ -113,6 +113,11 @@ export function SendingDomainsList({
                       : gmailLeft != null && gmailRec != null
                       ? `${gmailLeft.toLocaleString()} / ${gmailRec.toLocaleString()}`
                       : left.toLocaleString()}
+                    {getComposerOvershoot(r.domain, "gmail") > 0 && (
+                      <div className="text-[10px] font-medium text-amber-600 dark:text-amber-300">
+                        {getComposerOvershoot(r.domain, "gmail")} over from Composer sends
+                      </div>
+                    )}
                   </td>
                   <td className="px-2 py-1">
                     {r.eligible ? (
