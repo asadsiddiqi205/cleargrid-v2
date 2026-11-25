@@ -381,7 +381,7 @@ export function NodeEmailAnalytics({
             )}
           </SubBlock>
 
-          <WarmyRotationLogSection />
+          <WarmyRotationLogSection warmy={warmy} />
 
           <SubBlock title={<>Recipient domains {warmy.hasProfile && <WarmyTag hint="Inbox (placement test) and Held for volume come from Warmy." />}</>}>
             <table className="w-full text-[11px]">
@@ -427,7 +427,9 @@ export function NodeEmailAnalytics({
               label={<>Inbox rate <WarmyTag hint="Sent-weighted across the profile's Warmy placement tests." /></>}
               value={
                 warmy.inboxRate
-                  ? `${warmy.inboxRate.pct}%`
+                  ? `${warmy.inboxRate.pct}% · placement test, ${new Date(
+                      warmy.inboxRate.date,
+                    ).toLocaleDateString("en-US", { day: "numeric", month: "short" })}`
                   : "No recent placement test"
               }
               tone={warmy.inboxRate ? "ok" : "muted"}
@@ -464,8 +466,16 @@ export function NodeEmailAnalytics({
           </div>
 
           {warmy.gmailSpamRateDomainWide != null && (
-            <p className="mt-1.5 text-[10px] text-muted-foreground">
-              Gmail spam rate (domain-wide, yesterday):{" "}
+            <p
+              className="mt-1.5 text-[10px] text-muted-foreground"
+              title={
+                warmy.spamPerDomain
+                  .filter((e) => e.spamRate != null)
+                  .map((e) => `${e.domain}: ${(e.spamRate! * 100).toFixed(2)}%`)
+                  .join("\n") + "\nGmail, domain-wide, yesterday."
+              }
+            >
+              Gmail spam rate (worst · domain-wide · yesterday):{" "}
               <span className="text-foreground tabular-nums">
                 {(warmy.gmailSpamRateDomainWide * 100).toFixed(2)}%
               </span>
@@ -909,6 +919,8 @@ interface WarmyPerProvider {
 
 interface WarmyOverlay {
   hasProfile: boolean
+  profileId: string | null
+  profileDomains: string[]
   senderRows: WarmySenderRow[]
   providerExtras: Record<string, WarmyPerProvider>
   inboxRate: { pct: number; date: string } | null
@@ -916,6 +928,7 @@ interface WarmyOverlay {
     | { worst: "high" | "medium" | "bad"; domain: string; perDomain: Array<{ domain: string; reputation: "high" | "medium" | "bad" | null; date: string | null }> }
     | null
   gmailSpamRateDomainWide: number | null
+  spamPerDomain: Array<{ domain: string; spamRate: number | null }>
   heldOutOfVolume: number
   heldAllBlockedOrPaused: number
   queuedEspOnly: number
@@ -930,11 +943,14 @@ function buildWarmyOverlay(
   if (!profile) {
     return {
       hasProfile: false,
+      profileId: null,
+      profileDomains: [],
       senderRows: [],
       providerExtras: {},
       inboxRate: null,
       domainReputation: null,
       gmailSpamRateDomainWide: null,
+      spamPerDomain: [],
       heldOutOfVolume: 0,
       heldAllBlockedOrPaused: 0,
       queuedEspOnly: 0,
@@ -947,21 +963,37 @@ function buildWarmyOverlay(
   const shares = profile.domains.map((_, i) => 1 + ((seed ^ (i * 13)) % 9))
   const shareSum = shares.reduce((s, v) => s + v, 0)
 
-  const senderRows: WarmySenderRow[] = profile.domains.map((d, i) => {
-    const sent = Math.round((totalSent * shares[i]) / shareSum)
-    const w = getWarmyDomainByName(d.domain)
+  // Blocked / paused domains never take any sends this run; move their
+  // share onto the eligible domains instead, and count what we skipped
+  // for the Skipped column. This fixes the earlier mock where
+  // support.cleararabia.ai (Blocked) was credited with the most sends.
+  type Alloc = { domain: string; share: number; eligible: boolean }
+  const allocs: Alloc[] = profile.domains.map((d, i) => {
     const summary = statusForDomain(d.domain)
-    const hard = Math.round(sent * ((w?.gpm.spam_rate ?? 0.003) * 0.6 + 0.004))
+    const eligible = summary.status !== "blocked" && !summary.paused
+    return { domain: d.domain, share: shares[i] ?? 1, eligible }
+  })
+  const skippedShare = allocs.filter((a) => !a.eligible).reduce((s, a) => s + a.share, 0)
+  const eligibleShareSum = allocs.filter((a) => a.eligible).reduce((s, a) => s + a.share, 0) || 1
+  const senderRows: WarmySenderRow[] = allocs.map((a) => {
+    const w = getWarmyDomainByName(a.domain)
+    const summary = statusForDomain(a.domain)
     const spamRate = w?.gpm.spam_rate ?? 0.004
+    let sent = 0
+    let skipped = 0
+    if (a.eligible) {
+      // Redistribute the skipped share proportionally onto the eligible rows.
+      const effectiveShare = a.share + (skippedShare * a.share) / eligibleShareSum
+      sent = Math.round((totalSent * effectiveShare) / shareSum)
+    } else {
+      // Blocked / paused — rotation carried these to other domains.
+      skipped = Math.round((totalSent * a.share) / shareSum)
+    }
+    const hard = Math.round(sent * (spamRate * 0.6 + 0.004))
     const delivered = Math.max(0, sent - hard - Math.round(sent * spamRate))
-    const skipped = summary.status === "blocked" || summary.paused
-      ? Math.round(sent * 0.25)
-      : summary.status === "at_risk"
-      ? Math.round(sent * 0.08)
-      : 0
     return {
-      address: `${profile.prefix}@${d.domain}`,
-      domain: d.domain,
+      address: `${profile.prefix}@${a.domain}`,
+      domain: a.domain,
       sent,
       delivered,
       hardBounces: hard,
@@ -975,38 +1007,57 @@ function buildWarmyOverlay(
     }
   })
 
-  // Placement test: use the first domain's placement checker as the
-  // sent-weighted average (close enough for the prototype — real work
-  // is in the TODO at the top of this block).
-  const placementParts = ["gmail", "gsuite", "outlook"] as const
-  const providerExtras: Record<string, WarmyPerProvider> = {}
-  const anchorDomain = profile.domains
+  // Per-provider placement test: pick the best placement_checker reading
+  // across the profile's domains (sent-weighted would need a per-provider
+  // test, which Warmy doesn't publish yet — TODO at the top of this
+  // block). Yahoo, iCloud and Other get null — Warmy doesn't test those.
+  const warmyDomains = profile.domains
     .map((d) => getWarmyDomainByName(d.domain))
-    .find(Boolean) ?? null
-  for (const p of placementParts) {
-    const pct = anchorDomain?.placement_checker[p].inbox_pct ?? null
-    const providerLabel = p === "gsuite" ? "Workspace" : p === "gmail" ? "Gmail" : "Outlook"
-    providerExtras[providerLabel] = {
-      provider: providerLabel,
-      inboxPct: pct,
-      heldForVolume: Math.round((totalSent * ((seed >> (p.length * 2)) % 7)) / 100),
+    .filter((w): w is NonNullable<typeof w> => Boolean(w))
+  const providerExtras: Record<string, WarmyPerProvider> = {}
+  const pickPct = (key: "gmail" | "gsuite" | "outlook"): number | null => {
+    if (warmyDomains.length === 0) return null
+    let sumPct = 0
+    let n = 0
+    for (const w of warmyDomains) {
+      sumPct += w.placement_checker[key].inbox_pct
+      n++
     }
+    return n > 0 ? Math.round(sumPct / n) : null
   }
-  for (const other of ["Yahoo", "iCloud", "Other"]) {
-    providerExtras[other] = {
-      provider: other,
-      inboxPct: null,
-      heldForVolume: Math.round((totalSent * ((seed + other.length) % 4)) / 100),
-    }
+  providerExtras["Gmail"] = { provider: "Gmail", inboxPct: pickPct("gmail"), heldForVolume: 0 }
+  providerExtras["Workspace"] = { provider: "Workspace", inboxPct: pickPct("gsuite"), heldForVolume: 0 }
+  providerExtras["Outlook"] = { provider: "Outlook", inboxPct: pickPct("outlook"), heldForVolume: 0 }
+  providerExtras["Yahoo"] = { provider: "Yahoo", inboxPct: null, heldForVolume: 0 }
+  providerExtras["iCloud"] = { provider: "iCloud", inboxPct: null, heldForVolume: 0 }
+  providerExtras["Other"] = { provider: "Other", inboxPct: null, heldForVolume: 0 }
+
+  // Held for volume per provider: fraction of today's sends that waited
+  // because every eligible domain's Warmy recommended volume was spent.
+  // Clamped to [0, totalSent] so it can never be negative or over-count.
+  const perProviderHeld: Record<string, number> = {}
+  for (const provider of Object.keys(providerExtras)) {
+    const bump = (seed + provider.length * 7) % 100
+    const base = provider === "Gmail" ? bump % 6 : bump % 3
+    perProviderHeld[provider] = Math.min(totalSent, Math.max(0, Math.floor((totalSent * base) / 100)))
+    providerExtras[provider]!.heldForVolume = perProviderHeld[provider]!
   }
+  const heldOutOfVolume = Math.min(
+    totalSent,
+    Math.max(0, Object.values(perProviderHeld).reduce((s, v) => s + v, 0)),
+  )
 
   // Sent-weighted inbox rate across the three tested providers.
-  const inboxWeighted = placementParts.reduce((sum, p) => {
-    const pct = anchorDomain?.placement_checker[p].inbox_pct
-    return pct != null ? sum + pct : sum
-  }, 0)
-  const inboxRate = anchorDomain
-    ? { pct: Math.round(inboxWeighted / 3), date: anchorDomain.adeline_ai_info.date }
+  const inboxValues: number[] = []
+  for (const k of ["gmail", "gsuite", "outlook"] as const) {
+    const pct = pickPct(k)
+    if (pct != null) inboxValues.push(pct)
+  }
+  const inboxRate = inboxValues.length > 0 && warmyDomains.length > 0
+    ? {
+        pct: Math.round(inboxValues.reduce((s, v) => s + v, 0) / inboxValues.length),
+        date: warmyDomains[0]!.adeline_ai_info.date,
+      }
     : null
 
   // Domain reputation: worst across the profile's domains.
@@ -1026,23 +1077,36 @@ function buildWarmyOverlay(
     ? { worst: worstEntry.reputation!, domain: worstEntry.domain, perDomain }
     : null
 
-  const gmailSpamRateDomainWide = anchorDomain?.gpm.spam_rate ?? null
+  // Gmail spam rate = worst across the run's domains (not the first one).
+  // perDomainSpam exposes the per-domain values for the tooltip on hover.
+  const spamPerDomain = profile.domains.map((d) => {
+    const w = getWarmyDomainByName(d.domain)
+    return { domain: d.domain, spamRate: w?.gpm.spam_rate ?? null }
+  })
+  const worstSpamEntry = spamPerDomain
+    .filter((e) => e.spamRate != null)
+    .sort((a, b) => (b.spamRate ?? 0) - (a.spamRate ?? 0))[0]
+  const gmailSpamRateDomainWide = worstSpamEntry?.spamRate ?? null
 
-  const heldOutOfVolume = Object.values(providerExtras).reduce((s, v) => s + v.heldForVolume, 0)
-  const heldAllBlockedOrPaused = senderRows.every(
-    (r) => r.status === "blocked" || r.paused,
-  )
-    ? totalSent
-    : Math.round(totalSent * 0.01) // tiny ambient when at least one is alive
+  // Held-every-blocked-or-paused only makes sense when NO eligible
+  // domain exists on the profile. On a profile with any sending domain
+  // this row is zero.
+  const everyDomainOut = allocs.every((a) => !a.eligible)
+  const heldAllBlockedOrPaused = everyDomainOut
+    ? Math.min(totalSent, Math.max(0, totalSent - senderRows.reduce((s, r) => s + r.sent, 0)))
+    : 0
   const queuedEspOnly = Math.max(0, Math.round(totalSent * 0.02) - heldOutOfVolume)
 
   return {
     hasProfile: true,
+    profileId: profile.id,
+    profileDomains: profile.domains.map((d) => d.domain),
     senderRows,
     providerExtras,
     inboxRate,
     domainReputation,
     gmailSpamRateDomainWide,
+    spamPerDomain,
     heldOutOfVolume,
     heldAllBlockedOrPaused,
     queuedEspOnly,
@@ -1077,11 +1141,18 @@ function ReputationChip({ r }: { r: "high" | "medium" | "bad" | null }) {
   )
 }
 
-function WarmyRotationLogSection() {
-  const entries = listRotationLog()
+function WarmyRotationLogSection({ warmy }: { warmy: WarmyOverlay }) {
+  if (!warmy.profileId) return null
+  const profileDomains = new Set(warmy.profileDomains.map((d) => d.toLowerCase()))
+  const entries = listRotationLog({ profileId: warmy.profileId }).filter((e) =>
+    profileDomains.has(e.domain.toLowerCase()),
+  )
   if (entries.length === 0) return null
+  const skippedByDomain = new Map(
+    warmy.senderRows.map((r) => [r.domain.toLowerCase(), r.skipped]),
+  )
   return (
-    <SubBlock title="Rotation log">
+    <SubBlock title="Rotation log · this run">
       <table className="w-full text-[10.5px]">
         <thead>
           <tr className="text-left text-[9.5px] uppercase tracking-wider text-muted-foreground">
@@ -1094,25 +1165,34 @@ function WarmyRotationLogSection() {
           </tr>
         </thead>
         <tbody>
-          {entries.slice(0, 10).map((e) => (
-            <tr key={e.at + e.domain} className="border-b border-border/40">
-              <td className="py-1 text-muted-foreground">
-                {new Date(e.at).toLocaleString("en-US", {
-                  month: "short",
-                  day: "numeric",
-                  hour: "2-digit",
-                  minute: "2-digit",
-                })}
-              </td>
-              <td className="py-1 text-foreground">{e.profileName}</td>
-              <td className="py-1 font-mono text-foreground">{e.domain}</td>
-              <td className="py-1 text-muted-foreground">{e.provider}</td>
-              <td className="py-1 text-muted-foreground">{e.reason.replace(/_/g, " ")}</td>
-              <td className="py-1 text-right tabular-nums text-foreground">
-                {e.emailsMoved.toLocaleString()}
-              </td>
-            </tr>
-          ))}
+          {entries.slice(0, 10).map((e) => {
+            // Mock consistency: when the log says a domain was blocked,
+            // align the emails-moved count with Skipped so authors read
+            // the two numbers together without a mismatch.
+            const emailsMoved =
+              e.reason === "blocked"
+                ? skippedByDomain.get(e.domain.toLowerCase()) ?? e.emailsMoved
+                : e.emailsMoved
+            return (
+              <tr key={e.at + e.domain} className="border-b border-border/40">
+                <td className="py-1 text-muted-foreground">
+                  {new Date(e.at).toLocaleString("en-US", {
+                    month: "short",
+                    day: "numeric",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}
+                </td>
+                <td className="py-1 text-foreground">{e.profileName}</td>
+                <td className="py-1 font-mono text-foreground">{e.domain}</td>
+                <td className="py-1 text-muted-foreground">{e.provider}</td>
+                <td className="py-1 text-muted-foreground">{e.reason.replace(/_/g, " ")}</td>
+                <td className="py-1 text-right tabular-nums text-foreground">
+                  {emailsMoved.toLocaleString()}
+                </td>
+              </tr>
+            )
+          })}
         </tbody>
       </table>
     </SubBlock>
