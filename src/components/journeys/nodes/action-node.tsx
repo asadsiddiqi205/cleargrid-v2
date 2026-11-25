@@ -23,7 +23,7 @@ import { NodeErrorBadge } from "@/components/journeys/nodes/node-error-badge";
 import { isBlockHiddenByFlag } from "@/data/feature-flags";
 import { getPoolForProject, getPoolById, getGatewayById } from "@/data/project-pools";
 import { getSenderProfileById } from "@/data/sender-profiles";
-import { describeProfileRotationHealth, worstDomainState } from "@/components/warmy/sending-domains-list";
+import { shortProfileRotationHealth, worstDomainState } from "@/components/warmy/sending-domains-list";
 
 const actionIcons: Record<string, typeof Mail> = {
   email: Mail, sms: MessageSquare, whatsapp: MessageCircle, call: Phone,
@@ -85,7 +85,7 @@ export function ActionNode({ id, data, selected }: NodeProps) {
   const senderProfileId = typeof data.senderProfileId === "string" ? data.senderProfileId : null;
   const senderProfile = actionType === "email" && senderProfileId ? getSenderProfileById(senderProfileId) : null;
   const emailWorstState = senderProfile ? worstDomainState(senderProfile) : null;
-  const emailSummary = senderProfile ? describeProfileRotationHealth(senderProfile) : null;
+  const emailSummary = senderProfile ? shortProfileRotationHealth(senderProfile) : null;
 
   // Callback Handling badge — only on AI Call nodes with `callbackEnabled` on
   // (defaults to true per spec). Shows "Callbacks N" where N is the per-borrower cap.

@@ -335,13 +335,13 @@ export function MessageNodeFullEditor({
     : null
   const effectiveFromName = customFromName || resolvedProfile?.fromName || "ClearGrid Collections"
   // Journey sends rotate prefix@domain across the profile's domains, so
-  // the preview from line reads "prefix@<first eligible> · rotates
-  // across n domains" instead of a fixed from-email. Composer sends
-  // (which always use the full fromEmail) are previewed elsewhere.
+  // the preview from line shows "prefix@<rotating domain>" instead of a
+  // fixed from-email. Composer sends — which always use the full
+  // fromEmail — are previewed elsewhere.
   const effectiveFromEmail = customFromEmail ||
     (resolvedProfile
-      ? `${resolvedProfile.prefix}@${resolvedProfile.domains[0]?.domain ?? resolvedProfile.domain.domain}`
-      : "collections@cleargrid.ae")
+      ? `${resolvedProfile.prefix}@<rotating domain>`
+      : "")
   const rotationSummary = resolvedProfile
     ? describeProfileRotationHealth(resolvedProfile, "gmail")
     : ""
@@ -880,10 +880,16 @@ export function MessageNodeFullEditor({
             <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
               Preview · as the borrower will receive it
             </div>
-            {channel === "email" && rotationSummary && (
-              <div className="text-[10.5px] text-muted-foreground">
-                From {effectiveFromName} · {rotationSummary}
-              </div>
+            {channel === "email" && (
+              rotationSummary ? (
+                <div className="text-[10.5px] text-muted-foreground">
+                  From {effectiveFromName} &lt;{effectiveFromEmail}&gt; · {rotationSummary}
+                </div>
+              ) : (
+                <div className="text-[10.5px] text-muted-foreground">
+                  Pick a sender profile to preview the From line.
+                </div>
+              )
             )}
             {bodySource.startsWith("(no template picked") ? (
               <MessagePreview
@@ -892,7 +898,9 @@ export function MessageNodeFullEditor({
                 body=""
                 senderId={smsSenderId}
                 fromName={effectiveFromName}
-                fromAddress={effectiveFromEmail}
+                fromAddress={
+                  channel === "email" && !resolvedProfile ? "" : effectiveFromEmail
+                }
                 clickTracking={true}
               />
             ) : (
@@ -903,7 +911,9 @@ export function MessageNodeFullEditor({
                 subject={subjectSource}
                 body={bodySource}
                 fromName={effectiveFromName}
-                fromAddress={effectiveFromEmail}
+                fromAddress={
+                  channel === "email" && !resolvedProfile ? "" : effectiveFromEmail
+                }
                 senderId={smsSenderId}
                 clickTracking
                 phoneSelection={d.phoneSelection as PhoneSelection | undefined}

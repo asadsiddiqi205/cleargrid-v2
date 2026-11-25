@@ -205,15 +205,20 @@ export function describeProfileHealth(profile: SenderProfile): string {
 }
 
 /** Rotation-aware summary for Journey sends: "Rotates across N domains ·
- *  3 sending · 1 blocked (support.cleararabia.ai)". Fed to the Compose
- *  tab preview and the Send Email canvas subtitle on journey nodes. */
+ *  3 sending · 1 at risk (fallback only) · 1 blocked (support.cleararabia.ai)".
+ *  Fed to the Compose tab preview on journey nodes; the canvas subtitle
+ *  uses the short-form helper below. */
 export function describeProfileRotationHealth(
   profile: SenderProfile,
   provider: BorrowerProvider = "gmail",
 ): string {
   const rows = evaluateProfileDomains(profile, provider)
   const total = rows.length
-  const sending = rows.filter((r) => r.eligible).length
+  const healthyOrWatch = rows.filter((r) => {
+    if (!r.eligible) return false
+    return r.status === "healthy" || r.status === "watch" || r.status === "no_data"
+  })
+  const atRiskEligible = rows.filter((r) => r.eligible && r.status === "at_risk")
   const blockedRows = rows.filter((r) => r.skipReason === "blocked")
   const pausedRows = rows.filter((r) => r.skipReason === "paused")
   const usedUpRows = rows.filter(
@@ -221,14 +226,42 @@ export function describeProfileRotationHealth(
   )
   const parts: string[] = [
     `Rotates across ${total} domain${total === 1 ? "" : "s"}`,
-    `${sending} sending`,
+    `${healthyOrWatch.length} sending`,
   ]
   const joinNames = (rs: typeof rows) =>
     rs.length === 1 ? rs[0]!.domain : `${rs.length}`
+  if (atRiskEligible.length)
+    parts.push(`${atRiskEligible.length} at risk (fallback only)`)
   if (blockedRows.length) parts.push(`${blockedRows.length} blocked (${joinNames(blockedRows)})`)
   if (pausedRows.length) parts.push(`${pausedRows.length} paused (${joinNames(pausedRows)})`)
   if (usedUpRows.length) parts.push(`${usedUpRows.length} used up for Gmail`)
   return parts.join(" · ")
+}
+
+/** Short-form rotation summary for the canvas card: picks the most
+ *  attention-worthy signal only. "KSA-Non Banking · 1 domain blocked".
+ *  The caller is expected to prefix the profile name. */
+export function shortProfileRotationHealth(
+  profile: SenderProfile,
+  provider: BorrowerProvider = "gmail",
+): string {
+  const rows = evaluateProfileDomains(profile, provider)
+  const blockedRows = rows.filter((r) => r.skipReason === "blocked")
+  const pausedRows = rows.filter((r) => r.skipReason === "paused")
+  const atRiskEligible = rows.filter((r) => r.eligible && r.status === "at_risk")
+  const usedUpRows = rows.filter(
+    (r) => r.skipReason === "used_up" || r.skipReason === "warmy_zero",
+  )
+  if (blockedRows.length)
+    return `${blockedRows.length} domain${blockedRows.length === 1 ? "" : "s"} blocked`
+  if (pausedRows.length)
+    return `${pausedRows.length} domain${pausedRows.length === 1 ? "" : "s"} paused`
+  if (atRiskEligible.length)
+    return `${atRiskEligible.length} at risk (fallback)`
+  if (usedUpRows.length)
+    return `${usedUpRows.length} used up for Gmail`
+  const sending = rows.filter((r) => r.eligible).length
+  return `${sending} sending`
 }
 
 /** Worst domain state on the profile — used by the canvas card. */

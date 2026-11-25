@@ -528,13 +528,21 @@ function ResolvedIdentity({
                 <p className="text-[9px] font-semibold uppercase tracking-wider text-primary/80">
                   Preview
                 </p>
-                <p className="mt-0.5 truncate text-[11px] text-foreground">
-                  {(draft.fromName || profile.fromName) + " "}
-                  &lt;{draft.fromEmail || profile.fromEmail}&gt;
-                </p>
-                <p className="mt-0.5 truncate text-[10px] text-muted-foreground">
-                  Reply-to: {draft.replyTo || profile.replyTo}
-                </p>
+                {context === "journey" ? (
+                  <p className="mt-0.5 truncate text-[11px] text-foreground">
+                    {draft.fromName || profile.fromName}
+                  </p>
+                ) : (
+                  <>
+                    <p className="mt-0.5 truncate text-[11px] text-foreground">
+                      {(draft.fromName || profile.fromName) + " "}
+                      &lt;{draft.fromEmail || profile.fromEmail}&gt;
+                    </p>
+                    <p className="mt-0.5 truncate text-[10px] text-muted-foreground">
+                      Reply-to: {draft.replyTo || profile.replyTo}
+                    </p>
+                  </>
+                )}
               </div>
 
               {draftDomainMismatch && (
@@ -552,8 +560,9 @@ function ResolvedIdentity({
                 </div>
               )}
               <p className="text-[10px] leading-relaxed text-muted-foreground">
-                Custom From identity overrides the profile&apos;s fields for this campaign only.
-                Governed profile still routes the send.
+                {context === "journey"
+                  ? "Only the From name can be overridden on journey nodes."
+                  : "Custom From identity overrides the profile's fields for this campaign only. Governed profile still routes the send."}
               </p>
 
               {/* Confirm / Cancel — changes only commit on Confirm. */}
