@@ -71,6 +71,9 @@ export type MessageMetricId =
   | "incremental_net_vs_control"
   | "uplift"
   | "confidence"
+  // Warmy (sender-domain health, added with the Warmy integration)
+  | "sender_health_score"
+  | "held_for_volume_pct"
 
 export interface MetricDefinition {
   id: MessageMetricId
@@ -453,6 +456,26 @@ export const METRIC_DEFINITIONS: Record<MessageMetricId, MetricDefinition> = {
     description: "1 − p-value. A metric is 'significant' above 95%.",
     format: "percent",
     goodDirection: "up",
+  },
+  sender_health_score: {
+    id: "sender_health_score",
+    label: "Sender health",
+    short: "Sender health",
+    description:
+      "Sent-weighted Warmy health score across the sender profile's domains, at run time. Falls when a domain's reputation drops, which usually precedes a drop in opens.",
+    format: "count",
+    tone: "muted",
+    goodDirection: "up",
+  },
+  held_for_volume_pct: {
+    id: "held_for_volume_pct",
+    label: "Held for volume",
+    short: "Held / vol",
+    description:
+      "Share of this run's emails that waited for tomorrow because every eligible domain was out of Warmy's recommended volume for the recipient's provider.",
+    format: "percent",
+    tone: "warn",
+    goodDirection: "down",
   },
 }
 

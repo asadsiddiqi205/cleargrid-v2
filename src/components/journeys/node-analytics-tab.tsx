@@ -41,6 +41,8 @@ interface NodeAnalyticsTabProps {
   nodeLabel: string
   nodeType: string
   blockType?: string
+  /** Picked sender profile for the Warmy-powered email analytics. */
+  senderProfileId?: string
 }
 
 const STATE_TONE: Record<RunNodeRow["state"], string> = {
@@ -64,6 +66,7 @@ export function NodeAnalyticsTab({
   nodeLabel,
   nodeType,
   blockType,
+  senderProfileId,
 }: NodeAnalyticsTabProps) {
   const [query, setQuery] = React.useState("")
   const [stateFilter, setStateFilter] = React.useState<RunNodeRow["state"] | "all">("all")
@@ -97,6 +100,7 @@ export function NodeAnalyticsTab({
         run={run}
         nodeId={nodeId}
         nodeLabel={nodeLabel}
+        senderProfileId={senderProfileId}
       />
     )
   }

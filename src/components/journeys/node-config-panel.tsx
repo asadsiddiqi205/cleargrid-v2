@@ -1665,6 +1665,7 @@ export function NodeConfigPanel({ node, onClose, onUpdate, onDeleteNode, nodes =
                 nodeLabel={(d.label as string) ?? node.id}
                 nodeType={node.type ?? "action"}
                 blockType={d.blockType as string | undefined}
+                senderProfileId={(d.senderProfileId as string | undefined) ?? undefined}
               />
             )}
           </TabsContent>

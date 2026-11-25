@@ -479,6 +479,7 @@ export function MessageNodeFullEditor({
               nodeLabel={(d.label as string) ?? node.id}
               nodeType={node.type ?? "action"}
               blockType={d.blockType as string | undefined}
+              senderProfileId={senderProfileId ?? undefined}
             />
           )}
         </div>

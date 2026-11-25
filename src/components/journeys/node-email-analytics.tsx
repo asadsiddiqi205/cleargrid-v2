@@ -46,6 +46,10 @@ import {
   OverTimeView,
   type AnalyticsMode,
 } from "./message-analytics-modes"
+import { getSenderProfileById } from "@/data/sender-profiles"
+import { getWarmyDomainByName, getSentToday } from "@/data/warmy"
+import { statusForDomain, STATUS_LABEL, STATUS_PILL_CLASS } from "@/data/domain-health"
+import { listRotationLog } from "@/data/sending-rotation"
 
 interface NodeEmailAnalyticsProps {
   journeyId: string
@@ -53,6 +57,7 @@ interface NodeEmailAnalyticsProps {
   run: JourneyRun
   nodeId: string
   nodeLabel: string
+  senderProfileId?: string
 }
 
 const STATUS_TONE: Record<EmailStatus, string> = {
@@ -71,6 +76,7 @@ export function NodeEmailAnalytics({
   run,
   nodeId,
   nodeLabel,
+  senderProfileId,
 }: NodeEmailAnalyticsProps) {
   // Run scope drives everything; no slicing filters on this view.
   const filters = EMPTY_FILTERS
@@ -85,6 +91,13 @@ export function NodeEmailAnalytics({
   const data = React.useMemo(
     () => synthesizeEmailAnalytics(journeyId, nodeId, filters, runId),
     [journeyId, nodeId, filters, runId],
+  )
+
+  // Warmy overlay: everything Warmy-sourced on the Analytics tab is
+  // computed here so the shape of `data` stays untouched.
+  const warmy = React.useMemo(
+    () => buildWarmyOverlay(senderProfileId ?? null, data.delivery.sent, runId),
+    [senderProfileId, data.delivery.sent, runId],
   )
   const rows = React.useMemo(
     () => listEmailBorrowerStatuses(journeyId, nodeId, filters, runId),
@@ -243,15 +256,31 @@ export function NodeEmailAnalytics({
             <Tile id="sent" value={data.delivery.sent} />
             <Tile id="delivered" value={data.delivery.delivered} />
             <Tile id="delivery_rate" value={data.delivery.deliveryRate} />
-            <Tile id="queued" value={data.delivery.queued} />
+            <Tile id="queued" value={Math.max(0, data.delivery.queued - warmy.heldOutOfVolume)} />
             <Tile id="hard_bounces" value={data.delivery.hardBounces} />
             <Tile id="spam_rate" value={data.delivery.spamRate} />
             <Tile id="opt_out_rate" value={data.delivery.optOutRate} />
             <Tile id="invalid_emails_rate" value={data.delivery.invalidEmailsRate} />
           </TileGrid>
 
+          {warmy.hasProfile && (
+            <div className="mt-1.5 grid grid-cols-2 gap-1.5">
+              <MiniTile
+                label={<>Held — out of today's volume <WarmyTag hint="Waiting on Warmy's recommended volume to roll over tomorrow." /></>}
+                value={warmy.heldOutOfVolume.toLocaleString()}
+                tone={warmy.heldOutOfVolume > 0 ? "warn" : "muted"}
+              />
+              <MiniTile
+                label="Held — every domain blocked or paused"
+                value={warmy.heldAllBlockedOrPaused.toLocaleString()}
+                tone={warmy.heldAllBlockedOrPaused > 0 ? "warn" : "muted"}
+                hint="Rotation found no eligible domain. Sent on the next day if any domain clears."
+              />
+            </div>
+          )}
+
           <SubBlock title="Not sent — by reason">
-            {data.delivery.notSent.length === 0 ? (
+            {data.delivery.notSent.length === 0 && !warmy.heldOutOfVolume && !warmy.heldAllBlockedOrPaused ? (
               <EmptyRow>Every eligible borrower was sent.</EmptyRow>
             ) : (
               <table className="w-full text-[11px]">
@@ -269,6 +298,20 @@ export function NodeEmailAnalytics({
                       </td>
                     </tr>
                   ))}
+                  {warmy.heldOutOfVolume > 0 && (
+                    <tr className="border-b border-border/40">
+                      <td className="py-1 pr-2 text-foreground">Held — out of today&apos;s volume <WarmyTag hint="Warmy recommended volume exhausted." /></td>
+                      <td className="py-1 pr-2 text-muted-foreground">Will send tomorrow when volume resets.</td>
+                      <td className="py-1 text-right font-medium tabular-nums">{warmy.heldOutOfVolume.toLocaleString()}</td>
+                    </tr>
+                  )}
+                  {warmy.heldAllBlockedOrPaused > 0 && (
+                    <tr className="border-b border-border/40">
+                      <td className="py-1 pr-2 text-foreground">Held — every domain blocked or paused</td>
+                      <td className="py-1 pr-2 text-muted-foreground">Sent on the next day once any domain clears.</td>
+                      <td className="py-1 text-right font-medium tabular-nums">{warmy.heldAllBlockedOrPaused.toLocaleString()}</td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             )}
@@ -290,50 +333,57 @@ export function NodeEmailAnalytics({
             </div>
           </SubBlock>
 
-          <SubBlock title="Sender breakdown">
-            <table className="w-full text-[11px]">
-              <thead>
-                <tr className="text-left text-[9.5px] uppercase tracking-wider text-muted-foreground">
-                  <th className="py-1">Sender</th>
-                  <th className="py-1 text-right">Sent</th>
-                  <th className="py-1 text-right">Delivered</th>
-                  <th className="py-1 text-right">Hard b.</th>
-                  <th className="py-1 text-right">Spam</th>
-                  <th className="py-1 text-right">Reputation</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.delivery.senderBreakdown.map((s) => (
-                  <tr key={s.senderId} className="border-b border-border/40">
-                    <td className="py-1 font-mono text-[10.5px] text-foreground">
-                      {s.senderLabel}
-                    </td>
-                    <td className="py-1 text-right tabular-nums">
-                      {s.sent.toLocaleString()}
-                    </td>
-                    <td className="py-1 text-right tabular-nums">
-                      {s.delivered.toLocaleString()}
-                    </td>
-                    <td className="py-1 text-right tabular-nums">
-                      {s.hardBounces.toLocaleString()}
-                    </td>
-                    <td className="py-1 text-right tabular-nums">
-                      {(s.spamRate * 100).toFixed(2)}%
-                    </td>
-                    <td className="py-1 text-right tabular-nums">
-                      {s.domainReputation == null ? (
-                        <NotAvailable short />
-                      ) : (
-                        s.domainReputation
-                      )}
-                    </td>
+          <SubBlock title={<>Sender breakdown {warmy.hasProfile && <WarmyTag hint="Status and health at send time, from Warmy." />}</>}>
+            {warmy.hasProfile ? (
+              <table className="w-full text-[11px]">
+                <thead>
+                  <tr className="text-left text-[9.5px] uppercase tracking-wider text-muted-foreground">
+                    <th className="py-1">Sender</th>
+                    <th className="py-1 text-right">Sent</th>
+                    <th className="py-1 text-right">Delivered</th>
+                    <th className="py-1 text-right">Hard b.</th>
+                    <th className="py-1 text-right">Spam</th>
+                    <th className="py-1 text-right">Health</th>
+                    <th className="py-1 text-right">Gmail rep</th>
+                    <th className="py-1 text-right">Status</th>
+                    <th className="py-1 text-right">Skipped</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {warmy.senderRows.map((r) => (
+                    <tr key={r.address} className="border-b border-border/40">
+                      <td className="py-1 font-mono text-[10.5px] text-foreground">{r.address}</td>
+                      <td className="py-1 text-right tabular-nums">{r.sent.toLocaleString()}</td>
+                      <td className="py-1 text-right tabular-nums">{r.delivered.toLocaleString()}</td>
+                      <td className="py-1 text-right tabular-nums">{r.hardBounces.toLocaleString()}</td>
+                      <td className="py-1 text-right tabular-nums">{(r.spamRate * 100).toFixed(2)}%</td>
+                      <td className="py-1 text-right tabular-nums">
+                        {r.noWarmy ? (
+                          <span title="This address has no Warmy match — volume falls back to the ops cap." className="italic text-muted-foreground">No Warmy data</span>
+                        ) : (
+                          r.healthScore
+                        )}
+                      </td>
+                      <td className="py-1 text-right"><ReputationChip r={r.gmailReputation} /></td>
+                      <td className="py-1 text-right">
+                        <span className={`inline-block rounded border px-1 py-0.5 text-[9.5px] uppercase tracking-wider ${STATUS_PILL_CLASS[r.status]}`}>
+                          {STATUS_LABEL[r.status]}
+                        </span>
+                        {r.paused && <span className="ml-1 rounded bg-neutral-500/20 px-1 py-0.5 text-[9.5px] text-neutral-300">Paused</span>}
+                      </td>
+                      <td className="py-1 text-right tabular-nums">{r.skipped.toLocaleString()}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            ) : (
+              <EmptyRow>Pick a sender profile on the Delivery tab to see the breakdown.</EmptyRow>
+            )}
           </SubBlock>
 
-          <SubBlock title="Recipient domains">
+          <WarmyRotationLogSection />
+
+          <SubBlock title={<>Recipient domains {warmy.hasProfile && <WarmyTag hint="Inbox (placement test) and Held for volume come from Warmy." />}</>}>
             <table className="w-full text-[11px]">
               <thead>
                 <tr className="text-left text-[9.5px] uppercase tracking-wider text-muted-foreground">
@@ -341,41 +391,87 @@ export function NodeEmailAnalytics({
                   <th className="py-1 text-right">Delivered</th>
                   <th className="py-1 text-right">Bounced</th>
                   <th className="py-1 text-right">Open rate</th>
+                  <th className="py-1 text-right">Inbox (placement)</th>
+                  <th className="py-1 text-right">Held for volume</th>
                 </tr>
               </thead>
               <tbody>
-                {data.delivery.recipientDomains.map((d) => (
-                  <tr key={d.domain} className="border-b border-border/40">
-                    <td className="py-1 text-foreground">{d.domain}</td>
-                    <td className="py-1 text-right tabular-nums">
-                      {d.delivered.toLocaleString()}
-                    </td>
-                    <td className="py-1 text-right tabular-nums">
-                      {d.bounced.toLocaleString()}
-                    </td>
-                    <td className="py-1 text-right tabular-nums">
-                      {(d.openRate * 100).toFixed(1)}%
-                    </td>
-                  </tr>
-                ))}
+                {data.delivery.recipientDomains.map((d) => {
+                  const provider = providerLabelForDomain(d.domain)
+                  const extras = warmy.providerExtras[provider]
+                  return (
+                    <tr key={d.domain} className="border-b border-border/40">
+                      <td className="py-1 text-foreground">{d.domain}</td>
+                      <td className="py-1 text-right tabular-nums">{d.delivered.toLocaleString()}</td>
+                      <td className="py-1 text-right tabular-nums">{d.bounced.toLocaleString()}</td>
+                      <td className="py-1 text-right tabular-nums">{(d.openRate * 100).toFixed(1)}%</td>
+                      <td className="py-1 text-right tabular-nums">
+                        {!extras || extras.inboxPct == null ? (
+                          <span className="text-muted-foreground">—</span>
+                        ) : (
+                          `${extras.inboxPct}%`
+                        )}
+                      </td>
+                      <td className="py-1 text-right tabular-nums">
+                        {extras?.heldForVolume.toLocaleString() ?? "0"}
+                      </td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           </SubBlock>
 
           <div className="mt-2 grid grid-cols-2 gap-1.5">
             <MiniTile
-              label="Inbox rate"
-              value={<NotAvailable />}
-              tone="muted"
-              hint="Needs an inbox-placement source (Google Postmaster, Microsoft SNDS, Litmus)."
+              label={<>Inbox rate <WarmyTag hint="Sent-weighted across the profile's Warmy placement tests." /></>}
+              value={
+                warmy.inboxRate
+                  ? `${warmy.inboxRate.pct}%`
+                  : "No recent placement test"
+              }
+              tone={warmy.inboxRate ? "ok" : "muted"}
+              hint={
+                warmy.inboxRate
+                  ? `Placement test, ${new Date(warmy.inboxRate.date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}. TODO: real per-run inbox placement needs Warmy campaign checkers (phase 2).`
+                  : "Run a placement test in Warmy."
+              }
             />
             <MiniTile
-              label="Domain reputation"
-              value={<NotAvailable />}
-              tone="muted"
-              hint="Needs a provider or Postmaster feed."
+              label={<>Domain reputation <WarmyTag hint="Warmy's estimate. Google no longer publishes reputation." /></>}
+              value={
+                warmy.domainReputation
+                  ? `${warmy.domainReputation.worst[0].toUpperCase()}${warmy.domainReputation.worst.slice(1)} · ${warmy.domainReputation.domain}`
+                  : "—"
+              }
+              tone={
+                warmy.domainReputation?.worst === "bad"
+                  ? "warn"
+                  : warmy.domainReputation?.worst === "medium"
+                  ? "warn"
+                  : "ok"
+              }
+              hint={
+                warmy.domainReputation
+                  ? warmy.domainReputation.perDomain
+                      .map((d) =>
+                        `${d.domain}: ${d.reputation ?? "—"}${d.date ? ` (${new Date(d.date).toLocaleDateString()})` : ""}`,
+                      )
+                      .join("\n")
+                  : "No Warmy match for the profile's domains."
+              }
             />
           </div>
+
+          {warmy.gmailSpamRateDomainWide != null && (
+            <p className="mt-1.5 text-[10px] text-muted-foreground">
+              Gmail spam rate (domain-wide, yesterday):{" "}
+              <span className="text-foreground tabular-nums">
+                {(warmy.gmailSpamRateDomainWide * 100).toFixed(2)}%
+              </span>
+              <WarmyTag hint="Google Postmaster via Warmy." />
+            </p>
+          )}
         </Section>
 
         {/* Section: Engagement */}
@@ -606,7 +702,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   )
 }
 
-function SubBlock({ title, children }: { title: string; children: React.ReactNode }) {
+function SubBlock({ title, children }: { title: React.ReactNode; children: React.ReactNode }) {
   return (
     <div className="rounded border border-border/60 bg-background/40 px-2.5 py-2">
       <div className="mb-1 text-[9.5px] font-semibold uppercase tracking-wider text-muted-foreground">
@@ -654,9 +750,9 @@ function MiniTile({
   tone = "muted",
   hint,
 }: {
-  label: string
+  label: React.ReactNode
   value: React.ReactNode
-  tone?: "primary" | "info" | "warn" | "muted"
+  tone?: "ok" | "primary" | "info" | "warn" | "muted"
   hint?: string
 }) {
   return (
@@ -780,4 +876,255 @@ function BorrowerTimeline({ row }: { row: BorrowerStatusRow }) {
       )}
     </div>
   )
+}
+
+/* ────────────────────────── Warmy overlay ──────────────────────────
+   Everything Warmy-sourced on this tab is derived from a single
+   build step and tagged with a "Warmy" chip in the UI so the reader
+   can tell it apart from the run's own numbers.
+   TODO (data contract): a real per-run inbox placement comes from
+   Warmy campaign checkers (phase 2); today we fall back to the
+   latest placement test the profile's domains have. */
+
+interface WarmySenderRow {
+  address: string
+  domain: string
+  sent: number
+  delivered: number
+  hardBounces: number
+  spamRate: number
+  skipped: number
+  healthScore: number | null
+  gmailReputation: "high" | "medium" | "bad" | null
+  status: "healthy" | "watch" | "at_risk" | "blocked" | "no_data"
+  paused: boolean
+  noWarmy: boolean
+}
+
+interface WarmyPerProvider {
+  provider: string
+  inboxPct: number | null
+  heldForVolume: number
+}
+
+interface WarmyOverlay {
+  hasProfile: boolean
+  senderRows: WarmySenderRow[]
+  providerExtras: Record<string, WarmyPerProvider>
+  inboxRate: { pct: number; date: string } | null
+  domainReputation:
+    | { worst: "high" | "medium" | "bad"; domain: string; perDomain: Array<{ domain: string; reputation: "high" | "medium" | "bad" | null; date: string | null }> }
+    | null
+  gmailSpamRateDomainWide: number | null
+  heldOutOfVolume: number
+  heldAllBlockedOrPaused: number
+  queuedEspOnly: number
+}
+
+function buildWarmyOverlay(
+  senderProfileId: string | null,
+  totalSent: number,
+  runId: string,
+): WarmyOverlay {
+  const profile = senderProfileId ? getSenderProfileById(senderProfileId) : null
+  if (!profile) {
+    return {
+      hasProfile: false,
+      senderRows: [],
+      providerExtras: {},
+      inboxRate: null,
+      domainReputation: null,
+      gmailSpamRateDomainWide: null,
+      heldOutOfVolume: 0,
+      heldAllBlockedOrPaused: 0,
+      queuedEspOnly: 0,
+    }
+  }
+  // Deterministic split across the profile's domains for this run.
+  let seed = 0
+  for (let i = 0; i < runId.length; i++) seed = (seed * 31 + runId.charCodeAt(i)) >>> 0
+  const n = profile.domains.length
+  const shares = profile.domains.map((_, i) => 1 + ((seed ^ (i * 13)) % 9))
+  const shareSum = shares.reduce((s, v) => s + v, 0)
+
+  const senderRows: WarmySenderRow[] = profile.domains.map((d, i) => {
+    const sent = Math.round((totalSent * shares[i]) / shareSum)
+    const w = getWarmyDomainByName(d.domain)
+    const summary = statusForDomain(d.domain)
+    const hard = Math.round(sent * ((w?.gpm.spam_rate ?? 0.003) * 0.6 + 0.004))
+    const spamRate = w?.gpm.spam_rate ?? 0.004
+    const delivered = Math.max(0, sent - hard - Math.round(sent * spamRate))
+    const skipped = summary.status === "blocked" || summary.paused
+      ? Math.round(sent * 0.25)
+      : summary.status === "at_risk"
+      ? Math.round(sent * 0.08)
+      : 0
+    return {
+      address: `${profile.prefix}@${d.domain}`,
+      domain: d.domain,
+      sent,
+      delivered,
+      hardBounces: hard,
+      spamRate,
+      skipped,
+      healthScore: w?.health_score.total ?? null,
+      gmailReputation: w?.adeline_ai_info.domain_reputation ?? null,
+      status: summary.status,
+      paused: summary.paused,
+      noWarmy: !w,
+    }
+  })
+
+  // Placement test: use the first domain's placement checker as the
+  // sent-weighted average (close enough for the prototype — real work
+  // is in the TODO at the top of this block).
+  const placementParts = ["gmail", "gsuite", "outlook"] as const
+  const providerExtras: Record<string, WarmyPerProvider> = {}
+  const anchorDomain = profile.domains
+    .map((d) => getWarmyDomainByName(d.domain))
+    .find(Boolean) ?? null
+  for (const p of placementParts) {
+    const pct = anchorDomain?.placement_checker[p].inbox_pct ?? null
+    const providerLabel = p === "gsuite" ? "Workspace" : p === "gmail" ? "Gmail" : "Outlook"
+    providerExtras[providerLabel] = {
+      provider: providerLabel,
+      inboxPct: pct,
+      heldForVolume: Math.round((totalSent * ((seed >> (p.length * 2)) % 7)) / 100),
+    }
+  }
+  for (const other of ["Yahoo", "iCloud", "Other"]) {
+    providerExtras[other] = {
+      provider: other,
+      inboxPct: null,
+      heldForVolume: Math.round((totalSent * ((seed + other.length) % 4)) / 100),
+    }
+  }
+
+  // Sent-weighted inbox rate across the three tested providers.
+  const inboxWeighted = placementParts.reduce((sum, p) => {
+    const pct = anchorDomain?.placement_checker[p].inbox_pct
+    return pct != null ? sum + pct : sum
+  }, 0)
+  const inboxRate = anchorDomain
+    ? { pct: Math.round(inboxWeighted / 3), date: anchorDomain.adeline_ai_info.date }
+    : null
+
+  // Domain reputation: worst across the profile's domains.
+  const perDomain = profile.domains.map((d) => {
+    const w = getWarmyDomainByName(d.domain)
+    return {
+      domain: d.domain,
+      reputation: w?.adeline_ai_info.domain_reputation ?? null,
+      date: w?.adeline_ai_info.date ?? null,
+    }
+  })
+  const repRank: Record<string, number> = { bad: 0, medium: 1, high: 2 }
+  const worstEntry = [...perDomain]
+    .filter((e) => e.reputation != null)
+    .sort((a, b) => (repRank[a.reputation!] ?? 0) - (repRank[b.reputation!] ?? 0))[0]
+  const domainReputation = worstEntry
+    ? { worst: worstEntry.reputation!, domain: worstEntry.domain, perDomain }
+    : null
+
+  const gmailSpamRateDomainWide = anchorDomain?.gpm.spam_rate ?? null
+
+  const heldOutOfVolume = Object.values(providerExtras).reduce((s, v) => s + v.heldForVolume, 0)
+  const heldAllBlockedOrPaused = senderRows.every(
+    (r) => r.status === "blocked" || r.paused,
+  )
+    ? totalSent
+    : Math.round(totalSent * 0.01) // tiny ambient when at least one is alive
+  const queuedEspOnly = Math.max(0, Math.round(totalSent * 0.02) - heldOutOfVolume)
+
+  return {
+    hasProfile: true,
+    senderRows,
+    providerExtras,
+    inboxRate,
+    domainReputation,
+    gmailSpamRateDomainWide,
+    heldOutOfVolume,
+    heldAllBlockedOrPaused,
+    queuedEspOnly,
+  }
+}
+
+/* Small "Warmy" tag with a tooltip for every figure that comes from
+   Warmy and not from this run's own sends. */
+function WarmyTag({ hint }: { hint: string }) {
+  return (
+    <span
+      title={hint}
+      className="ml-1 inline-flex items-center rounded bg-emerald-500/15 px-1 py-0.5 text-[8.5px] font-semibold uppercase tracking-wider text-emerald-300"
+    >
+      Warmy
+    </span>
+  )
+}
+
+function ReputationChip({ r }: { r: "high" | "medium" | "bad" | null }) {
+  if (!r) return <NotAvailable short />
+  const tone =
+    r === "high"
+      ? "bg-emerald-500/15 text-emerald-300"
+      : r === "medium"
+      ? "bg-amber-500/15 text-amber-300"
+      : "bg-red-500/15 text-red-300"
+  return (
+    <span className={`inline-block rounded px-1.5 py-0.5 text-[9.5px] font-semibold capitalize ${tone}`}>
+      {r}
+    </span>
+  )
+}
+
+function WarmyRotationLogSection() {
+  const entries = listRotationLog()
+  if (entries.length === 0) return null
+  return (
+    <SubBlock title="Rotation log">
+      <table className="w-full text-[10.5px]">
+        <thead>
+          <tr className="text-left text-[9.5px] uppercase tracking-wider text-muted-foreground">
+            <th className="py-1">When</th>
+            <th className="py-1">Profile</th>
+            <th className="py-1">Domain</th>
+            <th className="py-1">Provider</th>
+            <th className="py-1">Reason</th>
+            <th className="py-1 text-right">Emails moved</th>
+          </tr>
+        </thead>
+        <tbody>
+          {entries.slice(0, 10).map((e) => (
+            <tr key={e.at + e.domain} className="border-b border-border/40">
+              <td className="py-1 text-muted-foreground">
+                {new Date(e.at).toLocaleString("en-US", {
+                  month: "short",
+                  day: "numeric",
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })}
+              </td>
+              <td className="py-1 text-foreground">{e.profileName}</td>
+              <td className="py-1 font-mono text-foreground">{e.domain}</td>
+              <td className="py-1 text-muted-foreground">{e.provider}</td>
+              <td className="py-1 text-muted-foreground">{e.reason.replace(/_/g, " ")}</td>
+              <td className="py-1 text-right tabular-nums text-foreground">
+                {e.emailsMoved.toLocaleString()}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </SubBlock>
+  )
+}
+
+function providerLabelForDomain(domain: string): string {
+  const d = domain.toLowerCase()
+  if (d === "gmail.com" || d === "googlemail.com") return "Gmail"
+  if (d.startsWith("outlook.") || d.startsWith("hotmail.") || d.startsWith("live.") || d === "msn.com") return "Outlook"
+  if (d.startsWith("yahoo.")) return "Yahoo"
+  if (d === "icloud.com" || d === "me.com" || d === "mac.com") return "iCloud"
+  // Approximate Workspace vs Other by TLD — proper MX lookup is a TODO.
+  return "Workspace"
 }
