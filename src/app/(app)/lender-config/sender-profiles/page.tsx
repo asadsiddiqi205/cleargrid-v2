@@ -40,6 +40,7 @@ import {
   type SenderProfile,
 } from "@/data/sender-profiles"
 import { lenders } from "@/data/lenders"
+import { WarmyConnectionButton } from "@/components/warmy/warmy-connection-button"
 
 export default function SenderProfilesPage() {
   const [profiles, setProfiles] = React.useState<SenderProfile[]>(SEED_PROFILES)
@@ -98,10 +99,13 @@ export default function SenderProfilesPage() {
             ))}
           </SelectContent>
         </Select>
-        <Button className="ml-auto" onClick={() => setCreateOpen(true)}>
-          <Plus className="h-3.5 w-3.5" />
-          New sender profile
-        </Button>
+        <div className="ml-auto flex items-center gap-2">
+          <WarmyConnectionButton />
+          <Button onClick={() => setCreateOpen(true)}>
+            <Plus className="h-3.5 w-3.5" />
+            New sender profile
+          </Button>
+        </div>
       </div>
 
       {/* Table */}
