@@ -44,6 +44,7 @@ import { WarmyConnectionButton } from "@/components/warmy/warmy-connection-butto
 import { DomainStatusDot } from "@/components/warmy/domain-status-dot"
 import { WarmyDomainsTab, WarmyDomainsToolbar } from "@/components/warmy/warmy-domains-tab"
 import { statusForDomain } from "@/data/domain-health"
+import { listWarmyDomains } from "@/data/warmy"
 
 type MainTab = "profiles" | "domains"
 
@@ -341,6 +342,8 @@ function NewProfileDialog({
   const [description, setDescription] = React.useState("")
   const [ccList, setCcList] = React.useState("")
   const [bccList, setBccList] = React.useState("")
+  const [prefixInput, setPrefixInput] = React.useState("")
+  const [selectedDomains, setSelectedDomains] = React.useState<string[]>([])
 
   React.useEffect(() => {
     if (open) {
@@ -353,14 +356,22 @@ function NewProfileDialog({
       setDescription("")
       setCcList("")
       setBccList("")
+      setPrefixInput("")
+      setSelectedDomains([])
     }
   }, [open])
 
-  const domainFromEmail = fromEmail.includes("@") ? fromEmail.split("@")[1] : ""
+  const domainFromEmail = fromEmail.includes("@") ? fromEmail.split("@")[1]! : ""
+  const effectivePrefix = (prefixInput.trim() || (fromEmail.includes("@") ? fromEmail.split("@")[0]! : fromEmail)).trim()
   // Domain verification is stubbed — anything with a properly-formed domain
   // starts as "verification pending" and needs an admin to mark verified in a
   // real workflow.
   const willBeVerified = false
+
+  const fromEmailStatus = domainFromEmail ? statusForDomain(domainFromEmail) : null
+  const effectiveDomains = selectedDomains.length > 0 || !domainFromEmail
+    ? selectedDomains
+    : [domainFromEmail]
 
   function handleSave() {
     if (!name.trim() || !fromName.trim() || !fromEmail.trim() || !replyTo.trim() || !domainFromEmail) {
@@ -369,7 +380,7 @@ function NewProfileDialog({
     }
     const now = new Date().toISOString()
     const lender = lenders.find((l) => l.id === lenderId)
-    const prefix = fromEmail.includes("@") ? fromEmail.split("@")[0]! : fromEmail
+    const prefix = effectivePrefix
     const seedDomain = {
       domain: domainFromEmail,
       verified: willBeVerified,
@@ -377,6 +388,15 @@ function NewProfileDialog({
       dkim: "pending" as const,
       dmarc: "pending" as const,
     }
+    const extraDomains = effectiveDomains
+      .filter((d) => d !== domainFromEmail)
+      .map((d) => ({
+        domain: d,
+        verified: true, // assume external domains are already verified
+        spf: "pass" as const,
+        dkim: "pass" as const,
+        dmarc: "pass" as const,
+      }))
     const profile: SenderProfile = {
       id: `sp-new-${Date.now().toString(36)}`,
       lenderId,
@@ -395,7 +415,7 @@ function NewProfileDialog({
         .filter(Boolean),
       prefix,
       domain: seedDomain,
-      domains: [seedDomain],
+      domains: [seedDomain, ...extraDomains],
       esp,
       status: willBeVerified ? "active" : "inactive",
       description: description.trim() || undefined,
@@ -404,6 +424,12 @@ function NewProfileDialog({
       updatedBy: "You",
     }
     onCreate(profile)
+    if (fromEmailStatus?.status === "blocked") {
+      toast.warning(`Profile saved — ${domainFromEmail} is currently Blocked`, {
+        description:
+          "Composer sends go out through this domain. They will be refused until the status clears.",
+      })
+    }
     onClose()
   }
 
@@ -458,6 +484,9 @@ function NewProfileDialog({
                 placeholder="collections@mashreq.com"
                 className="font-mono text-[12px]"
               />
+              {fromEmailStatus && (
+                <FromEmailStatusLine status={fromEmailStatus} domain={domainFromEmail} />
+              )}
             </Field>
             <Field label="Reply-to">
               <Input
@@ -466,6 +495,29 @@ function NewProfileDialog({
                 placeholder="reply@mashreq.com"
                 className="font-mono text-[12px]"
               />
+            </Field>
+          </div>
+
+          <div className="grid grid-cols-[120px,1fr] gap-3">
+            <Field label="Prefix">
+              <Input
+                value={prefixInput}
+                onChange={(e) => setPrefixInput(e.target.value)}
+                placeholder={effectivePrefix || "collections"}
+                className="font-mono text-[12px]"
+              />
+            </Field>
+            <Field label="Domains (Journey rotation)">
+              <DomainMultiSelect
+                value={effectiveDomains}
+                onChange={setSelectedDomains}
+                primary={domainFromEmail}
+              />
+              <p className="mt-1 text-[10px] text-muted-foreground">
+                Journey sends rotate {effectivePrefix || "<prefix>"}@domain across these domains,
+                skipping any that are blocked, paused or out of today&apos;s volume. Composer
+                sends still use the from email above.
+              </p>
             </Field>
           </div>
 
@@ -542,6 +594,150 @@ function NewProfileDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  )
+}
+
+function FromEmailStatusLine({
+  status,
+  domain,
+}: {
+  status: ReturnType<typeof statusForDomain>
+  domain: string
+}) {
+  return (
+    <div className="mt-1 flex items-center gap-1.5 text-[10.5px]">
+      <DomainStatusDot domain={domain} size="xs" />
+      <span className="font-mono text-foreground">{domain}</span>
+      <span className="text-muted-foreground">·</span>
+      <span
+        className={cn(
+          status.status === "healthy" && "text-emerald-300",
+          status.status === "watch" && "text-amber-300",
+          status.status === "at_risk" && "text-orange-300",
+          status.status === "blocked" && "text-red-300",
+          status.status === "no_data" && "text-neutral-300",
+        )}
+      >
+        {status.status === "healthy"
+          ? "Healthy"
+          : status.status === "watch"
+          ? "Watch"
+          : status.status === "at_risk"
+          ? "At risk"
+          : status.status === "blocked"
+          ? "Blocked"
+          : "No data"}
+      </span>
+      {status.status === "blocked" && (
+        <span className="text-[10px] text-red-300">· Composer sends will fail safety checks</span>
+      )}
+    </div>
+  )
+}
+
+function DomainMultiSelect({
+  value,
+  onChange,
+  primary,
+}: {
+  value: string[]
+  onChange: (next: string[]) => void
+  primary: string
+}) {
+  // Universe = every Warmy-known domain + every domain already on a
+  // seeded profile + the current from-email domain.
+  const all = React.useMemo(() => {
+    const set = new Set<string>()
+    for (const w of listWarmyDomains()) {
+      set.add(w.name.toLowerCase())
+    }
+    for (const p of SEED_PROFILES) {
+      for (const d of p.domains) set.add(d.domain.toLowerCase())
+    }
+    if (primary) set.add(primary.toLowerCase())
+    const list = [...set].map((d) => statusForDomain(d))
+    // Healthiest first.
+    const rank: Record<string, number> = {
+      healthy: 0,
+      watch: 1,
+      at_risk: 2,
+      blocked: 3,
+      no_data: 4,
+    }
+    list.sort((a, b) => rank[a.status] - rank[b.status] || a.name.localeCompare(b.name))
+    return list
+  }, [primary])
+
+  const selected = new Set(value.map((v) => v.toLowerCase()))
+  const toggle = (name: string) => {
+    const lower = name.toLowerCase()
+    const next = new Set(selected)
+    if (next.has(lower)) next.delete(lower)
+    else next.add(lower)
+    onChange([...next])
+  }
+
+  const healthy = value.filter((v) => statusForDomain(v).status === "healthy").length
+  const atRisk = value.filter((v) => statusForDomain(v).status === "at_risk").length
+  const blocked = value.filter((v) => statusForDomain(v).status === "blocked").length
+  const watch = value.filter((v) => statusForDomain(v).status === "watch").length
+
+  return (
+    <div className="space-y-1.5">
+      <div className="max-h-40 space-y-0.5 overflow-y-auto rounded-md border border-border bg-background/40 p-1">
+        {all.map((s) => {
+          const isSelected = selected.has(s.name.toLowerCase())
+          const isPrimary = s.name.toLowerCase() === primary.toLowerCase()
+          const w = s.warmy
+          const vol = w ? w.recommended_volume_today.gmail : null
+          return (
+            <button
+              key={s.name}
+              type="button"
+              onClick={() => toggle(s.name)}
+              className={cn(
+                "flex w-full items-center gap-2 rounded px-1.5 py-1 text-left text-[11px]",
+                isSelected ? "bg-primary/10" : "hover:bg-muted/40",
+              )}
+            >
+              <input
+                type="checkbox"
+                checked={isSelected}
+                readOnly
+                className="h-3 w-3 shrink-0"
+              />
+              <DomainStatusDot domain={s.name} size="xs" />
+              <span className="min-w-0 flex-1 truncate font-mono">{s.name}</span>
+              <span className="text-[10px] text-muted-foreground">
+                {w ? `health ${w.health_score.total}` : "no Warmy"}
+              </span>
+              {vol && vol.volume != null && (
+                <span className="text-[10px] tabular-nums text-muted-foreground">
+                  {vol.volume.toLocaleString()} today
+                </span>
+              )}
+              {isPrimary && (
+                <span className="rounded bg-primary/15 px-1 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-primary">
+                  From-email
+                </span>
+              )}
+              {s.status === "blocked" && (
+                <span className="text-[10px] text-red-300">Blocked — warn on send</span>
+              )}
+              {s.paused && (
+                <span className="text-[10px] text-neutral-300">Paused</span>
+              )}
+            </button>
+          )
+        })}
+      </div>
+      <p className="text-[10.5px] text-muted-foreground">
+        {value.length} domain{value.length === 1 ? "" : "s"} · {healthy} healthy
+        {watch ? ` · ${watch} watch` : ""}
+        {atRisk ? ` · ${atRisk} at risk` : ""}
+        {blocked ? ` · ${blocked} blocked by Gmail` : ""}
+      </p>
+    </div>
   )
 }
 
