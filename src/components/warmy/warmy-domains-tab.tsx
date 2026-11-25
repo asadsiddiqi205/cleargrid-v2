@@ -779,7 +779,7 @@ function UsedInBlock({ profiles, domain }: { profiles: SenderProfile[]; domain: 
               </p>
             </div>
             <Link
-              href={`/lender-config/sender-profiles#${p.id}`}
+              href={`/sender-profiles#${p.id}`}
               className="inline-flex items-center gap-1 text-[10.5px] font-medium text-primary hover:underline"
             >
               Open

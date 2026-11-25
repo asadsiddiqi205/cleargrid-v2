@@ -234,17 +234,17 @@ export function listRotationLog(opts: { domain?: string; profileId?: string } = 
 
 /** Seed a few log entries so the drawer isn't empty on first load. */
 appendRotationLog({
-  profileId: "sp-cleargrid-general",
-  profileName: "ClearGrid Collections",
-  domain: "cleargrid.ae",
+  profileId: "sp-uae-non-banking",
+  profileName: "UAE Non-Banking",
+  domain: "d.cleargrid.ae",
   provider: "gmail",
   reason: "used_up",
   emailsMoved: 120,
 })
 appendRotationLog({
-  profileId: "sp-fab-notices",
-  profileName: "FAB Formal Notices",
-  domain: "bankfab.com",
+  profileId: "sp-ksa-non-banking",
+  profileName: "KSA-Non Banking",
+  domain: "support.cleararabia.ai",
   provider: "gmail",
   reason: "blocked",
   emailsMoved: 0,

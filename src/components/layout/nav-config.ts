@@ -11,6 +11,7 @@ import {
   Building2,
   Wand2, FileText, Target,
   Library, Palette,
+  AtSign,
   ChevronDown,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -94,6 +95,7 @@ export const navGroups: NavGroup[] = [
       { title: "Templates", href: "/templates", icon: FileText },
       { title: "Saved modules", href: "/templates/modules", icon: Library },
       { title: "Playbooks", href: "/strategies", icon: Target },
+      { title: "Sender profiles", href: "/sender-profiles", icon: AtSign },
       { title: "Export history", href: "/exports", icon: FolderOpen },
     ],
   },

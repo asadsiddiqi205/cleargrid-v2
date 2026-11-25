@@ -43,7 +43,7 @@ export function SendingDomainsList({
           Sending domains
         </div>
         <Link
-          href="/lender-config/sender-profiles"
+          href="/sender-profiles"
           target="_blank"
           rel="noopener noreferrer"
           className="inline-flex items-center gap-1 text-[10.5px] font-medium text-primary hover:underline"

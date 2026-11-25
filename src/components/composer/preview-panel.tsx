@@ -622,7 +622,7 @@ function SenderDomainCheckRow({ state }: { state: ComposerState }) {
         {check.detail && <div className="text-[10.5px] opacity-80">{check.detail}</div>}
         {check.kind === "fail" && check.domain && (
           <a
-            href={`/lender-config/sender-profiles?domain=${check.domain}`}
+            href={`/sender-profiles?domain=${check.domain}`}
             target="_blank"
             rel="noopener noreferrer"
             className="text-[10.5px] underline"

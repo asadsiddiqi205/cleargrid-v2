@@ -4,7 +4,7 @@ import { PageShell } from "@/components/shared/page-shell"
 
 const SECTIONS = [
   {
-    href: "/lender-config/sender-profiles",
+    href: "/sender-profiles",
     icon: AtSign,
     title: "Sender profiles",
     description:

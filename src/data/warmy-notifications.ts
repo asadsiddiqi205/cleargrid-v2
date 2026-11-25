@@ -131,30 +131,30 @@ const DEV_SAMPLES: Array<{
   input: Omit<WebhookEvent, "id" | "at">
 }> = [
   {
-    label: "Gmail rejects mashreq.com",
+    label: "Gmail rejects legal.cleararabia.ai",
     input: {
       kind: "alert_issue",
-      domain: "mashreq.com",
+      domain: "legal.cleararabia.ai",
       alert_key: "reject_domain_by_gmail" as AlertKey,
       alert_status: "not completed",
       message: "Gmail rejected the domain after a reputation drop.",
     },
   },
   {
-    label: "cleargrid.ae runs out of Gmail volume",
+    label: "d.cleargrid.ae runs out of Gmail volume",
     input: {
       kind: "sending_block",
-      domain: "cleargrid.ae",
-      mailbox: "collections@cleargrid.ae",
+      domain: "d.cleargrid.ae",
+      mailbox: "collections@d.cleargrid.ae",
       message: "Mailbox throttled — daily Gmail volume reached.",
     },
   },
   {
-    label: "tamara.co bounce guard paused",
+    label: "s.cleargrid.ai bounce guard paused",
     input: {
       kind: "bounce_guard_stopped",
-      domain: "tamara.co",
-      mailbox: "care@tamara.co",
+      domain: "s.cleargrid.ai",
+      mailbox: "collections@s.cleargrid.ai",
       resume_at: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(),
       message: "Bounce guard paused warm-up for 2 h.",
     },

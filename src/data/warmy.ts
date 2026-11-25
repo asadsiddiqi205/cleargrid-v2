@@ -219,10 +219,57 @@ function v(volume: number | null, missing?: MissingData): RecommendedVolume {
   return missing ? { volume, missing_data: missing } : { volume }
 }
 
-/** Seeded domains — one row per sending domain in the existing sender
- *  profile seed, in a spread of states. */
+/** Helper so the extended subdomain roster stays compact. */
+function stdDomain(
+  name: string,
+  overrides: Partial<WarmyDomain> = {},
+): WarmyDomain {
+  const id = `wd-${name.replace(/\./g, "-")}`
+  const seed = [...name].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7)
+  const health = 72 + (seed % 20) // 72..91
+  return {
+    id,
+    name,
+    health_score: {
+      total: health,
+      deliverability_score: Math.min(100, health + 3),
+      placement_checker_score: Math.max(0, health - 2),
+      postmaster_score: Math.max(0, health - 5),
+      mailtest_score: health + 1,
+    },
+    dns_records: { spf: "valid", dkim: "valid", dmarc: "valid", mx: "valid" },
+    mailboxes: { active: 4 + (seed % 5), paused: 0, blocked: 0, stopped: 0 },
+    placement_checker: {
+      gmail: { inbox_pct: 88 + (seed % 8), spam_pct: 3 + (seed % 5) },
+      gsuite: { inbox_pct: 86 + (seed % 8), spam_pct: 4 + (seed % 5) },
+      outlook: { inbox_pct: 82 + (seed % 10), spam_pct: 6 + (seed % 5) },
+    },
+    gpm: { has_access: true, spam_rate: 0.0015 + (seed % 20) / 10000 },
+    adeline_ai_info: {
+      domain_reputation: health >= 85 ? "high" : "medium",
+      date: iso(now - (6 + (seed % 12)) * 60 * 60 * 1000),
+    },
+    recommended_volume_today: {
+      gmail: v(600 + (seed % 800)),
+      outlook: v(400 + (seed % 500)),
+      yahoo: v(200 + (seed % 300)),
+      google_workspace: v(500 + (seed % 600)),
+      microsoft_365: v(400 + (seed % 500)),
+    },
+    thirty_day_report: thirtyDayReport(seed),
+    ops_daily_cap_per_provider: null,
+    paused_by_ops: { paused: false },
+    ...overrides,
+  }
+}
+
+/** Seeded domains — one row per sending domain in the sender-profile
+ *  seed, in a spread of states. Spec profiles use cleargrid.co,
+ *  s.cleargrid.ai, legal.cleararabia.ai, support.cleararabia.ai,
+ *  and a cluster of UAE subdomains (c., h., g., e., a., j., f.,
+ *  d., i., m., q.). */
 export const MOCK_DOMAINS: WarmyDomain[] = [
-  // Healthy — cleargrid.co (the general profile's domain)
+  // Healthy — cleargrid.co (used by three spec profiles)
   {
     id: "wd-cleargrid-co",
     name: "cleargrid.co",
@@ -284,10 +331,10 @@ export const MOCK_DOMAINS: WarmyDomain[] = [
     ops_daily_cap_per_provider: null,
     paused_by_ops: { paused: false },
   },
-  // Watch — mashreq.com, Gmail reputation medium
+  // Watch — legal.cleararabia.ai, Gmail reputation medium
   {
-    id: "wd-mashreq-com",
-    name: "mashreq.com",
+    id: "wd-legal-cleararabia-ai",
+    name: "legal.cleararabia.ai",
     health_score: {
       total: 78,
       deliverability_score: 80,
@@ -315,10 +362,10 @@ export const MOCK_DOMAINS: WarmyDomain[] = [
     ops_daily_cap_per_provider: null,
     paused_by_ops: { paused: false },
   },
-  // Watch — tamara.co, under the watch health threshold
+  // Watch — c.cleargrid.ae, under the watch health threshold
   {
-    id: "wd-tamara-co",
-    name: "tamara.co",
+    id: "wd-c-cleargrid-ae",
+    name: "c.cleargrid.ae",
     health_score: {
       total: 70,
       deliverability_score: 72,
@@ -346,10 +393,10 @@ export const MOCK_DOMAINS: WarmyDomain[] = [
     ops_daily_cap_per_provider: null,
     paused_by_ops: { paused: false },
   },
-  // At risk — tamara.sa, Gmail rep bad + low health
+  // At risk — h.cleargrid.ae, Gmail rep bad + low health
   {
-    id: "wd-tamara-sa",
-    name: "tamara.sa",
+    id: "wd-h-cleargrid-ae",
+    name: "h.cleargrid.ae",
     health_score: {
       total: 48,
       deliverability_score: 50,
@@ -377,10 +424,10 @@ export const MOCK_DOMAINS: WarmyDomain[] = [
     ops_daily_cap_per_provider: null,
     paused_by_ops: { paused: false },
   },
-  // Blocked — bankfab.com, open Gmail reject alert + all mailboxes blocked
+  // Blocked — support.cleararabia.ai, open Gmail reject alert + all mailboxes blocked
   {
-    id: "wd-bankfab-com",
-    name: "bankfab.com",
+    id: "wd-support-cleararabia-ai",
+    name: "support.cleararabia.ai",
     health_score: {
       total: 18,
       deliverability_score: 20,
@@ -412,8 +459,8 @@ export const MOCK_DOMAINS: WarmyDomain[] = [
   // (small Gmail cap; the shadow counter below drives it above cap by
   // mid-day for a visible "used up" render).
   {
-    id: "wd-cleargrid-ae",
-    name: "cleargrid.ae",
+    id: "wd-d-cleargrid-ae",
+    name: "d.cleargrid.ae",
     health_score: {
       total: 85,
       deliverability_score: 87,
@@ -441,10 +488,10 @@ export const MOCK_DOMAINS: WarmyDomain[] = [
     ops_daily_cap_per_provider: null,
     paused_by_ops: { paused: false },
   },
-  // Watch — emiratesnbd.com, needs placement test
+  // Watch (missing_data) — i.cleargrid.ae, needs placement test
   {
-    id: "wd-emiratesnbd-com",
-    name: "emiratesnbd.com",
+    id: "wd-i-cleargrid-ae",
+    name: "i.cleargrid.ae",
     health_score: {
       total: 74,
       deliverability_score: 78,
@@ -472,10 +519,10 @@ export const MOCK_DOMAINS: WarmyDomain[] = [
     ops_daily_cap_per_provider: null,
     paused_by_ops: { paused: false },
   },
-  // Healthy — cashnow.ae
+  // Healthy — m.cleargrid.ae
   {
-    id: "wd-cashnow-ae",
-    name: "cashnow.ae",
+    id: "wd-m-cleargrid-ae",
+    name: "m.cleargrid.ae",
     health_score: {
       total: 90,
       deliverability_score: 92,
@@ -503,14 +550,22 @@ export const MOCK_DOMAINS: WarmyDomain[] = [
     ops_daily_cap_per_provider: null,
     paused_by_ops: { paused: false },
   },
+  // Remaining healthy subdomains used by Mashreq Buckets. The q.cleargrid.ae
+  // domain used by the ClearGrid Test profile is intentionally absent, so
+  // it exercises the "In Command, not in Warmy" fallback.
+  stdDomain("g.cleargrid.ae"),
+  stdDomain("e.cleargrid.ae"),
+  stdDomain("a.cleargrid.ae"),
+  stdDomain("j.cleargrid.ae"),
+  stdDomain("f.cleargrid.ae"),
 ]
 
 /* ─────────────────────────── Alerts ─────────────────────────── */
 
 const MOCK_ALERTS: WarmupAlert[] = [
   {
-    id: "wa-bankfab-gmail",
-    domain: "bankfab.com",
+    id: "wa-support-cleararabia-gmail",
+    domain: "support.cleararabia.ai",
     alert_key: "reject_domain_by_gmail",
     target_provider: "gmail",
     state: "open",
@@ -522,8 +577,8 @@ const MOCK_ALERTS: WarmupAlert[] = [
     ],
   },
   {
-    id: "wa-tamara-sa-mailtest",
-    domain: "tamara.sa",
+    id: "wa-h-cleargrid-mailtest",
+    domain: "h.cleargrid.ae",
     alert_key: "domain_not_synced_on_receiver",
     target_provider: "gmail",
     state: "in_progress",
@@ -556,10 +611,12 @@ const sentToday: Map<string, number> = new Map()
 function seedShadowCounters() {
   const h = new Date().getHours()
   const burn = Math.max(0, Math.min(1, (h - 6) / (WARMY_THRESHOLDS.simulatedGmailBurnoutHour - 6)))
-  sentToday.set("cleargrid.ae|gmail", Math.round(400 * (0.9 + 0.2 * burn)))
-  sentToday.set("mashreq.com|gmail", Math.round(1800 * 0.4 * burn))
+  // d.cleargrid.ae has the small Gmail cap and burns through mid-day.
+  sentToday.set("d.cleargrid.ae|gmail", Math.round(400 * (0.9 + 0.2 * burn)))
+  sentToday.set("legal.cleararabia.ai|gmail", Math.round(1800 * 0.4 * burn))
   sentToday.set("cleargrid.co|gmail", Math.round(2000 * 0.25 * burn))
-  sentToday.set("tamara.sa|gmail", Math.round(400 * 0.6 * burn))
+  sentToday.set("h.cleargrid.ae|gmail", Math.round(400 * 0.6 * burn))
+  sentToday.set("s.cleargrid.ai|gmail", Math.round(1500 * 0.2 * burn))
 }
 seedShadowCounters()
 
@@ -671,7 +728,7 @@ const webhookEvents: WebhookEvent[] = [
     id: "wh-1",
     at: iso(now - 90 * 60 * 1000),
     kind: "alert_issue",
-    domain: "bankfab.com",
+    domain: "support.cleararabia.ai",
     alert_key: "reject_domain_by_gmail",
     alert_status: "not completed",
     message: "Gmail rejected the domain. Next step: rotate DKIM.",
@@ -680,16 +737,16 @@ const webhookEvents: WebhookEvent[] = [
     id: "wh-2",
     at: iso(now - 45 * 60 * 1000),
     kind: "sending_block",
-    domain: "bankfab.com",
-    mailbox: "notices@bankfab.com",
+    domain: "support.cleararabia.ai",
+    mailbox: "collections@support.cleararabia.ai",
     message: "Mailbox blocked after 5 consecutive 550 rejects from Gmail.",
   },
   {
     id: "wh-3",
     at: iso(now - 20 * 60 * 1000),
     kind: "bounce_guard_stopped",
-    domain: "tamara.sa",
-    mailbox: "hello@tamara.sa",
+    domain: "h.cleargrid.ae",
+    mailbox: "collections@h.cleargrid.ae",
     resume_at: iso(now + 6 * 60 * 60 * 1000),
     message: "Bounce guard paused warm-up for 6 h after the bounce rate crossed 4 %.",
   },

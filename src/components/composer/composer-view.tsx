@@ -134,7 +134,7 @@ export interface ComposerState {
   campaignName: string
 
   /** Governed sender identity — required for send. Admin-managed at
-   *  `/lender-config/sender-profiles`. */
+   *  `/sender-profiles`. */
   senderProfileId: string | null
 
   /** Composer-level free-form override on the governed profile's From

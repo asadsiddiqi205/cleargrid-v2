@@ -130,6 +130,18 @@ export const lenders: Lender[] = [
     primaryColor: "#1E3A8A",
   },
   {
+    id: "lnd-hsbc",
+    name: "HSBC-Recovery",
+    shortName: "HSBC",
+    type: "bank",
+    country: "UAE",
+    status: "active",
+    borrowerCount: 5620,
+    totalDebtAed: 88_400_000,
+    recoveryRate: 28.5,
+    primaryColor: "#DB0011",
+  },
+  {
     id: "lnd-tamam",
     name: "Tamam",
     shortName: "Tamam",
