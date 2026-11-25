@@ -231,18 +231,19 @@ import {
  * (modern browsers + Node 17+), falls back to JSON for the demo.
  */
 /** Pick a human-friendly label for a node in validation / publish
- *  messages. Prefers description / template, since many seeded nodes
- *  share the generic `label: "Send Email"`, and falls back to the node
- *  id so the reader can always locate the node. */
+ *  messages. Prefers template, then description, then label — matching
+ *  the canvas card subtitle for Send Email nodes so the two surfaces
+ *  name the same node the same way. Falls back to the node id so the
+ *  reader can always locate the node. */
 function humanNodeLabel(d: Record<string, unknown>, nodeId: string): string {
   const description = typeof d.description === "string" ? d.description.trim() : ""
   const template = typeof d.template === "string" ? d.template.trim() : ""
   const label = typeof d.label === "string" ? d.label.trim() : ""
   const GENERIC = new Set(["Send Email", "Send SMS", "Send WhatsApp", "Start AI Call", "Trigger AI Call"])
-  if (description && !GENERIC.has(description)) return description
   if (template && !GENERIC.has(template)) return template
+  if (description && !GENERIC.has(description)) return description
   if (label && !GENERIC.has(label)) return label
-  return description || template || label || nodeId
+  return template || description || label || nodeId
 }
 
 function deepCloneData(data: Record<string, unknown>): Record<string, unknown> {
@@ -415,6 +416,105 @@ export default function JourneyCanvas({ journeyId }: JourneyCanvasProps) {
   }, [journeyId]);
 
   const [nodes, setNodes, onNodesChange] = useNodesState(seededNodes);
+
+  // Keep every node's _error / _errorSeverity in sync with the current
+  // Send Email configuration so the card badge + node-panel issues list
+  // fire on load, not just after the author clicks Publish. Same rules
+  // as the Publish pass, trimmed to per-node checks.
+  React.useEffect(() => {
+    const perNode = new Map<
+      string,
+      { severity: "blocker" | "warning"; title: string; detail?: string }
+    >()
+    for (const n of nodes) {
+      const d = (n.data as Record<string, unknown>) ?? {}
+      if (d.actionType !== "email") continue
+      const label = humanNodeLabel(d, n.id)
+      const spId = typeof d.senderProfileId === "string" ? d.senderProfileId : ""
+      const profile = spId ? getSenderProfileById(spId) : undefined
+      let next: { severity: "blocker" | "warning"; title: string; detail?: string } | null = null
+      if (!profile) {
+        next = {
+          severity: "blocker",
+          title: `"${label}" has no sender profile picked`,
+          detail: "Pick a sender profile on the Delivery tab.",
+        }
+      } else {
+        const rows = evaluateProfileDomains(profile, "gmail")
+        const everySkip =
+          rows.length > 0 &&
+          rows.every((r) =>
+            !r.eligible && (r.skipReason === "blocked" || r.skipReason === "paused"),
+          )
+        if (everySkip) {
+          next = {
+            severity: "blocker",
+            title: `"${label}" every domain on ${profile.name} is Blocked or Paused`,
+          }
+        } else {
+          const blockedOrAtRisk = profile.domains
+            .map((dd) => statusForDomain(dd.domain))
+            .filter((s) => s.status === "blocked" || s.status === "at_risk")
+          if (blockedOrAtRisk.length > 0) {
+            const names = blockedOrAtRisk.map((s) => s.name).join(", ")
+            next = {
+              severity: "warning",
+              title: `"${label}" sender profile ${profile.name} has At-risk / Blocked domain(s)`,
+              detail: `Rotation routes around: ${names}.`,
+            }
+          } else if (profile.domains.every((dd) => !getWarmyDomainByName(dd.domain))) {
+            next = {
+              severity: "warning",
+              title: `"${label}" sender profile has no domain matched in Warmy`,
+              detail: "Volume falls back to ops caps.",
+            }
+          } else {
+            const audience =
+              typeof d._audienceSampleCount === "number"
+                ? (d._audienceSampleCount as number)
+                : typeof d._audienceTotal === "number"
+                ? (d._audienceTotal as number)
+                : null
+            if (audience != null) {
+              const totalLeft = rows.reduce((sum, r) => sum + (r.volumeLeft ?? Infinity), 0)
+              if (Number.isFinite(totalLeft) && totalLeft < audience) {
+                next = {
+                  severity: "warning",
+                  title: `"${label}" today's volume may not cover this audience`,
+                  detail: "Some emails will wait until tomorrow.",
+                }
+              }
+            }
+          }
+        }
+      }
+      if (next) perNode.set(n.id, next)
+    }
+    setNodes((cur) => {
+      let changed = false
+      const next = cur.map((n) => {
+        const iss = perNode.get(n.id)
+        const d = (n.data as Record<string, unknown>) ?? {}
+        const message = iss ? (iss.detail ? `${iss.title} — ${iss.detail}` : iss.title) : undefined
+        const severity = iss?.severity
+        const curMsg = typeof d._error === "string" ? d._error : undefined
+        const curSev = typeof d._errorSeverity === "string" ? d._errorSeverity : undefined
+        if (message === curMsg && severity === curSev) return n
+        changed = true
+        const cleaned = { ...d }
+        if (iss) {
+          cleaned._error = message
+          cleaned._errorSeverity = severity
+        } else {
+          delete cleaned._error
+          delete cleaned._errorSeverity
+        }
+        return { ...n, data: cleaned }
+      })
+      return changed ? next : cur
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nodes.length, ...nodes.map((n) => (n.data as Record<string, unknown>)?.senderProfileId ?? "")])
 
   // Persist node-data edits whenever nodes change. The diff-based patch
   // keeps storage small and ignores transient fields (sim counts, etc.).
